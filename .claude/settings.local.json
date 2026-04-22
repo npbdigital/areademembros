@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(git --version)",
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force)",
+      "PowerShell(\\(Get-Location\\).Path)",
+      "PowerShell($src = \"D:\\\\Claude Agência\\\\Projeto Área de membros\\\\membros\"; $dst = \"D:\\\\Claude Agência\\\\Projeto Área de membros\"; Get-ChildItem -Path $src -Force | ForEach-Object { Move-Item -LiteralPath $_.FullName -Destination $dst -Force }; Remove-Item $src -Force; Move-Item \"D:\\\\Claude Agência\\\\SPEC_AREA_DE_MEMBROS.md\" $dst -Force; Get-ChildItem -Force $dst | Format-Table Name, Mode -AutoSize)",
+      "PowerShell(npm install @supabase/supabase-js @supabase/ssr 2>&1)",
+      "PowerShell(npx --yes shadcn@latest init -d -y 2>&1)",
+      "PowerShell(npx tsc --noEmit 2>&1)"
+    ]
+  }
+}
