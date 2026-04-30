@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Player – Academia NPB</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="fas fa-shield-halved"></i></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item" title="Início"><i class="fas fa-house"></i></a>
+      <a href="#" class="nav-item active" title="Cursos"><i class="fas fa-bookmark"></i></a>
+      <a href="#" class="nav-item" title="Comunidade"><i class="fas fa-face-smile"></i></a>
+      <a href="#" class="nav-item" title="Perfil"><i class="fas fa-user"></i></a>
+      <a href="#" class="nav-item" title="Suporte"><i class="fas fa-at"></i></a>
+    </nav>
+  </aside>
+
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <button class="menu-btn"><i class="fas fa-bars"></i></button>
+      <div class="topbar-right">
+        <div class="search-box">
+          <input type="text" placeholder="Pesquisar" />
+          <i class="fas fa-magnifying-glass"></i>
+        </div>
+        <div class="notif-btn">
+          <i class="fas fa-bell"></i>
+          <span class="badge">7</span>
+        </div>
+        <div class="avatar">
+          <img src="https://ui-avatars.com/api/?name=NPB&background=c9922a&color=fff&bold=true" alt="Avatar" />
+        </div>
+      </div>
+    </header>
+
+    <!-- PLAYER CONTENT -->
+    <div class="player-scroll">
+
+      <!-- TOP ROW: Vídeo + Lista de Aulas -->
+      <div class="player-top-row">
+
+        <div class="video-section">
+          <div class="video-wrapper" id="videoArea">
+            <!-- JS injeta iframe ou view de link -->
+          </div>
+        </div>
+
+        <aside class="lesson-list" id="lessonList">
+          <!-- JS renderiza as aulas -->
+        </aside>
+
+      </div>
+
+      <!-- BREADCRUMB BAR -->
+      <div class="player-breadcrumb-bar">
+        <div class="player-bc-left">
+          <i class="fas fa-table-cells-large"></i>
+          <a href="index.html">Nossos Cursos</a>
+          <i class="fas fa-chevron-right"></i>
+          <a href="curso.html" id="breadcrumbCourse">Curso</a>
+          <i class="fas fa-chevron-right"></i>
+          <span id="breadcrumbModule">Módulo</span>
+        </div>
+        <div class="player-bc-right">
+          <button class="btn-secondary" title="Grade"><i class="fas fa-table-cells-large"></i></button>
+          <button class="btn-secondary" title="Notas"><i class="fas fa-lightbulb"></i></button>
+          <button class="btn-secondary" id="favBtn" onclick="toggleFav(this)" title="Favoritar"><i class="far fa-bookmark"></i></button>
+          <button class="btn-secondary" onclick="prevLesson()" title="Anterior"><i class="fas fa-chevron-left"></i></button>
+          <button class="btn-secondary" onclick="nextLesson()" title="Próxima"><i class="fas fa-chevron-right"></i></button>
+        </div>
+      </div>
+
+      <!-- BOTTOM ROW: Info + Rating -->
+      <div class="player-bottom-row">
+
+        <div class="lesson-info-section">
+          <h2 id="currentTitle"></h2>
+          <div class="player-description" id="lessonDescription"></div>
+        </div>
+
+        <div class="rating-section">
+          <div class="rating-box">
+            <h4>Como você avalia este conteúdo?</h4>
+            <div class="rating-emojis" id="ratingEmojis">
+              <span title="Péssimo" onclick="rate(this)">😡</span>
+              <span title="Ruim" onclick="rate(this)">😞</span>
+              <span title="Regular" onclick="rate(this)">😐</span>
+              <span title="Bom" onclick="rate(this)">😊</span>
+              <span title="Excelente" onclick="rate(this)">😄</span>
+            </div>
+            <button class="btn-concluido" id="btnConcluido" onclick="markDone()">
+              Marcar como concluído
+            </button>
+            <div class="lesson-progress-label" id="progressLabel">0%</div>
+          </div>
+        </div>
+
+      </div>
+
+    </div><!-- end player-scroll -->
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

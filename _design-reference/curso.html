@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Curso – Academia NPB</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon"><i class="fas fa-shield-halved"></i></div>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="index.html" class="nav-item" title="Início"><i class="fas fa-house"></i></a>
+      <a href="#" class="nav-item active" title="Cursos"><i class="fas fa-bookmark"></i></a>
+      <a href="#" class="nav-item" title="Comunidade"><i class="fas fa-face-smile"></i></a>
+      <a href="#" class="nav-item" title="Perfil"><i class="fas fa-user"></i></a>
+      <a href="#" class="nav-item" title="Suporte"><i class="fas fa-at"></i></a>
+    </nav>
+  </aside>
+
+  <div class="main">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <button class="menu-btn"><i class="fas fa-bars"></i></button>
+      <div class="topbar-right">
+        <div class="search-box">
+          <input type="text" placeholder="Pesquisar" />
+          <i class="fas fa-magnifying-glass"></i>
+        </div>
+        <div class="notif-btn">
+          <i class="fas fa-bell"></i>
+          <span class="badge">7</span>
+        </div>
+        <div class="avatar">
+          <img src="https://ui-avatars.com/api/?name=NPB&background=c9922a&color=fff&bold=true" alt="Avatar" />
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+
+      <!-- HERO -->
+      <div class="curso-hero">
+        <div class="curso-hero-info">
+          <h1 id="courseName">Curso</h1>
+          <p id="courseDesc"></p>
+          <div class="curso-meta">
+            <a href="index.html"><i class="fas fa-house"></i> Nossos Cursos</a>
+          </div>
+          <div class="hero-progress">
+            <div class="hero-progress-bar">
+              <div class="hero-progress-fill" style="width: 0%"></div>
+            </div>
+            <span class="hero-progress-pct">0%</span>
+          </div>
+          <a href="player.html?p=lta2&m=0&l=0" id="courseStartBtn" class="btn-primary">começar agora</a>
+        </div>
+      </div>
+
+      <!-- MODULES -->
+      <section class="section">
+        <div class="section-header">
+          <h2>Módulos</h2>
+        </div>
+        <div class="modules-grid" id="modulesGrid">
+          <!-- Renderizado por app.js via DATA -->
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
