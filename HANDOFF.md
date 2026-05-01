@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** após Etapa 7 (Turmas + Matrículas + criar aluno via Resend)
-**Último commit no main:** `ce64312` (Etapa 6: YouTube)
+**Última atualização:** após Etapas 8 + 11 + 12 (biblioteca aluno + relatórios + drag-and-drop + role moderator + webhook)
+**Último commit no main:** `64648b4` (mega-commit cobrindo Etapas 8/11/12 + bug fixes)
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -34,15 +34,109 @@ SaaS de área de membros multi-curso, multi-turma, com:
 | Database | PostgreSQL via Supabase (schema `membros` isolado) |
 | Auth | Supabase Auth (e-mail/senha + magic link p/ recovery) |
 | Storage | Supabase Storage (capas, avatars, anexos) |
-| Email | Resend (ainda não conectado) |
-| YouTube | Google YouTube Data API v3 (ainda não conectado) |
+| Email | Resend (conectado, sender padrão `onboarding@resend.dev` — domínio próprio pendente) |
+| YouTube | Google YouTube Data API v3 (OAuth conectado — Etapa 6) |
 | Deploy | Vercel (Git integration, auto-deploy do `main`) |
 | Forms | react-hook-form + zod (instalados, ainda não usados massivamente) |
 | Toasts | sonner |
+| Drag-and-drop | `@dnd-kit/core` + `@dnd-kit/sortable` (Etapa 5.5 — substituiu setas em todas as listas) |
 
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 8 — Biblioteca + Player do aluno (commit `64648b4`)
+**Aluno:**
+- `/dashboard` real — "Meus Cursos" com % de progresso, "Continue de onde parou" (última aula com vídeo), "Cursos disponíveis" (CTA pra `sale_url`)
+- `/courses/[courseId]` — banners + grid de módulos com cadeado/drip
+- `/lessons/[lessonId]` — player YouTube (`rel=0&modestbranding=1`), sidebar de aulas, breadcrumb, prev/next, **botão "← Voltar para os módulos"**
+- Tabs: **Descrição** (HTML) / **Anexos** (download) / **Anotações** (textarea + auto-save) / **Avaliação** (1–5 estrelas + comentário)
+- "Marcar como concluída" + "Salvar nos favoritos" (optimistic UI + rollback)
+- **Tracking**: insert em `access_logs` ao abrir + ping de `watch_time_seconds` a cada 30s (clamp 0–120s, pula se aba escondida)
+- `/favorites` — lista de aulas salvas (mini-capa portrait + curso + módulo + tempo desde quando)
+- `/notes` — todas anotações com preview de 3 linhas + link
+- **Card de curso** linka pra ÚLTIMA aula assistida com vídeo daquele curso (ou pra `/courses/[id]` se nunca assistiu)
+
+**Helpers novos:**
+- `src/lib/drip.ts` — `isContentReleased()` cobre `immediate`/`locked`/`days_after_enrollment`/`fixed_date` + `releaseMessage()` pra UI
+- `src/lib/access.ts` — `getActiveEnrollments`/`getCourseAccessMap`/`checkCourseAccess`/`getUserRole`/`getNonStudentUserIds`. Quando aluno tem mesmo curso por turmas diferentes, usa `enrolled_at` mais antiga (drip libera mais cedo)
+
+**Server Actions (`src/app/(student)/lessons/actions.ts`):**
+- `toggleCompleteAction` / `toggleFavoriteAction` / `saveNoteAction` / `rateLessonAction` / `pingWatchTimeAction` / `logLessonViewAction`
+
+**Componentes novos** (`src/components/student/`): `youtube-player.tsx` · `lesson-actions-row.tsx` · `lesson-tabs.tsx` (Descrição/Anexos/Anotações/Avaliação) · `course-card.tsx` (Owned + Sale, aspect-[5/7]) · `banner-carousel.tsx` (auto-rotate 6s) · `sortable-modules-grid.tsx` (versão admin/mod inline na page do aluno)
+
+### Etapa 11 — Banners CRUD admin (commit `64648b4`)
+- 5 actions em `courses/actions.ts`: `createBannerAction` / `updateBannerAction` / `deleteBannerAction` / `moveBannerAction` / `toggleBannerActiveAction`
+- Section "Banners" embutida em `/admin/courses/[id]` (entre Módulos e fim)
+- `BannerForm` — upload via `CoverUpload` (recomendado 1280×400) + link_url + link_target select + is_active checkbox
+- Lista com toggle ativo/inativo client + drag-and-drop pra reordenar + delete
+- **Bucket reusado:** banners ficam no `course-covers` (não criou bucket separado pra evitar setup extra)
+
+### Etapa 12 — Webhook HTTP de matrícula automática (commit `64648b4`)
+- `POST /api/webhooks/enrollment` (`src/app/api/webhooks/enrollment/route.ts`)
+- **Auth:** `Authorization: Bearer {WEBHOOK_SECRET}` validado em tempo constante (anti-timing-attack)
+- **Eventos aceitos:** `enrollment.created` (default) / `enrollment.cancelled` / `enrollment.refunded`
+- **Lógica:** payload → resolve user (cria via `auth.admin.createUser` ou reaproveita) → upsert `membros.users` (profile) → upsert/desativa `enrollments` com `source='webhook'` + `webhook_payload` salvo
+- `expires_at`: usa `payload.expires_at` se vier, senão `expiresAtFromDuration(cohorts.default_duration_days)`
+- **Convite Resend** apenas pra usuário NOVO (best-effort — não bloqueia resposta)
+- Tudo logado em `webhook_logs` (status `'success'`/`'error'`)
+- **Middleware** já libera `/api/webhooks/*` (não exige sessão)
+- **Falta:** rate limiting (TODO no spec) + trigger SQL no `public.transactions_data` (depende do `product_cohort_map` ser populado)
+
+### Etapa 5.5 — Refinamentos do CRUD admin (commit `64648b4`)
+- **Lesson attachments** — tabela `membros.lesson_attachments` ativada (já existia no schema): admin adiciona PDFs/docs até 50MB no editor da aula, aluno vê na tab "Anexos" pra baixar
+  - Bucket `lesson-attachments` criado (público) com policies de Storage (escrita só admin via `membros.is_admin()`)
+  - Path: `{lessonId}/{uuid}.{ext}` — facilita auditoria
+  - Policy SELECT em `membros.lesson_attachments` adicionada pra `authenticated` (RLS estava habilitada sem policies)
+- **Drag-and-drop** com `@dnd-kit` substituiu **todas** as setas up/down:
+  - Cursos (grid `rectSortingStrategy`), Módulos, Aulas, Banners, Anexos
+  - Action `reorderEntitiesAction(table, idsInOrder, revalidatePaths)` faz update em duas fases (negativos depois positivos pra suportar UNIQUE futuro)
+  - Optimistic UI + rollback no erro
+  - `SortableList` reutilizável em `src/components/admin/sortable-list.tsx` (lista vertical) + `SortableCoursesGrid` específico pra grid
+- **Hover sutil** (`hover:bg-npb-bg3/40`) em todos os rows do `SortableList`
+- **Quick edit de módulo** via popup (`Modal` + `QuickEditModuleButton`): só título + capa, com `quickUpdateModuleAction` que **preserva** outros campos (descrição, drip, etc). `router.refresh()` após sucesso
+- **Modo edição inline na página do aluno** (`/courses/[id]`): admin/moderator vê drag-handle + lápis sobreposto nos cards de módulo (badge "Modo edição" no header) — mesmo `SortableModulesGrid` reutilizado lá
+
+### Etapa 13 (parcial) — Relatórios e atividade do aluno (commit `64648b4`)
+- `/admin/reports` — engajamento por curso:
+  - Filtro de período: `7d` / `30d` / `90d` / `all` (default 30d)
+  - Lista de cursos com **% views médio** + **% conclusão médio** + total de alunos
+  - Drill-in (`?course=ID`): top 10 aulas por % views + bottom 5 (menor engajamento), com `viewCount/totalAlunos` + `completeCount/%`
+  - **Top aulas por nota** (≥3 avaliações) — ranking pela média
+  - **Últimos comentários** — feed com nota, comentário, aluno e data
+  - **Admin/moderator excluídos das contagens** via `getNonStudentUserIds()`
+- `/admin/students/[id]/atividade` — perfil de uso de um aluno:
+  - 4 stat cards (último acesso, aulas vistas distintas, concluídas, tempo total)
+  - Progresso por curso (barra %)
+  - Timeline dos últimos 50 eventos (`lesson_view` + `lesson_complete`)
+  - Anotações + Avaliações dele (admin client pra burlar RLS de ratings)
+- Botão "Ver atividade" no `/admin/students/[id]`
+
+### Role `moderator` (commit `64648b4`)
+- **Migração Supabase aplicada:** `users_role_check` agora aceita `'student' | 'moderator' | 'admin'`
+- `student-create-form.tsx` e `student-edit-form.tsx` ganharam **seletor de função** (admin não é editável via UI — segurança; rebaixar admin é bloqueado na action)
+- `getCourseAccessMap` faz **bypass** de matrícula pra admin/moderator: retorna **todos** os cursos publicados com `enrolled_at = epoch` (drip libera tudo) e `has_community_access = true`
+- Helper `isElevatedRole(role)` em `src/lib/access.ts`
+- **Badge "Moderador"** no `user-dropdown` (igual o admin)
+- **Reset de senha manual pelo admin** (`SetPasswordForm` na página `/admin/students/[id]`) usando `auth.admin.updateUserById` — útil quando aluno não consegue abrir o link de convite
+
+### Bug fixes importantes (commit `64648b4`)
+- **Magic link redirecionava pra `/login` em vez de `/reset-password`:**
+  - `src/lib/supabase/middleware.ts` — `/reset-password` saiu de `isAuthRoute` (não expulsa user logado)
+  - `src/app/auth/callback/route.ts` — reescrito pra construir o `NextResponse.redirect` ANTES do `exchangeCodeForSession` e amarrar cookies à response (sem isso, Set-Cookie do exchange podia não ir junto do 307)
+  - Validação de `next` (só aceita path começando com `/`) pra evitar open-redirect
+- **Cards de curso/módulo** estavam `aspect-video` (16:9) — corrigido pra `aspect-[5/7]` (mesma proporção da capa portrait do admin)
+- **Player não renderiza placeholder** quando aula não tem vídeo (antes mostrava box "sem vídeo configurado")
+- **Toolbar do RichTextEditor** ganhou Parágrafo + H1 + H2 + H3 (antes só H2)
+- **Lesson-form** agora busca o título do vídeo via `/api/youtube/video-details` no mount, mostrando o título do vídeo em cima do videoId
+
+### Migrations Supabase aplicadas nesta etapa
+- `add_moderator_role_to_users` — CHECK aceita `'student'|'moderator'|'admin'`
+- `lesson_attachments_select_policy` — RLS read pra `authenticated`
+- `create_lesson_attachments_bucket` — bucket público + 4 policies de Storage (escrita só admin via `membros.is_admin()`)
+
+---
 
 ### Etapa 1 — Setup Next.js + Supabase clients (commit `c35963d`)
 - `npx create-next-app@14` com TS, Tailwind, ESLint, App Router, src/, alias `@/*`
@@ -217,41 +311,60 @@ SaaS de área de membros multi-curso, multi-turma, com:
 
 ## 🚧 Pendente (próximos passos)
 
-### Etapa 5.5 — Refinamentos do CRUD admin (opcional)
-- Drag-and-drop visual com `@dnd-kit/sortable` (substituir botões up/down)
-- Upload de capa direto pra Supabase Storage (bucket novo)
-- Anexos de aula (`lesson_attachments`) — listar/adicionar/remover/reordenar
-- Preview ao vivo do YouTube no form da aula
+### 🐛 Bugs em aberto
+- **"Sistema quebrou abrindo/fechando telas"** (reportado pelo Felipe) — sem stacktrace ainda. Quando reproduzir: pegar erro do console do browser (F12) + terminal do `npm run dev` e investigar. Hipóteses: vazamento do timer do YouTube player, modal portal não limpa `document.body.style.overflow` em algum caso, HMR do dev quebrado.
 
-### Etapa 8 — Biblioteca + Player (aluno) — PRÓXIMO
-- Botão "Conectar YouTube" em `/admin/settings`
-- Tokens criptografados em `membros.platform_settings`
-- Seletor de vídeos no editor de aula
+### Etapa 9 — Drip content
+- ✅ Helper `isContentReleased()` feito (Etapa 8)
+- ✅ Bloqueio server-side em `/courses/[id]` e `/lessons/[id]` (Etapa 8)
+- Notificação automática quando conteúdo é desbloqueado (cruza com Etapa 13 de notificações)
 
-### Etapa 7 — Turmas + Matrículas (admin)
-- `/admin/cohorts` — CRUD
-- Vincular cursos à turma com `has_community_access`
-- Matricular alunos manualmente
+### Etapa 10 — Comunidade (PRÓXIMA GRANDE) 🎯
+- `/community` — galerias (categorias de tópicos)
+- `/community/[gallery]` — lista de tópicos (fixados no topo)
+- `/community/[gallery]/[topic]` — tópico + respostas aninhadas (1 nível) + likes
+- Editor TipTap (já temos o componente) pra criar tópico/resposta
+- Moderação: admin/moderator pode deletar/responder qualquer coisa, marcar fixado, marcar `is_moderated`
+- Notificação quando alguém responde no tópico do aluno
+- Tabelas já criadas no schema: `community_galleries`, `community_topics`, `community_replies`, `community_likes`
+- **Reusar:** `isElevatedRole()` pra gatear ações de moderação
+- Acesso: `has_community_access` em `cohort_courses` controla se a turma libera comunidade — admin/moderator sempre vê
 
-### Etapa 8 — Biblioteca + Player (aluno)
-- `/dashboard` (real) — grid de cursos
-- `/courses/[id]` — módulos
-- `/lessons/[id]` — player + lista lateral + rating
+### Etapa 13 — Notificações in-app (parcial)
+- ✅ Página `/admin/students/[id]/atividade` (timeline + stats)
+- ✅ `/admin/reports` (engajamento + ratings)
+- ❌ Sino com badge no topbar — hoje é só placeholder. Conectar à tabela `notifications` (já existe)
+- ❌ Página `/notifications` com histórico
+- ❌ Triggers automáticos: nova aula publicada, conteúdo desbloqueado por drip, resposta na comunidade
+- ❌ E-mail transacional via Resend pros eventos importantes
 
-### Etapa 9 — Drip content (lógica de liberação)
-- Função utilitária `isContentReleased()`
-- Bloqueio server-side em todas as rotas de aula
+### Etapa 14 — Whitelabel
+- `/admin/settings` — form pra logo, cor primária, sender de e-mail (escreve em `platform_settings`)
+- Substituir hardcoded "Academia NPB" + dourado por valores das settings
+- Resend `from` vir de `platform_settings.email_sender`
 
-### Etapa 10–17 — Comunidade, banners, webhook, notifs, relatórios, whitelabel, refinamentos
+### Etapa 15 — Perfil e suporte do aluno
+- `/profile` — editar nome/telefone/avatar (upload pra Storage), trocar senha, ver histórico de matrículas. Link já existe na sidebar
+- `/support` — placeholder hoje. Decidir formato (form de e-mail? link pro WhatsApp?)
 
-### 🔌 Integração `transactions_data` → matrícula automática (PENDENTE)
-- Tabela `membros.product_cohort_map` já existe (vazia)
-- **Próximo passo:** quando você criar os primeiros produtos/turmas na Etapa 7, me passa: "produto X (vendido como `low ticket automático 2.0`) = turma Y" e eu populo o map
-- Aí crio o trigger AFTER INSERT/UPDATE em `public.transactions_data`:
-  - `Compra Aprovada` → cria/ativa matrícula
-  - `Compra Cancelada` / `Compra Reembolsada` / `Cancelada` → desativa
-  - `EXCEPTION WHEN OTHERS` em volta de tudo (zero risco de bloquear venda)
-- E rodo backfill das **2637 compras aprovadas** já existentes
+### 🔌 Integração `transactions_data` → matrícula automática (PENDENTE — bloqueado em input do Felipe)
+- ✅ Webhook HTTP `POST /api/webhooks/enrollment` pronto pra fontes externas (Kiwify/Hubla)
+- ❌ Trigger SQL no `public.transactions_data` (separado do webhook HTTP — esse é pra automação interna do NPB):
+  - Tabela `membros.product_cohort_map` já existe (vazia)
+  - **Próximo passo:** Felipe precisa mapear: "produto X (`low ticket automático 2.0`, código `xxx`) = turma Y (uuid)". Quando passar o mapeamento, criar trigger AFTER INSERT/UPDATE em `public.transactions_data`:
+    - `Compra Aprovada` → cria/ativa matrícula
+    - `Compra Cancelada` / `Compra Reembolsada` / `Cancelada` → desativa
+    - `EXCEPTION WHEN OTHERS` em volta de tudo (zero risco de bloquear venda)
+  - E rodar backfill das **2637 compras aprovadas** já existentes
+
+### Polimentos pequenos
+- Quick-edit de **aula** (popup com título + cover + duração) — hoje só módulo tem
+- Edição inline de banner (delete+recriar funciona, mas é ruim)
+- Bucket `lesson-attachments` está OK mas anexos são públicos por URL UUID — se for armazenar PDFs sensíveis, trocar pra signed URLs
+- Rate limiting no webhook (`@upstash/ratelimit` ou solução simples com timestamp em Redis/Supabase)
+- Domínio próprio no Resend (hoje sender `onboarding@resend.dev` só envia pro dono da conta)
+- Limpar `ReorderControls` (`src/components/admin/reorder-controls.tsx`) e os `move*Action` antigos — órfãos depois do drag-and-drop
+- Player YouTube usa iframe simples; trocar pra YouTube IFrame API pra ter eventos reais de play/pause/end (hoje o ping de watch_time é otimista — assume aba ativa = vendo)
 
 ---
 
@@ -311,7 +424,11 @@ Abre em http://localhost:3000 — deve redirecionar pra `/login`.
 ```bash
 npm run build
 ```
-Deve compilar sem erros e listar 13 rotas (incluindo `/admin/courses`, `/admin/courses/new`, `/admin/courses/[id]`, `/admin/courses/[id]/modules/[moduleId]`, `/admin/courses/[id]/modules/[moduleId]/lessons/[lessonId]`).
+Deve compilar sem erros e listar **31 rotas** (admin + aluno + auth + APIs YouTube e webhook). Inclui:
+- Admin: `/admin/{courses,cohorts,students,reports,youtube,dashboard}` + sub-rotas
+- Aluno: `/dashboard`, `/courses/[courseId]`, `/lessons/[lessonId]`, `/favorites`, `/notes`
+- Auth: `/login`, `/forgot-password`, `/reset-password`, `/auth/callback`
+- API: `/api/webhooks/enrollment`, `/api/youtube/{auth,callback,disconnect,videos,video-details}`
 
 ---
 
@@ -466,7 +583,17 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). Etapas 1–5 estão completas. Próximo passo é a **Etapa 6: integração YouTube via OAuth 2.0** — criar `/admin/youtube` com botão "Conectar conta YouTube", route handler em `/api/youtube/callback` que faz exchange do code por tokens (access + refresh), salva criptografados em `membros.platform_settings`, e route handler em `/api/youtube/videos` que lista vídeos do canal autenticado via `search.list?forMine=true`. Depois substituir o input de `youtube_video_id` no form da aula (`src/components/admin/lesson-form.tsx`) por um seletor visual com busca (debounce 500ms) que mostra thumbnail/título/duração. As variáveis `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI` precisam estar no `.env.local`.
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 8, 11 e 12 estão completas** (ver changelog do HANDOFF). O cliente já tem painel admin completo, biblioteca de aluno, player com tracking, anexos, drag-and-drop em todas as listas, role moderator com bypass de matrícula, /admin/reports com analytics, webhook HTTP de matrícula. **Próximas frentes pendentes:**
+>
+> 1. **🐛 BUG sem reproduzir:** Felipe relatou que "abrindo e fechando telas o sistema quebra". Sem stacktrace ainda. Precisa pegar console do browser (F12) e terminal do `npm run dev` na próxima vez que reproduzir. Hipóteses: vazamento do timer do YouTube player ao desmontar, modal portal não limpa `document.body.style.overflow` em casos específicos.
+>
+> 2. **Etapa 10 — Comunidade (PRÓXIMA GRANDE):** tabelas já existem (`community_galleries`, `community_topics`, `community_replies`, `community_likes`). Construir `/community`, `/community/[gallery]`, `/community/[gallery]/[topic]` com TipTap pra tópicos/respostas, likes, moderação (admin/moderator pode deletar/responder/fixar — usar `isElevatedRole()` de `src/lib/access.ts`). Acesso baseado em `cohort_courses.has_community_access`.
+>
+> 3. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar página `/notifications`, e triggers automáticos (nova aula, drip desbloqueado, resposta na comunidade). Resend pra e-mails dos eventos importantes.
+>
+> 4. **Trigger SQL `transactions_data` → matrícula:** depende do Felipe mapear "produto X = turma Y" em `membros.product_cohort_map` (vazia hoje). Webhook HTTP já existe pra fontes externas.
+>
+> 5. **Polimentos:** quick-edit de aula (hoje só módulo tem); domínio próprio no Resend; rate limit no webhook; deletar `ReorderControls` órfão; trocar player YouTube por IFrame API pra ter eventos reais de play/pause.
 
 ---
 
@@ -486,7 +613,9 @@ Cole essa mensagem inicial:
 | `b5e65c8` | docs: registra fix de GRANTs/exposed schemas no Supabase |
 | `f42fe23` | fix(admin): ReorderControls não-serializável + upload de capa (bucket course-covers) |
 | `ce64312` | **Etapa 6: YouTube OAuth + video picker** (crypto, tokens cifrados, modal de busca) |
-| _este commit_ | **Etapa 7: Turmas + Matrículas + criar aluno** (Resend invite com fallback de link manual) |
+| `4eff355` | **Etapa 7: Turmas + Matrículas + criar aluno** (Resend invite com fallback de link manual) |
+| `4146364` | feat(cohorts): duração de acesso a nível de turma (não mais por aluno) |
+| `64648b4` | **Etapas 8/11/12 + 5.5 + role moderator + bug fixes** (mega-commit — biblioteca aluno, banners admin, webhook, drag-and-drop, anexos, /admin/reports, /admin/students/[id]/atividade, /favorites, /notes, magic link fix, role moderator com bypass de matrícula) |
 
 ---
 
