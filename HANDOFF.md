@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** após Etapa 4 (layouts sidebar + topbar)
-**Último commit no main:** `b6e503a` (HANDOFF.md) — Etapa 4 será o próximo
+**Última atualização:** após Etapa 5 (CRUD admin de cursos/módulos/aulas)
+**Último commit no main:** `d3c4013` (Etapa 4) — Etapa 5 será o próximo commit
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -102,6 +102,40 @@ SaaS de área de membros multi-curso, multi-turma, com:
 - Mensagens de erro amigáveis em PT-BR ("E-mail ou senha incorretos", etc.)
 - Toda a UI usa os tokens `npb-*` (consistente com o design)
 
+### Etapa 5 — CRUD admin de cursos/módulos/aulas
+- **Server Actions** em [`src/app/(admin)/admin/courses/actions.ts`](src/app/(admin)/admin/courses/actions.ts):
+  - `createCourseAction` / `updateCourseAction` / `deleteCourseAction` / `moveCourseAction`
+  - `createModuleAction` / `updateModuleAction` / `deleteModuleAction` / `moveModuleAction`
+  - `createLessonAction` / `updateLessonAction` / `deleteLessonAction` / `moveLessonAction`
+  - Helper `assertAdmin()` (defense in depth, além do middleware)
+  - `nextPosition()` calcula próximo `position` automaticamente em insert
+  - `swapPosition()` faz reordenação via troca de `position` com vizinho
+- **Páginas:**
+  - `/admin/courses` — grid de cards (cover, título, pills publicado/à venda, reorder controls). Empty state quando lista vazia.
+  - `/admin/courses/new` — form de criar (CourseForm)
+  - `/admin/courses/[id]` — editar curso (form) + lista de módulos + form inline de adicionar módulo
+  - `/admin/courses/[id]/modules/[moduleId]` — editar módulo (form com drip) + lista de aulas + form inline de adicionar aula
+  - `/admin/courses/[id]/modules/[moduleId]/lessons/[lessonId]` — editar aula (form com YouTube ID + duração + descrição rich text + drip)
+  - `/admin/dashboard` agora mostra contagem de cursos/módulos/aulas com link rápido pra `/admin/courses`
+- **Componentes admin** em `src/components/admin/`:
+  - `course-form.tsx` — title, description (textarea), cover_url (URL), pills publicado/à venda, sale_url
+  - `module-form.tsx` — title, description, cover_url, DripFields
+  - `lesson-form.tsx` — title, youtube_video_id, duration_seconds, RichTextEditor (TipTap), DripFields
+  - `drip-fields.tsx` — 4 cards selecionáveis (immediate/locked/days_after_enrollment/fixed_date) com campos condicionais
+  - `rich-text-editor.tsx` — TipTap (StarterKit + Link), toolbar com bold/italic/strike/h2/listas/link/undo, sincroniza HTML em `<input type="hidden">` pra serializar via Server Action
+  - `add-child-form.tsx` — input + botão "Adicionar" inline (reset automático em sucesso, mostra erro inline)
+  - `delete-button.tsx` — confirm() nativo + useTransition pra disabled state. Variantes `icon` (lixeira só) e `full` (lixeira + texto)
+  - `reorder-controls.tsx` — botões up/down com useTransition, disable nos extremos
+- **Bound actions:** páginas usam `action.bind(null, courseId, ...)` pra fixar args antes de passar pra forms/componentes client. Padrão Next.js 14.
+- **createAdminClient() obrigatório:** policies RLS em `membros.{courses,modules,lessons,lesson_attachments}` só têm SELECT (`auth.role() = 'authenticated'`). Mutações são bloqueadas pra qualquer chave que não seja service_role. `actions.ts` checa `process.env.SUPABASE_SERVICE_ROLE_KEY` no helper `admin()` e dá erro claro com link do dashboard se faltar.
+- **Reads em pages** usam `createClient()` (anon + cookies) — funciona com a policy SELECT existente.
+- **Skipped por ora (entram em refinamentos futuros):**
+  - Drag-and-drop visual (usei botões up/down server-side; deps `@dnd-kit/*` instaladas mas não usadas ainda)
+  - Upload direto de capa pra Supabase Storage (input de URL por enquanto)
+  - YouTube video picker (Etapa 6 cuida — campo é apenas o video ID por enquanto, mas thumbnail já é gerada via `i.ytimg.com`)
+  - Anexos de aula (`lesson_attachments` — Etapa 5.5)
+- Build: 13 rotas verde.
+
 ### Etapa 4 — Layouts sidebar + topbar
 - **Route groups:**
   - `src/app/(student)/layout.tsx` — sidebar 64px (Início/Favoritos/Comunidade/Perfil/Suporte) + topbar 56px
@@ -126,13 +160,13 @@ SaaS de área de membros multi-curso, multi-turma, com:
 
 ## 🚧 Pendente (próximos passos)
 
-### Etapa 5 — CRUD Cursos/Módulos/Aulas (admin) — PRÓXIMO
-- `/admin/courses` — lista com drag-and-drop
-- `/admin/courses/[id]` — editar curso + módulos
-- `/admin/courses/[id]/modules/[moduleId]` — editar módulo + aulas
-- Editor TipTap pras descrições
+### Etapa 5.5 — Refinamentos do CRUD admin (opcional)
+- Drag-and-drop visual com `@dnd-kit/sortable` (substituir botões up/down)
+- Upload de capa direto pra Supabase Storage (bucket novo)
+- Anexos de aula (`lesson_attachments`) — listar/adicionar/remover/reordenar
+- Preview ao vivo do YouTube no form da aula
 
-### Etapa 6 — Integração YouTube (OAuth)
+### Etapa 6 — Integração YouTube (OAuth) — PRÓXIMO
 - Botão "Conectar YouTube" em `/admin/settings`
 - Tokens criptografados em `membros.platform_settings`
 - Seletor de vídeos no editor de aula
@@ -220,7 +254,7 @@ Abre em http://localhost:3000 — deve redirecionar pra `/login`.
 ```bash
 npm run build
 ```
-Deve compilar sem erros e listar 11 rotas (/, /_not-found, /admin/dashboard, /auth/callback, /dashboard, /forgot-password, /login, /reset-password).
+Deve compilar sem erros e listar 13 rotas (incluindo `/admin/courses`, `/admin/courses/new`, `/admin/courses/[id]`, `/admin/courses/[id]/modules/[moduleId]`, `/admin/courses/[id]/modules/[moduleId]/lessons/[lessonId]`).
 
 ---
 
@@ -260,7 +294,18 @@ src/
 │   │   └── dashboard/page.tsx ← placeholder (Etapa 8 vira biblioteca real)
 │   ├── (admin)/               ← Etapa 4: layout admin
 │   │   ├── layout.tsx         ← sidebar 240px + topbar (guarda role=admin)
-│   │   └── admin/dashboard/page.tsx ← placeholder métricas
+│   │   └── admin/
+│   │       ├── dashboard/page.tsx       ← stats + CTA
+│   │       └── courses/                 ← Etapa 5
+│   │           ├── actions.ts           ← Server Actions p/ courses/modules/lessons
+│   │           ├── page.tsx             ← lista
+│   │           ├── new/page.tsx         ← criar
+│   │           └── [id]/
+│   │               ├── page.tsx         ← editar curso + módulos
+│   │               └── modules/[moduleId]/
+│   │                   ├── page.tsx     ← editar módulo + aulas
+│   │                   └── lessons/[lessonId]/
+│   │                       └── page.tsx ← editar aula
 │   ├── auth/callback/route.ts ← exchange code → session
 │   ├── layout.tsx             ← root layout (lang=pt-BR, body)
 │   ├── globals.css            ← paleta dark + tokens
@@ -273,6 +318,15 @@ src/
 │   ├── topbar.tsx             ← Etapa 4
 │   ├── user-dropdown.tsx      ← Etapa 4 (avatar + menu + signOut)
 │   ├── notifications-dropdown.tsx ← Etapa 4 (badge + placeholder)
+│   ├── admin/                 ← Etapa 5
+│   │   ├── course-form.tsx
+│   │   ├── module-form.tsx
+│   │   ├── lesson-form.tsx
+│   │   ├── drip-fields.tsx
+│   │   ├── rich-text-editor.tsx
+│   │   ├── add-child-form.tsx
+│   │   ├── delete-button.tsx
+│   │   └── reorder-controls.tsx
 │   └── ui/                    ← shadcn (button, input, label, sonner)
 ├── lib/
 │   ├── supabase/
@@ -347,7 +401,7 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). Etapa 4 (layouts sidebar+topbar) está completa. Próximo passo é a **Etapa 5: CRUD admin de cursos, módulos e aulas** — criar `/admin/courses` (lista com drag-and-drop), `/admin/courses/[id]` (editar curso + módulos), `/admin/courses/[id]/modules/[moduleId]` (editar módulo + aulas) e o editor TipTap pras descrições. Reusar os tokens `npb-*` e respeitar o esquema `membros.courses/modules/lessons`.
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). Etapas 1–5 estão completas. Próximo passo é a **Etapa 6: integração YouTube via OAuth 2.0** — criar `/admin/youtube` com botão "Conectar conta YouTube", route handler em `/api/youtube/callback` que faz exchange do code por tokens (access + refresh), salva criptografados em `membros.platform_settings`, e route handler em `/api/youtube/videos` que lista vídeos do canal autenticado via `search.list?forMine=true`. Depois substituir o input de `youtube_video_id` no form da aula (`src/components/admin/lesson-form.tsx`) por um seletor visual com busca (debounce 500ms) que mostra thumbnail/título/duração. As variáveis `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI` precisam estar no `.env.local`.
 
 ---
 
@@ -362,7 +416,8 @@ Cole essa mensagem inicial:
 | `4735d94` | Dispara primeiro deploy via Git após conectar Vercel↔GitHub |
 | `2b2e4ae` | **Etapa 3: autenticação completa** (login, forgot, reset, callback, dashboard placeholder) |
 | `b6e503a` | Adiciona HANDOFF.md inicial |
-| _este commit_ | **Etapa 4: layouts sidebar + topbar** (route groups student/admin, dropdowns, fix middleware schema) |
+| `d3c4013` | **Etapa 4: layouts sidebar + topbar** (route groups student/admin, dropdowns, fix middleware schema) |
+| _este commit_ | **Etapa 5: CRUD admin de cursos/módulos/aulas** (TipTap, drip fields, reorder, soft auth check) |
 
 ---
 
