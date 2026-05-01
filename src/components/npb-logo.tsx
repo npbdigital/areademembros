@@ -5,6 +5,8 @@ interface NpbLogoProps {
   size?: "sm" | "md" | "lg";
   showWordmark?: boolean;
   className?: string;
+  /** Nome customizado da plataforma (default "Academia NPB"). */
+  name?: string;
 }
 
 const sizes = {
@@ -21,6 +23,7 @@ export function NpbLogo({
   size = "md",
   showWordmark = false,
   className,
+  name = "Academia NPB",
 }: NpbLogoProps) {
   const s = sizes[size];
   return (
@@ -42,7 +45,7 @@ export function NpbLogo({
               s.text,
             )}
           >
-            Academia NPB
+            {name}
           </span>
           <span className="text-[10px] uppercase tracking-widest text-npb-text-muted">
             Área de Membros

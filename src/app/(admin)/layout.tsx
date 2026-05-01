@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
 import { AdminSidebar } from "@/components/admin-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
@@ -25,9 +26,11 @@ export default async function AdminLayout({
 
   if (profile?.role !== "admin") redirect("/dashboard");
 
+  const settings = await getPlatformSettings(supabase);
+
   return (
     <div className="flex min-h-screen bg-npb-bg">
-      <AdminSidebar />
+      <AdminSidebar platformName={settings.platformName} />
       <div className="flex flex-1 flex-col pl-60">
         <Topbar
           user={{

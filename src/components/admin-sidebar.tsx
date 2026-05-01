@@ -54,7 +54,11 @@ const groups = [
   },
 ];
 
-export function AdminSidebar() {
+export function AdminSidebar({
+  platformName = "Academia NPB",
+}: {
+  platformName?: string;
+}) {
   const pathname = usePathname();
 
   return (
@@ -63,7 +67,7 @@ export function AdminSidebar() {
         <Link href="/admin/dashboard" className="flex items-center gap-2.5">
           <NpbLogo size="sm" />
           <div className="flex flex-col leading-tight">
-            <span className="text-sm font-bold text-npb-text">Academia NPB</span>
+            <span className="text-sm font-bold text-npb-text">{platformName}</span>
             <span className="text-[10px] uppercase tracking-widest text-npb-gold">
               Admin
             </span>

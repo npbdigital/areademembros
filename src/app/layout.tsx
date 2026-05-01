@@ -1,10 +1,23 @@
 import type { Metadata } from "next";
+import { createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "Academia NPB — Área de Membros",
-  description: "Plataforma de cursos e conteúdo da No Plan B Digital",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const supabase = createClient();
+    const settings = await getPlatformSettings(supabase);
+    return {
+      title: `${settings.platformName} — Área de Membros`,
+      description: `Plataforma de cursos e conteúdo de ${settings.platformName}`,
+    };
+  } catch {
+    return {
+      title: "Área de Membros",
+      description: "Plataforma de cursos e conteúdo",
+    };
+  }
+}
 
 export default function RootLayout({
   children,
