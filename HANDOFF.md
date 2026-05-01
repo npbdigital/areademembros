@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** após Etapa 3 (autenticação completa)
-**Último commit no main:** `2b2e4ae`
+**Última atualização:** após Etapa 4 (layouts sidebar + topbar)
+**Último commit no main:** `b6e503a` (HANDOFF.md) — Etapa 4 será o próximo
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -96,24 +96,37 @@ SaaS de área de membros multi-curso, multi-turma, com:
   - `reset-password/page.tsx` — define nova senha (após callback)
   - `actions.ts` — Server Actions: `signInAction`, `forgotPasswordAction`, `resetPasswordAction`, `signOutAction`
 - `src/app/auth/callback/route.ts` — Route Handler que faz `exchangeCodeForSession` e redireciona
-- `src/app/dashboard/page.tsx` — placeholder pós-login (Etapa 4 vai substituir)
 - `src/components/npb-logo.tsx` — logo escudo + wordmark reutilizável
 - `src/components/submit-button.tsx` — botão de submit com pending state via `useFormStatus`
 - Middleware atualizado pra liberar `/auth/callback`
 - Mensagens de erro amigáveis em PT-BR ("E-mail ou senha incorretos", etc.)
 - Toda a UI usa os tokens `npb-*` (consistente com o design)
 
+### Etapa 4 — Layouts sidebar + topbar
+- **Route groups:**
+  - `src/app/(student)/layout.tsx` — sidebar 64px (Início/Favoritos/Comunidade/Perfil/Suporte) + topbar 56px
+  - `src/app/(admin)/layout.tsx` — sidebar 240px (Dashboard, Cursos, Banners, Comunidade, Alunos, Turmas, Relatórios, YouTube, Configurações + voltar p/ aluno) + topbar 56px
+- **Páginas movidas/criadas:**
+  - `/dashboard` agora vive em `src/app/(student)/dashboard/page.tsx` (placeholder simplificado, header passou pro layout)
+  - `src/app/(admin)/admin/dashboard/page.tsx` — placeholder do painel admin
+  - `src/app/dashboard/page.tsx` antigo foi removido (route group resolve no mesmo path)
+- **Componentes novos em `src/components/`:**
+  - `student-sidebar.tsx` — client comp, 5 ícones com active state via `usePathname()`, replica `_design-reference/styles.css` (.sidebar)
+  - `admin-sidebar.tsx` — client comp, agrupamento por seção (Visão geral, Conteúdo, Pessoas, Análises, Sistema)
+  - `topbar.tsx` — server comp, busca opcional + Notificações + Avatar
+  - `user-dropdown.tsx` — client, click-outside próprio, mostra nome/e-mail/badge admin + links + signOut form
+  - `notifications-dropdown.tsx` — client, badge de não lidas + placeholder "Em breve" (Etapa 14 conecta a tabela `notifications`)
+- **Layouts buscam o `membros.users.full_name/avatar_url/role` do user logado e passam pro Topbar.**
+- **Toaster** subiu pra cada layout (auth/student/admin) — antes estava só no `(auth)`.
+- **Bug fix do middleware:** `src/lib/supabase/middleware.ts` checava `from("users")` (schema public). Corrigido pra `.schema("membros").from("users")` — sem isso a guarda de role admin nunca encontrava o profile e mandava todo mundo pra `/dashboard`.
+- **Lucide note:** o ícone `Youtube` (logo de marca) foi removido das versões recentes do `lucide-react`. Usei `PlaySquare` no link do `/admin/youtube`. Trocar pro logo oficial depois com SVG inline se for prioridade visual.
+- Build valida 11 rotas (`/`, `/_not-found`, `/admin/dashboard`, `/auth/callback`, `/dashboard`, `/forgot-password`, `/login`, `/reset-password`).
+
 ---
 
 ## 🚧 Pendente (próximos passos)
 
-### Etapa 4 — Layouts (sidebar + topbar) — PRÓXIMO
-- `src/app/(student)/layout.tsx` — sidebar 64px (5 ícones) + topbar (search/notif/avatar)
-- `src/app/(admin)/layout.tsx` — sidebar mais larga + topbar admin
-- Mover `/dashboard` pra dentro do `(student)` group
-- Componentes: `Sidebar`, `Topbar`, `UserDropdown`, `NotificationsDropdown`
-
-### Etapa 5 — CRUD Cursos/Módulos/Aulas (admin)
+### Etapa 5 — CRUD Cursos/Módulos/Aulas (admin) — PRÓXIMO
 - `/admin/courses` — lista com drag-and-drop
 - `/admin/courses/[id]` — editar curso + módulos
 - `/admin/courses/[id]/modules/[moduleId]` — editar módulo + aulas
@@ -207,7 +220,7 @@ Abre em http://localhost:3000 — deve redirecionar pra `/login`.
 ```bash
 npm run build
 ```
-Deve compilar sem erros e listar 6 rotas (/, /_not-found, /auth/callback, /dashboard, /forgot-password, /login, /reset-password).
+Deve compilar sem erros e listar 11 rotas (/, /_not-found, /admin/dashboard, /auth/callback, /dashboard, /forgot-password, /login, /reset-password).
 
 ---
 
@@ -242,20 +255,30 @@ src/
 │   │   ├── login/page.tsx
 │   │   ├── forgot-password/page.tsx
 │   │   └── reset-password/page.tsx
+│   ├── (student)/             ← Etapa 4: layout do aluno
+│   │   ├── layout.tsx         ← sidebar 64px + topbar 56px
+│   │   └── dashboard/page.tsx ← placeholder (Etapa 8 vira biblioteca real)
+│   ├── (admin)/               ← Etapa 4: layout admin
+│   │   ├── layout.tsx         ← sidebar 240px + topbar (guarda role=admin)
+│   │   └── admin/dashboard/page.tsx ← placeholder métricas
 │   ├── auth/callback/route.ts ← exchange code → session
-│   ├── dashboard/page.tsx     ← placeholder, vira (student)/dashboard na Etapa 4
 │   ├── layout.tsx             ← root layout (lang=pt-BR, body)
 │   ├── globals.css            ← paleta dark + tokens
 │   └── page.tsx               ← redirect / → /login | /dashboard
 ├── components/
 │   ├── npb-logo.tsx           ← escudo + wordmark
 │   ├── submit-button.tsx      ← com pending via useFormStatus
+│   ├── student-sidebar.tsx    ← Etapa 4
+│   ├── admin-sidebar.tsx      ← Etapa 4
+│   ├── topbar.tsx             ← Etapa 4
+│   ├── user-dropdown.tsx      ← Etapa 4 (avatar + menu + signOut)
+│   ├── notifications-dropdown.tsx ← Etapa 4 (badge + placeholder)
 │   └── ui/                    ← shadcn (button, input, label, sonner)
 ├── lib/
 │   ├── supabase/
 │   │   ├── client.ts          ← createBrowserClient (Client Components)
 │   │   ├── server.ts          ← createClient + createAdminClient
-│   │   └── middleware.ts      ← updateSession (auth + redirects)
+│   │   └── middleware.ts      ← updateSession (auth + redirects, role check via schema membros)
 │   └── utils.ts               ← cn() do shadcn
 └── middleware.ts              ← Next middleware ativando updateSession
 
@@ -316,7 +339,7 @@ git push                       # Deploy automático na Vercel
 
 6. **GitHub e Vercel estão conectados via Git integration** — qualquer push em `main` deploya. Não use `vercel deploy` CLI manual a não ser pra debug.
 
-7. **Não usei o `/(student)` ou `/(admin)` route groups ainda** — Etapa 4 vai criar. `/dashboard` está direto em `app/dashboard/` por enquanto, vai mudar.
+7. **Route groups `(student)` e `(admin)` em uso desde a Etapa 4** — `/dashboard` resolve via `(student)/dashboard/page.tsx` e `/admin/*` via `(admin)/admin/*`. Cada layout faz própria checagem de auth + role no servidor (defense in depth, além da camada de middleware).
 
 ---
 
@@ -324,7 +347,7 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). O último commit é `2b2e4ae` (Etapa 3 completa). Próximo passo é a **Etapa 4: layouts (sidebar + topbar) com base no design em `_design-reference/`**. Use Tailwind tokens `npb-*` e replique o sidebar 64px + topbar 56px do `_design-reference/styles.css`.
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). Etapa 4 (layouts sidebar+topbar) está completa. Próximo passo é a **Etapa 5: CRUD admin de cursos, módulos e aulas** — criar `/admin/courses` (lista com drag-and-drop), `/admin/courses/[id]` (editar curso + módulos), `/admin/courses/[id]/modules/[moduleId]` (editar módulo + aulas) e o editor TipTap pras descrições. Reusar os tokens `npb-*` e respeitar o esquema `membros.courses/modules/lessons`.
 
 ---
 
@@ -338,6 +361,8 @@ Cole essa mensagem inicial:
 | `67545de` | Adiciona `vercel.json` forçando framework=nextjs |
 | `4735d94` | Dispara primeiro deploy via Git após conectar Vercel↔GitHub |
 | `2b2e4ae` | **Etapa 3: autenticação completa** (login, forgot, reset, callback, dashboard placeholder) |
+| `b6e503a` | Adiciona HANDOFF.md inicial |
+| _este commit_ | **Etapa 4: layouts sidebar + topbar** (route groups student/admin, dropdowns, fix middleware schema) |
 
 ---
 

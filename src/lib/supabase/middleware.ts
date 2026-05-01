@@ -70,6 +70,7 @@ export async function updateSession(request: NextRequest) {
   // Rotas /admin exigem role = 'admin'
   if (user && pathname.startsWith("/admin")) {
     const { data: profile } = await supabase
+      .schema("membros")
       .from("users")
       .select("role")
       .eq("id", user.id)
