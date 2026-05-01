@@ -1,22 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  ChevronRight,
-  Layers,
-  Lock,
-  PlayCircle,
-} from "lucide-react";
+import { ArrowLeft, GalleryHorizontalEnd, Layers } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { CourseForm } from "@/components/admin/course-form";
 import { AddChildForm } from "@/components/admin/add-child-form";
 import { DeleteButton } from "@/components/admin/delete-button";
-import { ReorderControls } from "@/components/admin/reorder-controls";
+import { BannerForm } from "@/components/admin/banner-form";
 import {
+  SortableModulesList,
+  type SortableModule,
+} from "@/components/admin/sortable-modules-list";
+import { SortableBannersList } from "@/components/admin/sortable-banners-list";
+import {
+  createBannerAction,
   createModuleAction,
   deleteCourseAction,
-  deleteModuleAction,
-  moveModuleAction,
   updateCourseAction,
 } from "../actions";
 
@@ -62,9 +60,18 @@ export default async function EditCoursePage({
     }
   }
 
+  // Banners do curso
+  const { data: banners } = await supabase
+    .schema("membros")
+    .from("banners")
+    .select("id, image_url, link_url, link_target, is_active, position")
+    .eq("course_id", courseId)
+    .order("position", { ascending: true });
+
   const updateAction = updateCourseAction.bind(null, courseId);
   const deleteAction = deleteCourseAction.bind(null, courseId);
   const createModule = createModuleAction.bind(null, courseId);
+  const createBanner = createBannerAction.bind(null, courseId);
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -122,21 +129,63 @@ export default async function EditCoursePage({
           </div>
 
           {modules && modules.length > 0 ? (
-            <ul className="divide-y divide-npb-border">
-              {modules.map((m, index) => (
-                <ModuleRow
-                  key={m.id}
-                  module={m}
-                  courseId={courseId}
-                  lessonCount={lessonCounts[m.id] ?? 0}
-                  isFirst={index === 0}
-                  isLast={index === modules.length - 1}
-                />
-              ))}
-            </ul>
+            <SortableModulesList
+              courseId={courseId}
+              modules={modules as SortableModule[]}
+              lessonCounts={lessonCounts}
+            />
           ) : (
             <p className="px-2 py-6 text-center text-sm text-npb-text-muted">
               Nenhum módulo ainda. Adicione o primeiro acima.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Banners */}
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <GalleryHorizontalEnd className="h-5 w-5 text-npb-gold" />
+          <h2 className="text-lg font-bold text-npb-text">Banners</h2>
+          <span className="rounded bg-npb-bg3 px-2 py-0.5 text-xs text-npb-text-muted">
+            {banners?.length ?? 0}
+          </span>
+        </div>
+        <p className="mb-4 text-xs text-npb-text-muted">
+          Aparecem em carousel acima da grade de módulos pros alunos
+          matriculados nesse curso.
+        </p>
+
+        <div className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-4">
+          <details className="rounded-lg border border-npb-border bg-npb-bg3 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-npb-text">
+              + Adicionar banner
+            </summary>
+            <div className="mt-4">
+              <BannerForm
+                action={createBanner}
+                submitLabel="Adicionar banner"
+                successMessage="Banner adicionado."
+                resetOnSuccess
+              />
+            </div>
+          </details>
+
+          {banners && banners.length > 0 ? (
+            <SortableBannersList
+              courseId={courseId}
+              banners={banners.map((b) => ({
+                id: b.id,
+                image_url: b.image_url,
+                link_url: b.link_url,
+                link_target: b.link_target,
+                is_active: b.is_active,
+                position: b.position,
+              }))}
+            />
+          ) : (
+            <p className="py-4 text-center text-sm text-npb-text-muted">
+              Nenhum banner ainda. Adicione o primeiro acima.
             </p>
           )}
         </div>
@@ -145,86 +194,3 @@ export default async function EditCoursePage({
   );
 }
 
-interface ModuleRowProps {
-  module: {
-    id: string;
-    title: string;
-    position: number | null;
-    release_type: string | null;
-    cover_url: string | null;
-  };
-  courseId: string;
-  lessonCount: number;
-  isFirst: boolean;
-  isLast: boolean;
-}
-
-function ModuleRow({
-  module: m,
-  courseId,
-  lessonCount,
-  isFirst,
-  isLast,
-}: ModuleRowProps) {
-  const deleteAction = deleteModuleAction.bind(null, m.id, courseId);
-  const isLocked = m.release_type === "locked";
-
-  return (
-    <li className="flex items-center gap-3 px-2 py-3">
-      <ReorderControls
-        onMoveUp={moveModuleAction.bind(null, m.id, courseId, "up")}
-        onMoveDown={moveModuleAction.bind(null, m.id, courseId, "down")}
-        disableUp={isFirst}
-        disableDown={isLast}
-      />
-
-      <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded bg-npb-bg3">
-        {m.cover_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={m.cover_url}
-            alt={m.title}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-npb-text-muted">
-            <Layers className="h-4 w-4" />
-          </div>
-        )}
-      </div>
-
-      <Link
-        href={`/admin/courses/${courseId}/modules/${m.id}`}
-        className="flex flex-1 items-center justify-between gap-3 group"
-      >
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-npb-text group-hover:text-npb-gold">
-              {m.title}
-            </span>
-            {isLocked && (
-              <span className="inline-flex items-center gap-0.5 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-medium text-npb-text-muted">
-                <Lock className="h-2.5 w-2.5" />
-                bloqueado
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 text-xs text-npb-text-muted">
-            <PlayCircle className="h-3 w-3" />
-            {lessonCount === 0
-              ? "Nenhuma aula"
-              : `${lessonCount} aula${lessonCount > 1 ? "s" : ""}`}
-          </div>
-        </div>
-        <ChevronRight className="h-4 w-4 text-npb-text-muted group-hover:text-npb-gold" />
-      </Link>
-
-      <DeleteButton
-        action={deleteAction}
-        confirmMessage={`Excluir o módulo "${m.title}"? As aulas dentro dele também serão removidas.`}
-        variant="icon"
-        label="Excluir módulo"
-      />
-    </li>
-  );
-}

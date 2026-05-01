@@ -39,11 +39,17 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Rotas em que NÃO redirecionamos um usuário logado pra fora.
+  // /reset-password fica fora do "redireciona se logado" — após o callback,
+  // a sessão já está válida e o user precisa ficar lá pra definir senha.
   const isAuthRoute =
     pathname.startsWith("/login") ||
     pathname.startsWith("/forgot-password") ||
-    pathname.startsWith("/reset-password") ||
     pathname.startsWith("/auth/callback");
+
+  // Rotas que sempre permitem acesso, com ou sem sessão.
+  const isPublicAuthRoute =
+    isAuthRoute || pathname.startsWith("/reset-password");
 
   const isPublicApi = pathname.startsWith("/api/webhooks");
   const isStaticOrNext =
@@ -52,7 +58,7 @@ export async function updateSession(request: NextRequest) {
     pathname === "/";
 
   // Sem sessão → manda pra /login (exceto em rotas públicas)
-  if (!user && !isAuthRoute && !isPublicApi && !isStaticOrNext) {
+  if (!user && !isPublicAuthRoute && !isPublicApi && !isStaticOrNext) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);

@@ -40,6 +40,7 @@ export default async function StudentLayout({
             email: user.email ?? "",
             avatarUrl: profile?.avatar_url ?? null,
             isAdmin: profile?.role === "admin",
+            isModerator: profile?.role === "moderator",
           }}
           notificationsCount={notificationsCount ?? 0}
         />

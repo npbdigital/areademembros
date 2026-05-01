@@ -75,10 +75,14 @@ export async function createStudentAction(
   const email = str(formData, "email").toLowerCase();
   const phone = nullableStr(formData, "phone");
   const cohortId = nullableStr(formData, "cohort_id");
+  const role = str(formData, "role") || "student";
 
   if (!fullName) return { ok: false, error: "Nome é obrigatório." };
   if (!email) return { ok: false, error: "E-mail é obrigatório." };
   if (!email.includes("@")) return { ok: false, error: "E-mail inválido." };
+  if (role !== "student" && role !== "moderator") {
+    return { ok: false, error: "Função inválida." };
+  }
 
   const supabase = admin();
   const origin = getOrigin();
@@ -119,7 +123,7 @@ export async function createStudentAction(
         email,
         full_name: fullName,
         phone,
-        role: "student",
+        role,
         is_active: true,
       },
       { onConflict: "id" },
@@ -223,17 +227,44 @@ export async function updateStudentAction(
   const fullName = str(formData, "full_name");
   const phone = nullableStr(formData, "phone");
   const isActive = formData.get("is_active") === "on";
+  const roleRaw = str(formData, "role");
+  const role = roleRaw || null;
 
   if (!fullName) return { ok: false, error: "Nome é obrigatório." };
+  if (role && role !== "student" && role !== "moderator") {
+    return {
+      ok: false,
+      error: "Apenas student ou moderator podem ser definidos por aqui.",
+    };
+  }
+
+  // Não permitir rebaixar admin via UI
+  const { data: current } = await admin()
+    .schema("membros")
+    .from("users")
+    .select("role")
+    .eq("id", id)
+    .single();
+  if (current?.role === "admin" && role && role !== "admin") {
+    return {
+      ok: false,
+      error: "Use o painel do Supabase para alterar a função de um admin.",
+    };
+  }
+
+  const update: Record<string, unknown> = {
+    full_name: fullName,
+    phone,
+    is_active: isActive,
+  };
+  if (role && current?.role !== "admin") {
+    update.role = role;
+  }
 
   const { error } = await admin()
     .schema("membros")
     .from("users")
-    .update({
-      full_name: fullName,
-      phone,
-      is_active: isActive,
-    })
+    .update(update)
     .eq("id", id);
 
   if (error) return { ok: false, error: error.message };
@@ -241,6 +272,33 @@ export async function updateStudentAction(
   revalidatePath("/admin/students");
   revalidatePath(`/admin/students/${id}`);
   return { ok: true };
+}
+
+export async function setStudentPasswordAction(
+  userId: string,
+  newPassword: string,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    if (typeof newPassword !== "string" || newPassword.length < 8) {
+      return {
+        ok: false,
+        error: "A senha precisa ter pelo menos 8 caracteres.",
+      };
+    }
+
+    const supabase = admin();
+    const { error } = await supabase.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    });
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath(`/admin/students/${userId}`);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return { ok: false, error: msg };
+  }
 }
 
 export async function setStudentActiveAction(

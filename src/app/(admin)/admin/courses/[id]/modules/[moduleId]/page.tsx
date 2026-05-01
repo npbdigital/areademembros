@@ -1,22 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  ChevronRight,
-  Clock,
-  Lock,
-  PlayCircle,
-} from "lucide-react";
+import { ArrowLeft, ChevronRight, PlayCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { ModuleForm } from "@/components/admin/module-form";
 import { AddChildForm } from "@/components/admin/add-child-form";
 import { DeleteButton } from "@/components/admin/delete-button";
-import { ReorderControls } from "@/components/admin/reorder-controls";
+import {
+  SortableLessonsList,
+  type SortableLesson,
+} from "@/components/admin/sortable-lessons-list";
 import {
   createLessonAction,
-  deleteLessonAction,
   deleteModuleAction,
-  moveLessonAction,
   updateModuleAction,
 } from "../../../actions";
 
@@ -66,10 +61,7 @@ export default async function EditModulePage({
       {/* Breadcrumb */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-sm text-npb-text-muted">
-          <Link
-            href="/admin/courses"
-            className="hover:text-npb-text"
-          >
+          <Link href="/admin/courses" className="hover:text-npb-text">
             Cursos
           </Link>
           <ChevronRight className="h-3 w-3" />
@@ -132,18 +124,11 @@ export default async function EditModulePage({
           </div>
 
           {lessons && lessons.length > 0 ? (
-            <ul className="divide-y divide-npb-border">
-              {lessons.map((lesson, index) => (
-                <LessonRow
-                  key={lesson.id}
-                  lesson={lesson}
-                  courseId={courseId}
-                  moduleId={moduleId}
-                  isFirst={index === 0}
-                  isLast={index === lessons.length - 1}
-                />
-              ))}
-            </ul>
+            <SortableLessonsList
+              courseId={courseId}
+              moduleId={moduleId}
+              lessons={lessons as SortableLesson[]}
+            />
           ) : (
             <p className="px-2 py-6 text-center text-sm text-npb-text-muted">
               Nenhuma aula ainda. Adicione a primeira acima.
@@ -153,106 +138,4 @@ export default async function EditModulePage({
       </section>
     </div>
   );
-}
-
-interface LessonRowProps {
-  lesson: {
-    id: string;
-    title: string;
-    position: number | null;
-    release_type: string | null;
-    youtube_video_id: string | null;
-    duration_seconds: number | null;
-  };
-  courseId: string;
-  moduleId: string;
-  isFirst: boolean;
-  isLast: boolean;
-}
-
-function LessonRow({
-  lesson,
-  courseId,
-  moduleId,
-  isFirst,
-  isLast,
-}: LessonRowProps) {
-  const deleteAction = deleteLessonAction.bind(
-    null,
-    lesson.id,
-    moduleId,
-    courseId,
-  );
-  const isLocked = lesson.release_type === "locked";
-  const hasVideo = Boolean(lesson.youtube_video_id);
-
-  return (
-    <li className="flex items-center gap-3 px-2 py-3">
-      <ReorderControls
-        onMoveUp={moveLessonAction.bind(null, lesson.id, moduleId, courseId, "up")}
-        onMoveDown={moveLessonAction.bind(null, lesson.id, moduleId, courseId, "down")}
-        disableUp={isFirst}
-        disableDown={isLast}
-      />
-
-      <div className="flex h-12 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded bg-npb-bg3">
-        {hasVideo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={`https://i.ytimg.com/vi/${lesson.youtube_video_id}/mqdefault.jpg`}
-            alt=""
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <PlayCircle className="h-5 w-5 text-npb-text-muted opacity-50" />
-        )}
-      </div>
-
-      <Link
-        href={`/admin/courses/${courseId}/modules/${moduleId}/lessons/${lesson.id}`}
-        className="flex flex-1 items-center justify-between gap-3 group"
-      >
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-sm font-medium text-npb-text group-hover:text-npb-gold">
-              {lesson.title}
-            </span>
-            {isLocked && (
-              <span className="inline-flex items-center gap-0.5 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-medium text-npb-text-muted">
-                <Lock className="h-2.5 w-2.5" />
-                bloqueado
-              </span>
-            )}
-            {!hasVideo && (
-              <span className="inline-flex items-center gap-0.5 rounded bg-yellow-500/10 px-1.5 py-0.5 text-[10px] font-medium text-yellow-400">
-                sem vídeo
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 text-xs text-npb-text-muted">
-            {lesson.duration_seconds ? (
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {formatDuration(lesson.duration_seconds)}
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <ChevronRight className="h-4 w-4 text-npb-text-muted group-hover:text-npb-gold" />
-      </Link>
-
-      <DeleteButton
-        action={deleteAction}
-        confirmMessage={`Excluir a aula "${lesson.title}"?`}
-        variant="icon"
-        label="Excluir aula"
-      />
-    </li>
-  );
-}
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}m ${s.toString().padStart(2, "0")}s`;
 }

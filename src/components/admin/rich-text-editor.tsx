@@ -6,11 +6,14 @@ import Link from "@tiptap/extension-link";
 import { useEffect, useState } from "react";
 import {
   Bold,
+  Heading1,
   Heading2,
+  Heading3,
   Italic,
   Link as LinkIcon,
   List,
   ListOrdered,
+  Pilcrow,
   Strikethrough,
   Undo2,
 } from "lucide-react";
@@ -32,7 +35,7 @@ export function RichTextEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        heading: { levels: [2, 3] },
+        heading: { levels: [1, 2, 3] },
       }),
       Link.configure({
         openOnClick: false,
@@ -107,12 +110,34 @@ function Toolbar({ editor }: { editor: Editor | null }) {
       </ToolbarButton>
       <Separator />
       <ToolbarButton
+        active={editor.isActive("paragraph")}
+        onClick={() => editor.chain().focus().setParagraph().run()}
+        label="Parágrafo"
+      >
+        <Pilcrow className="h-3.5 w-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        active={editor.isActive("heading", { level: 1 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+        label="Título grande (H1)"
+      >
+        <Heading1 className="h-3.5 w-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
         active={editor.isActive("heading", { level: 2 })}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        label="Título"
+        label="Subtítulo (H2)"
       >
         <Heading2 className="h-3.5 w-3.5" />
       </ToolbarButton>
+      <ToolbarButton
+        active={editor.isActive("heading", { level: 3 })}
+        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+        label="Subtítulo menor (H3)"
+      >
+        <Heading3 className="h-3.5 w-3.5" />
+      </ToolbarButton>
+      <Separator />
       <ToolbarButton
         active={editor.isActive("bulletList")}
         onClick={() => editor.chain().focus().toggleBulletList().run()}

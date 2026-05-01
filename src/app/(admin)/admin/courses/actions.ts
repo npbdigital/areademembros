@@ -70,7 +70,7 @@ function nullableDate(formData: FormData, key: string): string | null {
 }
 
 async function nextPosition(
-  table: "courses" | "modules" | "lessons",
+  table: "courses" | "modules" | "lessons" | "banners" | "lesson_attachments",
   filter: { column: string; value: string } | null,
 ): Promise<number> {
   let q = admin().from(table).select("position").order("position", {
@@ -228,6 +228,41 @@ export async function updateModuleAction(
   return { ok: true };
 }
 
+/**
+ * Quick edit — só título e capa, preserva os demais campos
+ * (description, drip, etc). Usado no popup de edição rápida.
+ */
+export async function quickUpdateModuleAction(
+  id: string,
+  courseId: string,
+  payload: { title?: string; cover_url?: string | null },
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const update: Record<string, unknown> = {};
+    if (typeof payload.title === "string") {
+      const t = payload.title.trim();
+      if (!t) return { ok: false, error: "Título é obrigatório." };
+      update.title = t;
+    }
+    if (payload.cover_url !== undefined) {
+      const c = (payload.cover_url ?? "").trim();
+      update.cover_url = c === "" ? null : c;
+    }
+    if (Object.keys(update).length === 0) return { ok: true };
+
+    const { error } = await admin().from("modules").update(update).eq("id", id);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath(`/admin/courses/${courseId}`);
+    revalidatePath(`/courses/${courseId}`);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return { ok: false, error: msg };
+  }
+}
+
 export async function deleteModuleAction(id: string, courseId: string) {
   await assertAdmin();
   const { error } = await admin().from("modules").delete().eq("id", id);
@@ -354,11 +389,323 @@ export async function moveLessonAction(
 }
 
 // ============================================================
+// BANNERS (vinculados a um curso)
+// ============================================================
+
+export async function createBannerAction(
+  courseId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await assertAdmin();
+  const imageUrl = str(formData, "image_url");
+  if (!imageUrl) return { ok: false, error: "URL da imagem é obrigatória." };
+
+  const linkTarget = str(formData, "link_target") || "_blank";
+  if (linkTarget !== "_blank" && linkTarget !== "_self") {
+    return { ok: false, error: "Alvo do link inválido." };
+  }
+
+  const position = await nextPosition("banners", {
+    column: "course_id",
+    value: courseId,
+  });
+
+  const { error } = await admin().from("banners").insert({
+    course_id: courseId,
+    image_url: imageUrl,
+    link_url: nullableStr(formData, "link_url"),
+    link_target: linkTarget,
+    is_active: bool(formData, "is_active"),
+    position,
+  });
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/admin/courses/${courseId}`);
+  revalidatePath(`/courses/${courseId}`);
+  return { ok: true };
+}
+
+export async function updateBannerAction(
+  id: string,
+  courseId: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  await assertAdmin();
+  const imageUrl = str(formData, "image_url");
+  if (!imageUrl) return { ok: false, error: "URL da imagem é obrigatória." };
+
+  const linkTarget = str(formData, "link_target") || "_blank";
+  if (linkTarget !== "_blank" && linkTarget !== "_self") {
+    return { ok: false, error: "Alvo do link inválido." };
+  }
+
+  const { error } = await admin()
+    .from("banners")
+    .update({
+      image_url: imageUrl,
+      link_url: nullableStr(formData, "link_url"),
+      link_target: linkTarget,
+      is_active: bool(formData, "is_active"),
+    })
+    .eq("id", id);
+
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/admin/courses/${courseId}`);
+  revalidatePath(`/courses/${courseId}`);
+  return { ok: true };
+}
+
+export async function deleteBannerAction(id: string, courseId: string) {
+  await assertAdmin();
+  const { error } = await admin().from("banners").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/admin/courses/${courseId}`);
+  revalidatePath(`/courses/${courseId}`);
+}
+
+export async function moveBannerAction(
+  id: string,
+  courseId: string,
+  direction: "up" | "down",
+) {
+  await assertAdmin();
+  await swapPosition("banners", id, direction, {
+    column: "course_id",
+    value: courseId,
+  });
+  revalidatePath(`/admin/courses/${courseId}`);
+  revalidatePath(`/courses/${courseId}`);
+}
+
+export async function toggleBannerActiveAction(
+  id: string,
+  courseId: string,
+  isActive: boolean,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const { error } = await admin()
+      .from("banners")
+      .update({ is_active: isActive })
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath(`/admin/courses/${courseId}`);
+    revalidatePath(`/courses/${courseId}`);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return { ok: false, error: msg };
+  }
+}
+
+// ============================================================
+// LESSON ATTACHMENTS
+// ============================================================
+
+const LESSON_ATTACHMENT_BUCKET = "lesson-attachments";
+
+export async function addLessonAttachmentAction(
+  lessonId: string,
+  moduleId: string,
+  courseId: string,
+  payload: {
+    fileName: string;
+    fileUrl: string;
+    fileSizeBytes?: number | null;
+  },
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+
+    const fileName = payload.fileName?.trim();
+    const fileUrl = payload.fileUrl?.trim();
+    if (!fileName || !fileUrl) {
+      return { ok: false, error: "Nome e URL do arquivo são obrigatórios." };
+    }
+
+    const position = await nextPosition("lesson_attachments", {
+      column: "lesson_id",
+      value: lessonId,
+    });
+
+    const { error } = await admin().from("lesson_attachments").insert({
+      lesson_id: lessonId,
+      file_name: fileName,
+      file_url: fileUrl,
+      file_size_bytes: payload.fileSizeBytes ?? null,
+      position,
+    });
+
+    if (error) return { ok: false, error: error.message };
+    revalidatePath(
+      `/admin/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`,
+    );
+    revalidatePath(`/lessons/${lessonId}`);
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return { ok: false, error: msg };
+  }
+}
+
+export async function deleteLessonAttachmentAction(
+  id: string,
+  lessonId: string,
+  moduleId: string,
+  courseId: string,
+) {
+  await assertAdmin();
+  const client = admin();
+
+  const { data: existing } = await client
+    .from("lesson_attachments")
+    .select("file_url")
+    .eq("id", id)
+    .single();
+
+  const { error } = await client
+    .from("lesson_attachments")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  if (existing?.file_url) {
+    const path = extractStoragePath(
+      existing.file_url,
+      LESSON_ATTACHMENT_BUCKET,
+    );
+    if (path) {
+      await createAdminClient()
+        .storage.from(LESSON_ATTACHMENT_BUCKET)
+        .remove([path]);
+    }
+  }
+
+  revalidatePath(
+    `/admin/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`,
+  );
+  revalidatePath(`/lessons/${lessonId}`);
+}
+
+export async function moveLessonAttachmentAction(
+  id: string,
+  lessonId: string,
+  moduleId: string,
+  courseId: string,
+  direction: "up" | "down",
+) {
+  await assertAdmin();
+  await swapPosition("lesson_attachments", id, direction, {
+    column: "lesson_id",
+    value: lessonId,
+  });
+  revalidatePath(
+    `/admin/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}`,
+  );
+  revalidatePath(`/lessons/${lessonId}`);
+}
+
+/**
+ * Extrai o path interno do bucket de uma URL pública do Supabase Storage.
+ * Ex: https://xxx.supabase.co/storage/v1/object/public/lesson-attachments/abc.pdf
+ *  → "abc.pdf"
+ */
+function extractStoragePath(publicUrl: string, bucket: string): string | null {
+  const marker = `/object/public/${bucket}/`;
+  const idx = publicUrl.indexOf(marker);
+  if (idx < 0) return null;
+  return decodeURIComponent(publicUrl.slice(idx + marker.length));
+}
+
+// ============================================================
+// REORDER em lote — usado pelo drag-and-drop (SortableList)
+// ============================================================
+
+type SortableTable =
+  | "courses"
+  | "modules"
+  | "lessons"
+  | "banners"
+  | "lesson_attachments";
+
+const VALID_SORTABLE_TABLES: SortableTable[] = [
+  "courses",
+  "modules",
+  "lessons",
+  "banners",
+  "lesson_attachments",
+];
+
+/**
+ * Recebe a nova ordem completa de uma lista (todos os ids do escopo) e
+ * reescreve `position` de cada um. Pra suportar a UNIQUE de (escopo, position)
+ * eventual, faz em duas fases: deslocando pra negativo e depois reaplicando.
+ *
+ * `revalidatePathHints` é uma lista de paths a invalidar após o update.
+ */
+export async function reorderEntitiesAction(
+  table: SortableTable,
+  idsInOrder: string[],
+  revalidatePathHints: string[] = [],
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    if (!VALID_SORTABLE_TABLES.includes(table)) {
+      return { ok: false, error: "Tabela inválida." };
+    }
+    if (!Array.isArray(idsInOrder) || idsInOrder.length === 0) {
+      return { ok: true };
+    }
+
+    const client = admin();
+
+    // Fase 1: garante posições negativas únicas (evita conflito de UNIQUE
+    // se algum dia adicionarmos)
+    await Promise.all(
+      idsInOrder.map((id, i) =>
+        client
+          .from(table)
+          .update({ position: -1 - i })
+          .eq("id", id),
+      ),
+    );
+
+    // Fase 2: aplica posições finais 0..N-1
+    await Promise.all(
+      idsInOrder.map((id, i) =>
+        client
+          .from(table)
+          .update({ position: i })
+          .eq("id", id),
+      ),
+    );
+
+    for (const path of revalidatePathHints) {
+      revalidatePath(path);
+    }
+
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return { ok: false, error: msg };
+  }
+}
+
+// ============================================================
 // Reorder helper — troca position com o vizinho na direção
+// (usado pelos botões antigos up/down — ainda válido pra lugares que
+//  não migraram pro drag-and-drop)
 // ============================================================
 
 async function swapPosition(
-  table: "courses" | "modules" | "lessons",
+  table:
+    | "courses"
+    | "modules"
+    | "lessons"
+    | "banners"
+    | "lesson_attachments",
   id: string,
   direction: "up" | "down",
   filter: { column: string; value: string } | null,

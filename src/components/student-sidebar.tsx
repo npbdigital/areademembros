@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AtSign, Bookmark, Home, Smile, User } from "lucide-react";
+import { AtSign, Bookmark, Home, NotebookPen, Smile, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NpbLogo } from "@/components/npb-logo";
 
 const items = [
   { href: "/dashboard", label: "Início", icon: Home },
   { href: "/favorites", label: "Favoritos", icon: Bookmark },
+  { href: "/notes", label: "Anotações", icon: NotebookPen },
   { href: "/community", label: "Comunidade", icon: Smile },
   { href: "/profile", label: "Perfil", icon: User },
   { href: "/support", label: "Suporte", icon: AtSign },

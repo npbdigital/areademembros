@@ -12,6 +12,7 @@ export interface StudentEditFormValues {
   email?: string | null;
   phone?: string | null;
   is_active?: boolean | null;
+  role?: string | null;
 }
 
 interface StudentEditFormProps {
@@ -54,17 +55,45 @@ export function StudentEditForm({
         </div>
       </div>
 
-      <div className="space-y-1.5">
-        <Label htmlFor="phone" className="text-npb-text">
-          Telefone
-        </Label>
-        <Input
-          id="phone"
-          name="phone"
-          defaultValue={init.phone ?? ""}
-          placeholder="+55 11 99999-9999"
-          className="bg-npb-bg3 border-npb-border text-npb-text"
-        />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="phone" className="text-npb-text">
+            Telefone
+          </Label>
+          <Input
+            id="phone"
+            name="phone"
+            defaultValue={init.phone ?? ""}
+            placeholder="+55 11 99999-9999"
+            className="bg-npb-bg3 border-npb-border text-npb-text"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="role" className="text-npb-text">
+            Função
+          </Label>
+          {init.role === "admin" ? (
+            <Input
+              value="Admin"
+              readOnly
+              disabled
+              className="bg-npb-bg2 border-npb-border text-npb-text-muted"
+            />
+          ) : (
+            <select
+              id="role"
+              name="role"
+              defaultValue={init.role ?? "student"}
+              className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim focus:ring-1 focus:ring-npb-gold-dim"
+            >
+              <option value="student">Aluno</option>
+              <option value="moderator">Moderador</option>
+            </select>
+          )}
+          <p className="text-[10px] text-npb-text-muted">
+            Moderador acessa todos os cursos e pode moderar a comunidade.
+          </p>
+        </div>
       </div>
 
       <label className="flex cursor-pointer items-start gap-3 rounded-md border border-npb-border bg-npb-bg3 p-3">

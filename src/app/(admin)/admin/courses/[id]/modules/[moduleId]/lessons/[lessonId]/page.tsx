@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Paperclip } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { LessonForm } from "@/components/admin/lesson-form";
 import { DeleteButton } from "@/components/admin/delete-button";
+import { AttachmentUpload } from "@/components/admin/attachment-upload";
+import {
+  SortableAttachmentsList,
+  type SortableAttachment,
+} from "@/components/admin/sortable-attachments-list";
 import { deleteLessonAction, updateLessonAction } from "../../../../../actions";
 
 export const dynamic = "force-dynamic";
@@ -48,6 +53,13 @@ export default async function EditLessonPage({
   ) {
     notFound();
   }
+
+  const { data: attachments } = await supabase
+    .schema("membros")
+    .from("lesson_attachments")
+    .select("id, file_name, file_url, file_size_bytes, position")
+    .eq("lesson_id", lessonId)
+    .order("position", { ascending: true });
 
   const updateAction = updateLessonAction.bind(null, lessonId, moduleId, courseId);
   const deleteAction = deleteLessonAction.bind(null, lessonId, moduleId, courseId);
@@ -106,6 +118,42 @@ export default async function EditLessonPage({
           successMessage="Aula atualizada."
         />
       </div>
+
+      <section>
+        <div className="mb-3 flex items-center gap-2">
+          <Paperclip className="h-5 w-5 text-npb-gold" />
+          <h2 className="text-lg font-bold text-npb-text">Anexos</h2>
+          <span className="rounded bg-npb-bg3 px-2 py-0.5 text-xs text-npb-text-muted">
+            {attachments?.length ?? 0}
+          </span>
+        </div>
+        <p className="mb-3 text-xs text-npb-text-muted">
+          PDFs, planilhas, documentos — tudo que ficar disponível pra download
+          na aba &quot;Anexos&quot; da aula.
+        </p>
+
+        <div className="space-y-3 rounded-2xl border border-npb-border bg-npb-bg2 p-4">
+          <AttachmentUpload
+            lessonId={lessonId}
+            moduleId={moduleId}
+            courseId={courseId}
+          />
+
+          {attachments && attachments.length > 0 ? (
+            <SortableAttachmentsList
+              courseId={courseId}
+              moduleId={moduleId}
+              lessonId={lessonId}
+              attachments={attachments as SortableAttachment[]}
+            />
+          ) : (
+            <p className="py-3 text-center text-xs text-npb-text-muted">
+              Nenhum anexo nessa aula.
+            </p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
+

@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 
 /**
  * OAuth/recovery callback do Supabase.
+ *
+ * Constrói a NextResponse PRIMEIRO e amarra os cookies da sessão a ela —
+ * isso garante que o Set-Cookie do exchange vá junto com o redirect 307.
  *
  * Fluxos suportados:
  * - Recuperação de senha → ?code=xxx&next=/reset-password
@@ -29,10 +32,29 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", origin));
   }
 
-  const supabase = createClient();
-  const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(
-    code,
+  const safeNext = next.startsWith("/") ? next : "/dashboard";
+  let response = NextResponse.redirect(new URL(safeNext, origin));
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: CookieOptions) {
+          response.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: CookieOptions) {
+          response.cookies.set({ name, value: "", ...options });
+        },
+      },
+    },
   );
+
+  const { error: exchangeError } =
+    await supabase.auth.exchangeCodeForSession(code);
 
   if (exchangeError) {
     const url = new URL("/login", origin);
@@ -40,8 +62,8 @@ export async function GET(request: NextRequest) {
       "error",
       "Link de recuperação inválido ou expirado. Solicite outro.",
     );
-    return NextResponse.redirect(url);
+    response = NextResponse.redirect(url);
   }
 
-  return NextResponse.redirect(new URL(next, origin));
+  return response;
 }

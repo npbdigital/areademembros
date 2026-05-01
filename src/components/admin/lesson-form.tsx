@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState } from "react-dom";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Film, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,6 +58,35 @@ export function LessonForm({
   const [duration, setDuration] = useState<number | "">(
     init.duration_seconds ?? "",
   );
+
+  // Quando o form carrega só com o videoId (sem title), busca o título no
+  // YouTube pra mostrar pro admin saber qual vídeo está vinculado.
+  useEffect(() => {
+    if (!video?.videoId || video.title) return;
+    let cancelled = false;
+    fetch(`/api/youtube/video-details?videoId=${encodeURIComponent(video.videoId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.ok && data.video?.title) {
+          setVideo((prev) =>
+            prev && prev.videoId === data.video.videoId
+              ? {
+                  ...prev,
+                  title: data.video.title,
+                  thumbnail: data.video.thumbnail ?? prev.thumbnail,
+                }
+              : prev,
+          );
+        }
+      })
+      .catch(() => {
+        // silencioso — admin pode estar sem YouTube conectado
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [video?.videoId, video?.title]);
 
   function handlePick(v: VideoPick) {
     setVideo({ videoId: v.videoId, title: v.title, thumbnail: v.thumbnail });

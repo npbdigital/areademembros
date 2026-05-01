@@ -4,13 +4,17 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
+  History,
+  KeyRound,
   Layers,
   Send,
+  Shield,
   XCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { StudentEditForm } from "@/components/admin/student-edit-form";
 import { ResendInviteButton } from "@/components/admin/resend-invite-button";
+import { SetPasswordForm } from "@/components/admin/set-password-form";
 import { updateStudentAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +58,13 @@ export default async function EditStudentPage({
           <ArrowLeft className="h-3.5 w-3.5" />
           Voltar para alunos
         </Link>
+        <Link
+          href={`/admin/students/${userId}/atividade`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-npb-border bg-npb-bg2 px-3 py-1.5 text-xs font-semibold text-npb-text transition hover:border-npb-gold"
+        >
+          <History className="h-3.5 w-3.5" />
+          Ver atividade
+        </Link>
       </div>
 
       <section className="flex items-center gap-4">
@@ -72,9 +83,21 @@ export default async function EditStudentPage({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="truncate text-xl font-bold text-npb-text">
-            {student.full_name || "(sem nome)"}
-          </h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="truncate text-xl font-bold text-npb-text">
+              {student.full_name || "(sem nome)"}
+            </h1>
+            {student.role === "admin" && (
+              <span className="inline-flex items-center gap-1 rounded bg-npb-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-npb-gold">
+                <Shield className="h-3 w-3" /> Admin
+              </span>
+            )}
+            {student.role === "moderator" && (
+              <span className="inline-flex items-center gap-1 rounded bg-npb-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-npb-gold">
+                <Shield className="h-3 w-3" /> Moderador
+              </span>
+            )}
+          </div>
           <p className="text-sm text-npb-text-muted">{student.email}</p>
           <p className="mt-0.5 text-xs text-npb-text-muted">
             Cadastrado em {createdAt} ·{" "}
@@ -99,12 +122,25 @@ export default async function EditStudentPage({
           <Send className="h-5 w-5 text-npb-gold" />
           <h2 className="text-lg font-bold text-npb-text">Acesso</h2>
         </div>
-        <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-6">
-          <p className="mb-3 text-sm text-npb-text-muted">
-            Use isso pra enviar um novo link caso o aluno tenha perdido o
-            convite, esquecido a senha, ou o link tenha expirado.
-          </p>
-          <ResendInviteButton userId={userId} />
+        <div className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+          <div>
+            <h3 className="mb-2 text-sm font-semibold text-npb-text">
+              Reenviar convite
+            </h3>
+            <p className="mb-3 text-sm text-npb-text-muted">
+              Gera um novo link de definição de senha e tenta enviar por
+              e-mail. Útil quando o link anterior expirou.
+            </p>
+            <ResendInviteButton userId={userId} />
+          </div>
+
+          <div className="border-t border-npb-border pt-4">
+            <h3 className="mb-2 inline-flex items-center gap-2 text-sm font-semibold text-npb-text">
+              <KeyRound className="h-4 w-4 text-npb-gold" />
+              Definir senha manualmente
+            </h3>
+            <SetPasswordForm userId={userId} />
+          </div>
         </div>
       </section>
 

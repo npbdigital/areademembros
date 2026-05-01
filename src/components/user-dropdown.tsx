@@ -11,6 +11,7 @@ export interface UserDropdownProps {
   email: string;
   avatarUrl?: string | null;
   isAdmin?: boolean;
+  isModerator?: boolean;
 }
 
 export function UserDropdown({
@@ -18,6 +19,7 @@ export function UserDropdown({
   email,
   avatarUrl,
   isAdmin,
+  isModerator,
 }: UserDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -87,12 +89,17 @@ export function UserDropdown({
               {fullName || "Sem nome"}
             </div>
             <div className="truncate text-xs text-npb-text-muted">{email}</div>
-            {isAdmin && (
+            {isAdmin ? (
               <span className="mt-2 inline-flex items-center gap-1 rounded bg-npb-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-npb-gold">
                 <ShieldCheck className="h-3 w-3" />
                 Admin
               </span>
-            )}
+            ) : isModerator ? (
+              <span className="mt-2 inline-flex items-center gap-1 rounded bg-npb-gold/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-npb-gold">
+                <ShieldCheck className="h-3 w-3" />
+                Moderador
+              </span>
+            ) : null}
           </div>
 
           <div className="py-1.5">
