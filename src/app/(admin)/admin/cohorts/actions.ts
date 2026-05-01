@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { expiresAtFromDuration } from "@/lib/enrollment";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -43,11 +44,11 @@ function nullableStr(formData: FormData, key: string): string | null {
   return v === "" ? null : v;
 }
 
-function nullableDate(formData: FormData, key: string): string | null {
+function nullableInt(formData: FormData, key: string): number | null {
   const v = str(formData, key);
   if (v === "") return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  const n = Number.parseInt(v, 10);
+  return Number.isNaN(n) || n < 1 ? null : n;
 }
 
 // ============================================================
@@ -67,6 +68,7 @@ export async function createCohortAction(
     .insert({
       name,
       description: nullableStr(formData, "description"),
+      default_duration_days: nullableInt(formData, "default_duration_days"),
     })
     .select("id")
     .single();
@@ -90,6 +92,7 @@ export async function updateCohortAction(
     .update({
       name,
       description: nullableStr(formData, "description"),
+      default_duration_days: nullableInt(formData, "default_duration_days"),
     })
     .eq("id", id);
   if (error) return { ok: false, error: error.message };
@@ -161,6 +164,21 @@ export async function toggleCommunityAccessAction(
 // ENROLLMENTS — matricular aluno em uma turma
 // ============================================================
 
+/**
+ * Lê a duração padrão da turma e calcula expires_at agora.
+ * Reusado em createStudent + enrollExistingStudent.
+ */
+async function calculateExpiryForCohort(
+  cohortId: string,
+): Promise<string | null> {
+  const { data } = await admin()
+    .from("cohorts")
+    .select("default_duration_days")
+    .eq("id", cohortId)
+    .single();
+  return expiresAtFromDuration(data?.default_duration_days);
+}
+
 export async function enrollExistingStudentAction(
   cohortId: string,
   _prev: ActionResult | null,
@@ -170,7 +188,7 @@ export async function enrollExistingStudentAction(
   const userId = str(formData, "user_id");
   if (!userId) return { ok: false, error: "Selecione um aluno." };
 
-  const expiresAt = nullableDate(formData, "expires_at");
+  const expiresAt = await calculateExpiryForCohort(cohortId);
 
   // Verifica se já existe matrícula nessa turma
   const { data: existing } = await admin()
@@ -181,12 +199,13 @@ export async function enrollExistingStudentAction(
     .maybeSingle();
 
   if (existing) {
-    // Reativa + atualiza expires_at
+    // Reativa + reseta expires_at do zero (nova "matrícula")
     const { error } = await admin()
       .from("enrollments")
       .update({
         is_active: true,
         expires_at: expiresAt,
+        enrolled_at: new Date().toISOString(),
         source: "manual",
       })
       .eq("id", existing.id);
@@ -223,9 +242,15 @@ export async function reactivateEnrollmentAction(
   cohortId: string,
 ): Promise<void> {
   await assertAdmin();
+  // Recalcula expires_at do zero ao reativar
+  const expiresAt = await calculateExpiryForCohort(cohortId);
   const { error } = await admin()
     .from("enrollments")
-    .update({ is_active: true })
+    .update({
+      is_active: true,
+      expires_at: expiresAt,
+      enrolled_at: new Date().toISOString(),
+    })
     .eq("id", enrollmentId);
   if (error) throw new Error(error.message);
   revalidatePath(`/admin/cohorts/${cohortId}`);

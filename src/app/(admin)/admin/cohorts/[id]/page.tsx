@@ -9,6 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { formatDuration } from "@/lib/format-duration";
 import { AddCourseToCohortForm } from "@/components/admin/add-course-to-cohort-form";
 import { CohortForm } from "@/components/admin/cohort-form";
 import { CommunityToggle } from "@/components/admin/community-toggle";
@@ -37,7 +38,7 @@ export default async function EditCohortPage({
   const { data: cohort } = await supabase
     .schema("membros")
     .from("cohorts")
-    .select("id, name, description")
+    .select("id, name, description, default_duration_days")
     .eq("id", cohortId)
     .single();
 
@@ -110,15 +111,22 @@ export default async function EditCohortPage({
 
       <section>
         <h1 className="mb-1 text-xl font-bold text-npb-text">{cohort.name}</h1>
-        <p className="mb-6 text-sm text-npb-text-muted">
-          Edite nome e descrição. Vincule cursos e matricule alunos abaixo.
+        <p className="mb-2 text-sm text-npb-text-muted">
+          Edite nome, descrição e duração do acesso. Vincule cursos e matricule
+          alunos abaixo.
         </p>
+        <div className="mb-6 inline-flex items-center gap-1.5 rounded-md bg-npb-bg3 px-3 py-1 text-xs">
+          <span className="text-npb-text-muted">Duração do acesso:</span>
+          <span className="font-semibold text-npb-gold">
+            {formatDuration(cohort.default_duration_days)}
+          </span>
+        </div>
         <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-6">
           <CohortForm
             action={updateAction}
             initialValues={cohort}
             submitLabel="Salvar alterações"
-            successMessage="Turma atualizada."
+            successMessage="Turma atualizada (mudanças não afetam matrículas existentes)."
           />
         </div>
       </section>

@@ -1,6 +1,14 @@
 import Link from "next/link";
-import { ChevronRight, Layers, Plus, Users } from "lucide-react";
+import {
+  ChevronRight,
+  Clock,
+  Infinity as InfinityIcon,
+  Layers,
+  Plus,
+  Users,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { formatDuration } from "@/lib/format-duration";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +18,7 @@ export default async function AdminCohortsPage() {
   const { data: cohorts } = await supabase
     .schema("membros")
     .from("cohorts")
-    .select("id, name, description, created_at")
+    .select("id, name, description, default_duration_days, created_at")
     .order("created_at", { ascending: false });
 
   const list = cohorts ?? [];
@@ -105,7 +113,7 @@ export default async function AdminCohortsPage() {
                     </p>
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-npb-text-muted">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-npb-text-muted">
                   <span>
                     📚 {courseCounts[cohort.id] ?? 0} curso
                     {(courseCounts[cohort.id] ?? 0) !== 1 ? "s" : ""}
@@ -114,6 +122,14 @@ export default async function AdminCohortsPage() {
                     <Users className="h-3 w-3" />
                     {studentCounts[cohort.id] ?? 0} aluno
                     {(studentCounts[cohort.id] ?? 0) !== 1 ? "s" : ""}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-medium text-npb-gold">
+                    {cohort.default_duration_days == null ? (
+                      <InfinityIcon className="h-2.5 w-2.5" />
+                    ) : (
+                      <Clock className="h-2.5 w-2.5" />
+                    )}
+                    {formatDuration(cohort.default_duration_days)}
                   </span>
                 </div>
               </Link>

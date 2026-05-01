@@ -5,11 +5,13 @@ import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
+import { CohortDurationField } from "@/components/admin/cohort-duration-field";
 import type { ActionResult } from "@/app/(admin)/admin/cohorts/actions";
 
 export interface CohortFormValues {
   name?: string | null;
   description?: string | null;
+  default_duration_days?: number | null;
 }
 
 interface CohortFormProps {
@@ -60,6 +62,8 @@ export function CohortForm({
           className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim focus:ring-1 focus:ring-npb-gold-dim"
         />
       </div>
+
+      <CohortDurationField defaultValue={init.default_duration_days} />
 
       {state?.error && (
         <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">

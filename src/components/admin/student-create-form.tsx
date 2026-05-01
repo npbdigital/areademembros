@@ -76,42 +76,27 @@ export function StudentCreateForm({
           <legend className="-ml-1 px-1 text-sm font-medium text-npb-text">
             Matrícula (opcional)
           </legend>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="cohort_id" className="text-npb-text-muted text-xs">
-                Turma
-              </Label>
-              <select
-                id="cohort_id"
-                name="cohort_id"
-                defaultValue={defaultCohortId ?? ""}
-                className="w-full rounded-md border border-npb-border bg-npb-bg2 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-              >
-                <option value="">— Sem matrícula —</option>
-                {cohortOptions.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="expires_at"
-                className="text-npb-text-muted text-xs"
-              >
-                Expira em
-              </Label>
-              <Input
-                id="expires_at"
-                name="expires_at"
-                type="date"
-                className="bg-npb-bg2 border-npb-border text-npb-text"
-              />
-              <p className="text-[10px] text-npb-text-muted">
-                Vazio = sem expiração.
-              </p>
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cohort_id" className="text-npb-text-muted text-xs">
+              Turma
+            </Label>
+            <select
+              id="cohort_id"
+              name="cohort_id"
+              defaultValue={defaultCohortId ?? ""}
+              className="w-full rounded-md border border-npb-border bg-npb-bg2 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+            >
+              <option value="">— Sem matrícula —</option>
+              {cohortOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-npb-text-muted">
+              A duração do acesso é definida pela turma (configurada em{" "}
+              <code>/admin/cohorts</code>).
+            </p>
           </div>
         </fieldset>
 

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
+import { expiresAtFromDuration } from "@/lib/enrollment";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -44,13 +45,6 @@ function nullableStr(formData: FormData, key: string): string | null {
   return v === "" ? null : v;
 }
 
-function nullableDate(formData: FormData, key: string): string | null {
-  const v = str(formData, key);
-  if (v === "") return null;
-  const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
 function getOrigin(): string {
   const h = headers();
   return (
@@ -81,7 +75,6 @@ export async function createStudentAction(
   const email = str(formData, "email").toLowerCase();
   const phone = nullableStr(formData, "phone");
   const cohortId = nullableStr(formData, "cohort_id");
-  const expiresAt = nullableDate(formData, "expires_at");
 
   if (!fullName) return { ok: false, error: "Nome é obrigatório." };
   if (!email) return { ok: false, error: "E-mail é obrigatório." };
@@ -138,8 +131,16 @@ export async function createStudentAction(
     };
   }
 
-  // 3. Matricula (se cohort selecionada)
+  // 3. Matricula (se cohort selecionada) — expires_at vem da duração da turma
   if (cohortId) {
+    const { data: cohort } = await supabase
+      .schema("membros")
+      .from("cohorts")
+      .select("default_duration_days")
+      .eq("id", cohortId)
+      .single();
+    const expiresAt = expiresAtFromDuration(cohort?.default_duration_days);
+
     const { data: existingEnroll } = await supabase
       .schema("membros")
       .from("enrollments")
@@ -152,7 +153,11 @@ export async function createStudentAction(
       await supabase
         .schema("membros")
         .from("enrollments")
-        .update({ is_active: true, expires_at: expiresAt })
+        .update({
+          is_active: true,
+          expires_at: expiresAt,
+          enrolled_at: new Date().toISOString(),
+        })
         .eq("id", existingEnroll.id);
     } else {
       await supabase.schema("membros").from("enrollments").insert({
