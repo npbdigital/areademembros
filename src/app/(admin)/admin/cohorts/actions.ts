@@ -69,6 +69,7 @@ export async function createCohortAction(
       name,
       description: nullableStr(formData, "description"),
       default_duration_days: nullableInt(formData, "default_duration_days"),
+      support_prefix: nullableStr(formData, "support_prefix"),
     })
     .select("id")
     .single();
@@ -93,6 +94,7 @@ export async function updateCohortAction(
       name,
       description: nullableStr(formData, "description"),
       default_duration_days: nullableInt(formData, "default_duration_days"),
+      support_prefix: nullableStr(formData, "support_prefix"),
     })
     .eq("id", id);
   if (error) return { ok: false, error: error.message };

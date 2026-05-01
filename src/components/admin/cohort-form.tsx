@@ -12,6 +12,7 @@ export interface CohortFormValues {
   name?: string | null;
   description?: string | null;
   default_duration_days?: number | null;
+  support_prefix?: string | null;
 }
 
 interface CohortFormProps {
@@ -64,6 +65,24 @@ export function CohortForm({
       </div>
 
       <CohortDurationField defaultValue={init.default_duration_days} />
+
+      <div className="space-y-1.5">
+        <Label htmlFor="support_prefix" className="text-npb-text">
+          Prefixo de suporte (interno)
+        </Label>
+        <Input
+          id="support_prefix"
+          name="support_prefix"
+          defaultValue={init.support_prefix ?? ""}
+          placeholder="Ex: LTA 3"
+          maxLength={32}
+          className="bg-npb-bg3 border-npb-border text-npb-text uppercase font-mono"
+        />
+        <p className="text-xs text-npb-text-muted">
+          Aparece no início do assunto dos e-mails de suporte enviados por
+          alunos dessa turma. Ex: <code>[LTA 3] Não consigo entrar...</code>
+        </p>
+      </div>
 
       {state?.error && (
         <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">

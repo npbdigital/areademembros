@@ -1,6 +1,6 @@
 import { Resend } from "resend";
-
-const FROM_DEFAULT = "Academia NPB <onboarding@resend.dev>";
+import { createAdminClient } from "@/lib/supabase/server";
+import { buildResendFrom, getPlatformSettings } from "@/lib/settings";
 
 let cached: Resend | null = null;
 
@@ -16,22 +16,48 @@ export interface SendResult {
   error?: string;
 }
 
+/**
+ * Resolve o "From" preferindo, nessa ordem:
+ *   1. params.from (override explícito do caller)
+ *   2. platform_settings.email_from_address/name
+ *   3. RESEND_FROM_EMAIL/RESEND_FROM_NAME do .env
+ *   4. "Academia NPB <onboarding@resend.dev>" (default)
+ *
+ * Quando não tem service_role disponível, cai pro env/default.
+ */
+async function resolveFrom(override?: string): Promise<string> {
+  if (override) return override;
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return buildResendFrom(null);
+  }
+  try {
+    const supabase = createAdminClient();
+    const settings = await getPlatformSettings(supabase);
+    return buildResendFrom(settings);
+  } catch {
+    return buildResendFrom(null);
+  }
+}
+
 export async function sendEmail(params: {
   to: string;
   subject: string;
   html: string;
   from?: string;
+  replyTo?: string;
 }): Promise<SendResult> {
   const resend = client();
   if (!resend) {
     return { ok: false, error: "RESEND_API_KEY ausente." };
   }
   try {
+    const from = await resolveFrom(params.from);
     const { error } = await resend.emails.send({
-      from: params.from ?? FROM_DEFAULT,
+      from,
       to: params.to,
       subject: params.subject,
       html: params.html,
+      replyTo: params.replyTo,
     });
     if (error) {
       return { ok: false, error: error.message ?? String(error) };

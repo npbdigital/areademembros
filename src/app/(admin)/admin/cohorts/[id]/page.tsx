@@ -38,7 +38,7 @@ export default async function EditCohortPage({
   const { data: cohort } = await supabase
     .schema("membros")
     .from("cohorts")
-    .select("id, name, description, default_duration_days")
+    .select("id, name, description, default_duration_days, support_prefix")
     .eq("id", cohortId)
     .single();
 
