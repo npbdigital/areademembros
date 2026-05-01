@@ -4,22 +4,31 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { useTransition } from "react";
 
 interface ReorderControlsProps {
-  onMove: (direction: "up" | "down") => Promise<void>;
+  onMoveUp: () => Promise<void>;
+  onMoveDown: () => Promise<void>;
   disableUp?: boolean;
   disableDown?: boolean;
 }
 
+/**
+ * Recebe DUAS server actions já bound (uma por direção). Não aceita
+ * função inline porque Next.js 14 não serializa closures pra client comp.
+ */
 export function ReorderControls({
-  onMove,
+  onMoveUp,
+  onMoveDown,
   disableUp,
   disableDown,
 }: ReorderControlsProps) {
   const [pending, startTransition] = useTransition();
 
-  function handle(direction: "up" | "down") {
+  function handle(e: React.MouseEvent, action: () => Promise<void>) {
+    // Para impedir que o clique navegue caso o controle esteja dentro de um <Link>.
+    e.preventDefault();
+    e.stopPropagation();
     if (pending) return;
     startTransition(async () => {
-      await onMove(direction);
+      await action();
     });
   }
 
@@ -27,7 +36,7 @@ export function ReorderControls({
     <div className="flex flex-col">
       <button
         type="button"
-        onClick={() => handle("up")}
+        onClick={(e) => handle(e, onMoveUp)}
         disabled={pending || disableUp}
         title="Mover para cima"
         aria-label="Mover para cima"
@@ -37,7 +46,7 @@ export function ReorderControls({
       </button>
       <button
         type="button"
-        onClick={() => handle("down")}
+        onClick={(e) => handle(e, onMoveDown)}
         disabled={pending || disableDown}
         title="Mover para baixo"
         aria-label="Mover para baixo"

@@ -98,15 +98,12 @@ function CourseCard({
   isFirst: boolean;
   isLast: boolean;
 }) {
-  const moveUp = moveCourseAction.bind(null, course.id, "up");
-  const moveDown = moveCourseAction.bind(null, course.id, "down");
-
   return (
     <Link
       href={`/admin/courses/${course.id}`}
       className="group flex flex-col overflow-hidden rounded-xl border border-npb-border bg-npb-bg2 transition-all hover:border-npb-gold-dim hover:shadow-npb-card-hover"
     >
-      <div className="relative aspect-[3/4] overflow-hidden bg-npb-bg3">
+      <div className="relative aspect-[5/7] overflow-hidden bg-npb-bg3">
         {course.cover_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -119,9 +116,10 @@ function CourseCard({
             <BookOpen className="h-12 w-12 opacity-30" />
           </div>
         )}
-        <div className="absolute right-2 top-2" onClick={(e) => e.preventDefault()}>
+        <div className="absolute right-2 top-2 rounded bg-black/50 backdrop-blur-sm">
           <ReorderControls
-            onMove={async (dir) => (dir === "up" ? moveUp() : moveDown())}
+            onMoveUp={moveCourseAction.bind(null, course.id, "up")}
+            onMoveDown={moveCourseAction.bind(null, course.id, "down")}
             disableUp={isFirst}
             disableDown={isLast}
           />

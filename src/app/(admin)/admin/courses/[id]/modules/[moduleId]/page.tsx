@@ -177,7 +177,6 @@ function LessonRow({
   isFirst,
   isLast,
 }: LessonRowProps) {
-  const moveAction = moveLessonAction.bind(null, lesson.id, moduleId, courseId);
   const deleteAction = deleteLessonAction.bind(
     null,
     lesson.id,
@@ -190,7 +189,8 @@ function LessonRow({
   return (
     <li className="flex items-center gap-3 px-2 py-3">
       <ReorderControls
-        onMove={(dir) => moveAction(dir)}
+        onMoveUp={moveLessonAction.bind(null, lesson.id, moduleId, courseId, "up")}
+        onMoveDown={moveLessonAction.bind(null, lesson.id, moduleId, courseId, "down")}
         disableUp={isFirst}
         disableDown={isLast}
       />

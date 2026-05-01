@@ -166,14 +166,14 @@ function ModuleRow({
   isFirst,
   isLast,
 }: ModuleRowProps) {
-  const moveAction = moveModuleAction.bind(null, m.id, courseId);
   const deleteAction = deleteModuleAction.bind(null, m.id, courseId);
   const isLocked = m.release_type === "locked";
 
   return (
     <li className="flex items-center gap-3 px-2 py-3">
       <ReorderControls
-        onMove={(dir) => moveAction(dir)}
+        onMoveUp={moveModuleAction.bind(null, m.id, courseId, "up")}
+        onMoveDown={moveModuleAction.bind(null, m.id, courseId, "down")}
         disableUp={isFirst}
         disableDown={isLast}
       />

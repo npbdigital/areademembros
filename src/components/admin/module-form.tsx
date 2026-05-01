@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 import { DripFields, type ReleaseType } from "@/components/admin/drip-fields";
+import { CoverUpload } from "@/components/admin/cover-upload";
 import type { ActionResult } from "@/app/(admin)/admin/courses/actions";
 
 export interface ModuleFormValues {
@@ -69,16 +70,13 @@ export function ModuleForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="cover_url" className="text-npb-text">
-          URL da capa
-        </Label>
-        <Input
-          id="cover_url"
+        <Label className="text-npb-text">Capa do módulo</Label>
+        <CoverUpload
           name="cover_url"
-          type="url"
-          defaultValue={init.cover_url ?? ""}
-          placeholder="https://..."
-          className="bg-npb-bg3 border-npb-border text-npb-text"
+          defaultValue={init.cover_url}
+          recommendedWidth={300}
+          recommendedHeight={420}
+          label="Capa do módulo"
         />
       </div>
 
