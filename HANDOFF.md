@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** após Etapa 5 (CRUD admin de cursos/módulos/aulas)
-**Último commit no main:** `d3c4013` (Etapa 4) — Etapa 5 será o próximo commit
+**Última atualização:** após Etapa 6 (YouTube OAuth + video picker)
+**Último commit no main:** `f42fe23` (Etapa 5.5 fix + cover upload)
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -102,6 +102,39 @@ SaaS de área de membros multi-curso, multi-turma, com:
 - Mensagens de erro amigáveis em PT-BR ("E-mail ou senha incorretos", etc.)
 - Toda a UI usa os tokens `npb-*` (consistente com o design)
 
+### Etapa 6 — Integração YouTube (OAuth 2.0 + video picker)
+- **Lib `src/lib/crypto.ts`** — AES-256-GCM, chave derivada de `SUPABASE_SERVICE_ROLE_KEY` via scrypt. Formato: `base64(iv | authTag | ciphertext)`. Usado pra cifrar tokens OAuth no banco.
+- **Lib `src/lib/youtube/storage.ts`** — duas linhas no `membros.platform_settings`:
+  - `youtube_oauth_tokens` (cifrado): `{access_token, refresh_token, expires_at, scope}`
+  - `youtube_oauth_meta` (plain): `{channel_id, channel_title, channel_thumbnail, connected_at}` — pra exibir sem decifrar
+- **Lib `src/lib/youtube/client.ts`** — wrapper da YouTube Data API v3:
+  - `buildAuthUrl()` — monta URL OAuth com `access_type=offline&prompt=consent` (garante refresh_token)
+  - `exchangeCodeForTokens()` — POST `oauth2.googleapis.com/token`
+  - `getValidAccessToken()` — refresh automático quando expira em < 1 min
+  - `ytFetch()` — wrapper com retry em 401 (re-refresh)
+  - `getOwnChannel()`, `searchOwnVideos()`, `getVideoDetails()` (com `parseISODuration` pra ISO 8601 → segundos)
+- **Route handlers** em `src/app/api/youtube/`:
+  - `auth/route.ts` — gera state, salva em cookie HttpOnly, redireciona pro Google
+  - `callback/route.ts` — valida state, troca code por tokens, busca info do canal, salva tudo, redireciona pra `/admin/youtube?connected=1`
+  - `disconnect/route.ts` (POST) — limpa as duas linhas de platform_settings
+  - `videos/route.ts` — busca paginada (search.list)
+  - `video-details/route.ts` — duração + thumbnail (videos.list)
+  - Todos protegidos por `getAdminUserId()` em `src/lib/admin-guard.ts`
+- **Página `/admin/youtube`** — server component:
+  - Sem conexão: card "Nenhum canal conectado" + botão `Link href="/api/youtube/auth"`
+  - Conectado: card com avatar do canal + título + data de conexão + botão "Desconectar" (client comp `disconnect-button.tsx` faz POST + router.refresh)
+  - Mostra erros via `?error=` na query string
+- **Componente `video-picker.tsx`** — client modal:
+  - Busca com debounce 500ms via `/api/youtube/videos?q=...`
+  - Grid de cards com thumbnail/título/data
+  - Click → busca duração via `/api/youtube/video-details?videoId=...` → chama `onPick({videoId, title, durationSeconds, thumbnail})`
+  - ESC fecha, click fora fecha, focus auto no input
+- **`lesson-form.tsx` reescrito** — agora usa VideoPicker:
+  - Card de vídeo com thumbnail + título + ID + botões "Trocar"/"Remover"
+  - Duração auto-preenchida quando seleciona via picker (mas editável)
+  - Fallback `<details>` "Ou cole o ID manualmente" pra casos sem canal conectado
+- Build: 19 rotas verde.
+
 ### Etapa 5 — CRUD admin de cursos/módulos/aulas
 - **Server Actions** em [`src/app/(admin)/admin/courses/actions.ts`](src/app/(admin)/admin/courses/actions.ts):
   - `createCourseAction` / `updateCourseAction` / `deleteCourseAction` / `moveCourseAction`
@@ -166,7 +199,7 @@ SaaS de área de membros multi-curso, multi-turma, com:
 - Anexos de aula (`lesson_attachments`) — listar/adicionar/remover/reordenar
 - Preview ao vivo do YouTube no form da aula
 
-### Etapa 6 — Integração YouTube (OAuth) — PRÓXIMO
+### Etapa 7 — Turmas + Matrículas (admin) — PRÓXIMO
 - Botão "Conectar YouTube" em `/admin/settings`
 - Tokens criptografados em `membros.platform_settings`
 - Seletor de vídeos no editor de aula
@@ -425,7 +458,10 @@ Cole essa mensagem inicial:
 | `2b2e4ae` | **Etapa 3: autenticação completa** (login, forgot, reset, callback, dashboard placeholder) |
 | `b6e503a` | Adiciona HANDOFF.md inicial |
 | `d3c4013` | **Etapa 4: layouts sidebar + topbar** (route groups student/admin, dropdowns, fix middleware schema) |
-| _este commit_ | **Etapa 5: CRUD admin de cursos/módulos/aulas** (TipTap, drip fields, reorder, soft auth check) |
+| `fa70869` | **Etapa 5: CRUD admin de cursos/módulos/aulas** (TipTap, drip fields, reorder, soft auth check) |
+| `b5e65c8` | docs: registra fix de GRANTs/exposed schemas no Supabase |
+| `f42fe23` | fix(admin): ReorderControls não-serializável + upload de capa (bucket course-covers) |
+| _este commit_ | **Etapa 6: YouTube OAuth + video picker** (crypto, tokens cifrados, modal de busca) |
 
 ---
 
