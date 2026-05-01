@@ -395,6 +395,14 @@ git push                       # Deploy automático na Vercel
 
 7. **Route groups `(student)` e `(admin)` em uso desde a Etapa 4** — `/dashboard` resolve via `(student)/dashboard/page.tsx` e `/admin/*` via `(admin)/admin/*`. Cada layout faz própria checagem de auth + role no servidor (defense in depth, além da camada de middleware).
 
+8. **Schema `membros` exposto via PostgREST + GRANTs feitos manualmente** (corrigido após Etapa 5). A migration original que criou o schema esqueceu de:
+   - Adicionar `membros` em `pgrst.db_schemas` do role `authenticator` (sem isso, queries `.schema('membros')` retornam vazio sem erro visível)
+   - Conceder `USAGE` no schema pra `anon`/`authenticated`/`service_role` (RLS roda EM CIMA dos GRANTs — não substitui)
+   - Conceder `SELECT` (e nas tabelas de aluno: INSERT/UPDATE/DELETE) pra `authenticated`
+   - Conceder tudo pra `service_role` (pra mutações admin)
+
+   Migrations aplicadas no Supabase: `expose_membros_schema_via_postgrest` e `grant_membros_schema_access_to_supabase_roles`. **Se um dia recriar o schema do zero, NÃO esqueça desses GRANTs** — caso contrário o sintoma é "página renderiza, mas nada que depende de role/profile funciona, e nenhum erro aparece no console".
+
 ---
 
 ## 🧪 Para o próximo Claude (se você abrir nova sessão)
