@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** após Etapa 6 (YouTube OAuth + video picker)
-**Último commit no main:** `f42fe23` (Etapa 5.5 fix + cover upload)
+**Última atualização:** após Etapa 7 (Turmas + Matrículas + criar aluno via Resend)
+**Último commit no main:** `ce64312` (Etapa 6: YouTube)
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -102,6 +102,30 @@ SaaS de área de membros multi-curso, multi-turma, com:
 - Mensagens de erro amigáveis em PT-BR ("E-mail ou senha incorretos", etc.)
 - Toda a UI usa os tokens `npb-*` (consistente com o design)
 
+### Etapa 7 — Turmas + Matrículas + criar aluno
+- **Cohorts (`/admin/cohorts`):**
+  - Lista de turmas (cards) com contagem de cursos vinculados + alunos ativos
+  - `/admin/cohorts/new` — criar
+  - `/admin/cohorts/[id]` — 3 seções:
+    1. Form de edição (nome + descrição) com `CohortForm`
+    2. **Cursos vinculados** — `AddCourseToCohortForm` (select + checkbox comunidade) + lista com toggle de comunidade (`CommunityToggle` cliente) e botão de desvincular
+    3. **Alunos matriculados** — `EnrollExistingStudentForm` (matricular existente) + lista com data/expiração/status, botões desativar/reativar
+- **Students (`/admin/students`):**
+  - Tabela com aluno (avatar+nome+email), telefone, qtd matrículas, status, data
+  - `/admin/students/new` — `StudentCreateForm` (client) com matrícula opcional. Em sucesso, mostra `InviteLinkCard` com link copiável + status do envio de email
+  - `/admin/students/[id]` — header com avatar, `StudentEditForm`, `ResendInviteButton` (gera novo link + reenvia), lista de matrículas
+- **Server Actions** em duas pastas:
+  - `cohorts/actions.ts` — create/update/delete + addCourseToCohort/removeCourseFromCohort/toggleCommunityAccess + enrollExistingStudent/unenroll/reactivateEnrollment
+  - `students/actions.ts` — createStudentAction (cria auth user + profile + matrícula opcional + gera magic link de recovery + tenta enviar via Resend) / updateStudent / setStudentActive / resendInviteAction
+- **Resend integration:**
+  - `src/lib/email/resend.ts` — wrapper simples (`sendEmail`) + template HTML (`inviteEmailHtml`)
+  - Sender padrão: `Academia NPB <onboarding@resend.dev>`
+  - **Resend free tier:** sem domínio próprio configurado, só consegue enviar pro e-mail do dono da conta. Pra enviar pra qualquer aluno, precisa configurar domínio próprio em Resend → Domains (adicionar SPF/DKIM no DNS)
+  - O fluxo de criação **sempre mostra o link manualmente** (`InviteLinkCard`) — se o e-mail saiu, mostra check verde; se não, mostra aviso amarelo + erro, e admin copia/envia pelo WhatsApp
+- **Magic link flow:** usa `supabase.auth.admin.generateLink({ type: 'recovery', email })` → vai pro `/auth/callback?next=/reset-password` (já existente da Etapa 3)
+- **Idempotência:** se o e-mail já existe em `auth.users`, reaproveita o id; se já existe matrícula nessa turma, reativa em vez de duplicar
+- Build: 25 rotas verde.
+
 ### Etapa 6 — Integração YouTube (OAuth 2.0 + video picker)
 - **Lib `src/lib/crypto.ts`** — AES-256-GCM, chave derivada de `SUPABASE_SERVICE_ROLE_KEY` via scrypt. Formato: `base64(iv | authTag | ciphertext)`. Usado pra cifrar tokens OAuth no banco.
 - **Lib `src/lib/youtube/storage.ts`** — duas linhas no `membros.platform_settings`:
@@ -199,7 +223,7 @@ SaaS de área de membros multi-curso, multi-turma, com:
 - Anexos de aula (`lesson_attachments`) — listar/adicionar/remover/reordenar
 - Preview ao vivo do YouTube no form da aula
 
-### Etapa 7 — Turmas + Matrículas (admin) — PRÓXIMO
+### Etapa 8 — Biblioteca + Player (aluno) — PRÓXIMO
 - Botão "Conectar YouTube" em `/admin/settings`
 - Tokens criptografados em `membros.platform_settings`
 - Seletor de vídeos no editor de aula
@@ -461,7 +485,8 @@ Cole essa mensagem inicial:
 | `fa70869` | **Etapa 5: CRUD admin de cursos/módulos/aulas** (TipTap, drip fields, reorder, soft auth check) |
 | `b5e65c8` | docs: registra fix de GRANTs/exposed schemas no Supabase |
 | `f42fe23` | fix(admin): ReorderControls não-serializável + upload de capa (bucket course-covers) |
-| _este commit_ | **Etapa 6: YouTube OAuth + video picker** (crypto, tokens cifrados, modal de busca) |
+| `ce64312` | **Etapa 6: YouTube OAuth + video picker** (crypto, tokens cifrados, modal de busca) |
+| _este commit_ | **Etapa 7: Turmas + Matrículas + criar aluno** (Resend invite com fallback de link manual) |
 
 ---
 
