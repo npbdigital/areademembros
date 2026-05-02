@@ -145,7 +145,7 @@ export default async function ProfilePage() {
     .schema("afiliados")
     .from("affiliate_links")
     .select(
-      "external_affiliate_id, verified, verified_at, registered_at, cpf_cnpj_last4",
+      "kiwify_email, kiwify_name, verified, verified_at, registered_at, cpf_cnpj_last4",
     )
     .eq("member_user_id", user.id)
     .eq("source", "kiwify")
@@ -153,8 +153,8 @@ export default async function ProfilePage() {
 
   const affiliateLink: AffiliateLinkView | null = linkRow
     ? {
-        externalAffiliateId: (linkRow as { external_affiliate_id: string })
-          .external_affiliate_id,
+        kiwifyEmail: (linkRow as { kiwify_email: string }).kiwify_email,
+        kiwifyName: (linkRow as { kiwify_name: string }).kiwify_name,
         verified: (linkRow as { verified: boolean }).verified,
         verifiedAt: (linkRow as { verified_at: string | null }).verified_at,
         registeredAt: (linkRow as { registered_at: string }).registered_at,
@@ -163,18 +163,18 @@ export default async function ProfilePage() {
       }
     : null;
 
-  // Vendas — usa o external_affiliate_id pra pegar tudo (até as anteriores ao
-  // cadastro, que aparecem como info no card "pendente")
-  const externalAffId = affiliateLink?.externalAffiliateId;
+  // Vendas — usa o email pra pegar tudo (atribuídas e órfãs com mesmo email)
+  const kiwifyEmail = affiliateLink?.kiwifyEmail;
   let affiliateStats: AffiliateStats = {
     totalSales: 0,
     paidSales: 0,
     refundedSales: 0,
     totalCommissionCents: 0,
     recentSales: [],
+    nameMismatchCount: 0,
   };
 
-  if (externalAffId) {
+  if (kiwifyEmail) {
     const { data: salesData } = await adminSb
       .schema("afiliados")
       .from("sales")
@@ -182,9 +182,9 @@ export default async function ProfilePage() {
         "id, product_name, status, commission_value_cents, approved_at, member_user_id",
       )
       .eq("source", "kiwify")
-      .eq("external_affiliate_id", externalAffId)
+      .ilike("kiwify_email", kiwifyEmail)
       .order("approved_at", { ascending: false })
-      .limit(10);
+      .limit(50);
 
     const all = (salesData ?? []) as Array<{
       id: string;
@@ -194,15 +194,16 @@ export default async function ProfilePage() {
       approved_at: string | null;
       member_user_id: string | null;
     }>;
-    // Stats consideram só vendas atribuídas ao próprio user (após registro)
+    // Stats consideram só vendas atribuídas ao user (email + nome batendo)
     const mine = all.filter((s) => s.member_user_id === user.id);
+    const orphan = all.filter((s) => s.member_user_id === null);
     const paid = mine.filter((s) => s.status === "paid");
     const refunded = mine.filter(
       (s) => s.status === "refunded" || s.status === "chargedback",
     );
 
     affiliateStats = {
-      totalSales: all.length,
+      totalSales: mine.length,
       paidSales: paid.length,
       refundedSales: refunded.length,
       totalCommissionCents: paid.reduce(
@@ -216,6 +217,8 @@ export default async function ProfilePage() {
         commissionCents: s.commission_value_cents,
         approvedAt: s.approved_at,
       })),
+      // Vendas com email batendo mas nome NÃO (= órfãs com mesmo email)
+      nameMismatchCount: orphan.length,
     };
   }
 

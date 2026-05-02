@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto";
+import { processSalesRaw } from "@/lib/affiliates/process";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -126,6 +127,55 @@ export async function revealCpfCnpjAction(
     } catch {
       return { ok: false, error: "Falha ao decifrar." };
     }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/**
+ * Reprocessa um sales_raw pendente (debug: rodar processSalesRaw de novo).
+ * Útil pra raws que ficaram processed=false por bug ou deploy fora de hora.
+ */
+export async function reprocessSalesRawAction(
+  rawId: string,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    await processSalesRaw(rawId);
+    revalidatePath("/admin/affiliates");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/** Reprocessa TODOS os sales_raw com processed=false. */
+export async function reprocessAllPendingAction(): Promise<
+  ActionResult<{ count: number }>
+> {
+  try {
+    await assertAdmin();
+    const supabase = createAdminClient();
+
+    const { data: pending } = await supabase
+      .schema("afiliados")
+      .from("sales_raw")
+      .select("id")
+      .eq("processed", false)
+      .limit(100);
+
+    let count = 0;
+    for (const row of (pending ?? []) as Array<{ id: string }>) {
+      try {
+        await processSalesRaw(row.id);
+        count++;
+      } catch (e) {
+        console.error("[reprocess] erro em raw", row.id, e);
+      }
+    }
+
+    revalidatePath("/admin/affiliates");
+    return { ok: true, data: { count } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }

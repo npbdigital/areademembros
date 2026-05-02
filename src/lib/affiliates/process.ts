@@ -1,13 +1,15 @@
 /**
- * Processamento de eventos Kiwify.
+ * Processamento de eventos Kiwify (dupla verificação email + nome).
  *
  * Fluxo:
- *   1. Webhook recebe payload → salva em afiliados.sales_raw
+ *   1. Webhook salva em afiliados.sales_raw
  *   2. processSalesRaw(rawId) é chamado em background
  *   3. Pra cada commissioned_store tipo 'affiliate':
- *      - cria/atualiza afiliados.sales (idempotente via UNIQUE)
- *      - se afiliado tem vinculação verificada e venda é após registered_at,
+ *      - cria/atualiza afiliados.sales (idempotente via UNIQUE order×email)
+ *      - se afiliado tem vinculação verificada com aquele email E nome bate,
  *        atribui XP e avalia conquistas
+ *      - se email bate mas nome NÃO bate: sale fica órfã (member_user_id=null)
+ *        e admin vê isso na UI pra resolver manual
  *   4. Marca raw como processed
  *
  * Reembolso/chargeback:
@@ -19,9 +21,10 @@ import { createAdminClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { awardXp } from "@/lib/gamification";
 import { notifyAndEmail, tryNotify } from "@/lib/notifications";
+import { normalizeEmail, normalizeName } from "@/lib/affiliates/normalize";
 
 interface KiwifyStore {
-  id: string;
+  id?: string;
   type: "producer" | "coproducer" | "affiliate" | string;
   affiliate_id?: string | null;
   email?: string | null;
@@ -75,17 +78,10 @@ function toCents(v: string | number | null | undefined): number {
 
 function parseKiwifyDate(s: string | null | undefined): string | null {
   if (!s) return null;
-  // Kiwify manda "YYYY-MM-DD HH:mm" em alguns campos. Date constructor
-  // brasileiro lida OK. Quando vier ISO completo (Subscription.start_date),
-  // também funciona.
   const d = new Date(s.replace(" ", "T"));
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-/**
- * Processa um sales_raw novo. Idempotente — pode rodar várias vezes pra
- * mesmo raw e não duplica vendas (UNIQUE constraint).
- */
 export async function processSalesRaw(rawId: string): Promise<void> {
   const supabase = createAdminClient();
 
@@ -111,10 +107,8 @@ export async function processSalesRaw(rawId: string): Promise<void> {
     } else if (REVERSAL_EVENTS.has(eventType)) {
       await processReversal(supabase, raw, payload, eventType);
     }
-    // outros eventos (billet_created, pix_created etc.): ignoramos
   } catch (e) {
     console.error("[kiwify process] erro:", e);
-    // não dispara throw — marca como processed mesmo com erro pra não loop
   }
 
   await supabase
@@ -145,30 +139,44 @@ async function processApproved(
 
   for (const store of stores) {
     if (store.type !== "affiliate") continue;
-    if (!store.affiliate_id) continue;
+    if (!store.email) continue;
 
-    const externalAffiliateId = store.affiliate_id;
+    const emailNorm = normalizeEmail(store.email);
+    const nameFromKiwify = store.custom_name ?? "";
     const commissionCents = toCents(store.value);
 
-    // Procura vinculação ativa
+    // Procura vinculação por email (case-insensitive)
     const { data: linkRow } = await supabase
       .schema("afiliados")
       .from("affiliate_links")
-      .select("id, member_user_id, verified, verified_at, registered_at")
+      .select(
+        "id, member_user_id, kiwify_email, kiwify_name, verified, verified_at, registered_at",
+      )
       .eq("source", "kiwify")
-      .eq("external_affiliate_id", externalAffiliateId)
+      .ilike("kiwify_email", emailNorm)
       .maybeSingle();
     const link = linkRow as
       | {
           id: string;
           member_user_id: string;
+          kiwify_email: string;
+          kiwify_name: string;
           verified: boolean;
           verified_at: string | null;
           registered_at: string;
         }
       | null;
 
-    // Upsert da venda (idempotência via UNIQUE)
+    // Verifica se nome bate (segundo fator)
+    let nameMatches = false;
+    if (link) {
+      nameMatches =
+        normalizeName(link.kiwify_name) === normalizeName(nameFromKiwify);
+    }
+
+    const shouldAttach = link !== null && nameMatches;
+
+    // Upsert da venda (idempotência via UNIQUE source × order × email)
     const { data: saleRow, error: saleErr } = await supabase
       .schema("afiliados")
       .from("sales")
@@ -177,9 +185,11 @@ async function processApproved(
           raw_id: raw.id,
           source: "kiwify",
           external_order_id: orderId,
-          external_affiliate_id: externalAffiliateId,
+          kiwify_affiliate_id: store.affiliate_id ?? null,
           external_store_id: store.id ?? null,
-          member_user_id: link?.member_user_id ?? null,
+          kiwify_email: emailNorm,
+          kiwify_name: nameFromKiwify,
+          member_user_id: shouldAttach && link ? link.member_user_id : null,
           product_name: productName,
           product_id: productId,
           status: "paid",
@@ -191,7 +201,7 @@ async function processApproved(
           status_updated_at: new Date().toISOString(),
         },
         {
-          onConflict: "source,external_order_id,external_affiliate_id",
+          onConflict: "source,external_order_id,kiwify_email",
         },
       )
       .select("id, xp_awarded, member_user_id, status")
@@ -209,13 +219,35 @@ async function processApproved(
       status: string;
     };
 
-    // Sem vinculação → fica órfã. Quando alguém vincular, o backfill atribui
+    // Sem vinculação → órfã
     if (!link) continue;
+
+    // Email bate mas nome NÃO → notifica aluno (anti-spam 24h)
+    if (!nameMatches) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: recentNotifs } = await supabase
+        .schema("membros")
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", link.member_user_id)
+        .ilike("title", "%nome no Kiwify%")
+        .gte("created_at", since);
+
+      if ((recentNotifs ?? 0) === 0) {
+        await tryNotify({
+          userId: link.member_user_id,
+          title: "Nome no Kiwify não bate com o cadastrado",
+          body: `Vimos uma venda chegando no email ${emailNorm}, mas o nome no Kiwify ("${nameFromKiwify}") é diferente do que você cadastrou ("${link.kiwify_name}"). Atualize seu perfil.`,
+          link: "/profile#afiliado",
+        });
+      }
+      continue;
+    }
 
     // Venda anterior ao cadastro → não conta
     if (new Date(approvedAt) < new Date(link.registered_at)) continue;
 
-    // Marca verified se ainda não está
+    // Marca verified
     if (!link.verified) {
       await supabase
         .schema("afiliados")
@@ -235,10 +267,9 @@ async function processApproved(
       });
     }
 
-    // Atribui XP se ainda não atribuiu (idempotente via xp_awarded)
+    // XP da venda
     if (sale.xp_awarded === 0 && sale.status === "paid") {
       const xpAmount = Math.floor(commissionCents / 100) + 10;
-      // 1 XP por R$ + 10 XP fixo por venda
       try {
         await awardXp(supabase, {
           userId: link.member_user_id,
@@ -256,7 +287,6 @@ async function processApproved(
       }
     }
 
-    // Avalia conquistas Kiwify
     await evaluateKiwifyAchievements(supabase, link.member_user_id);
   }
 }
@@ -274,7 +304,6 @@ async function processReversal(
     ? "chargedback"
     : "refunded";
 
-  // Busca todas as sales desse order_id (pode ter múltiplos affiliates)
   const { data: sales } = await supabase
     .schema("afiliados")
     .from("sales")
@@ -300,7 +329,6 @@ async function processReversal(
       })
       .eq("id", s.id);
 
-    // Reverte XP
     if (s.xp_awarded > 0 && s.member_user_id) {
       try {
         await awardXp(supabase, {
@@ -331,15 +359,10 @@ async function processReversal(
   }
 }
 
-/**
- * Avalia conquistas das categorias 'sales_count' e 'sales_value' pro user.
- * Só desbloqueia (nunca revoga). XP da conquista vai pro xp_log.
- */
 async function evaluateKiwifyAchievements(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<void> {
-  // Stats atuais (só vendas pagas — refundadas não contam pra conquistas)
   const { data: salesData } = await supabase
     .schema("afiliados")
     .from("sales")
@@ -354,7 +377,6 @@ async function evaluateKiwifyAchievements(
     0,
   );
 
-  // Conquistas das 2 categorias relevantes
   const { data: achList } = await supabase
     .schema("membros")
     .from("achievements")
@@ -362,7 +384,6 @@ async function evaluateKiwifyAchievements(
     .in("category", ["sales_count", "sales_value"])
     .eq("is_active", true);
 
-  // Já desbloqueadas
   const { data: unlocked } = await supabase
     .schema("membros")
     .from("user_achievements")
@@ -393,15 +414,13 @@ async function evaluateKiwifyAchievements(
     }
     if (!achieved) continue;
 
-    // Insere desbloqueio
     const { error: insErr } = await supabase
       .schema("membros")
       .from("user_achievements")
       .insert({ user_id: userId, achievement_id: ach.id });
 
-    if (insErr) continue; // race condition: outro processo desbloqueou primeiro
+    if (insErr) continue;
 
-    // XP de bônus
     if (ach.xp_reward > 0) {
       try {
         await awardXp(supabase, {
@@ -411,11 +430,10 @@ async function evaluateKiwifyAchievements(
           referenceId: ach.id,
         });
       } catch {
-        // ignora — XP é bônus
+        // ignora
       }
     }
 
-    // Notif
     await tryNotify({
       userId,
       title: `Conquista desbloqueada: ${ach.name}`,
@@ -428,21 +446,26 @@ async function evaluateKiwifyAchievements(
 }
 
 /**
- * Backfill: quando aluno acabou de vincular, atribui vendas órfãs com aquele
- * external_affiliate_id (que aconteceram após registered_at) ao user_id dele.
+ * Backfill após cadastro: atribui vendas órfãs com email + nome batendo
+ * (após registered_at).
  */
 export async function backfillOrphanSales(
-  externalAffiliateId: string,
+  kiwifyEmail: string,
+  kiwifyName: string,
   memberUserId: string,
   registeredAt: string,
 ): Promise<number> {
   const supabase = createAdminClient();
+  const emailNorm = normalizeEmail(kiwifyEmail);
+
   const { data: orphans } = await supabase
     .schema("afiliados")
     .from("sales")
-    .select("id, status, commission_value_cents, approved_at, xp_awarded")
+    .select(
+      "id, status, commission_value_cents, approved_at, xp_awarded, kiwify_name",
+    )
     .eq("source", "kiwify")
-    .eq("external_affiliate_id", externalAffiliateId)
+    .ilike("kiwify_email", emailNorm)
     .is("member_user_id", null);
 
   let attached = 0;
@@ -452,8 +475,15 @@ export async function backfillOrphanSales(
     commission_value_cents: number;
     approved_at: string | null;
     xp_awarded: number;
+    kiwify_name: string | null;
   }>) {
-    // Só atribui vendas posteriores ao cadastro
+    // Valida nome
+    if (
+      normalizeName(kiwifyName) !== normalizeName(s.kiwify_name ?? "")
+    ) {
+      continue;
+    }
+
     if (s.approved_at && new Date(s.approved_at) < new Date(registeredAt)) {
       continue;
     }
@@ -465,7 +495,6 @@ export async function backfillOrphanSales(
       .eq("id", s.id);
     attached++;
 
-    // Atribui XP retroativo (das vendas dentro do período)
     if (s.status === "paid" && s.xp_awarded === 0) {
       const xpAmount = Math.floor(s.commission_value_cents / 100) + 10;
       try {

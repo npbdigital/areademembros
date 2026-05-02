@@ -23,7 +23,8 @@ import {
 } from "@/app/(student)/profile/affiliate-actions";
 
 export interface AffiliateLinkView {
-  externalAffiliateId: string;
+  kiwifyEmail: string;
+  kiwifyName: string;
   verified: boolean;
   verifiedAt: string | null;
   registeredAt: string;
@@ -42,6 +43,8 @@ export interface AffiliateStats {
     commissionCents: number;
     approvedAt: string | null;
   }>;
+  /** Vendas com email batendo mas nome NÃO. Avisa pra ele atualizar. */
+  nameMismatchCount: number;
 }
 
 interface Props {
@@ -101,32 +104,48 @@ function NotLinked() {
             Conecte sua conta Kiwify
           </h3>
           <p className="mt-1 text-sm text-npb-text-muted">
-            Suas vendas como afiliado serão rastreadas, transformadas em XP
-            e em conquistas. Só você vê seus números.
+            Suas vendas como afiliado serão rastreadas, transformadas em XP e
+            conquistas. Só você vê seus números.
           </p>
         </div>
       </div>
 
       <form action={formAction} className="space-y-4">
         <div>
-          <Label
-            htmlFor="external_affiliate_id"
-            className="text-sm text-npb-text"
-          >
-            ID de afiliado Kiwify <span className="text-npb-gold">*</span>
+          <Label htmlFor="kiwify_email" className="text-sm text-npb-text">
+            E-mail cadastrado na Kiwify <span className="text-npb-gold">*</span>
           </Label>
           <Input
-            id="external_affiliate_id"
-            name="external_affiliate_id"
-            placeholder="Ex: BrzPdTT"
+            id="kiwify_email"
+            name="kiwify_email"
+            type="email"
+            placeholder="seuemail@exemplo.com"
             required
-            maxLength={64}
-            className="mt-1 bg-npb-bg3 border-npb-border text-npb-text font-mono"
+            maxLength={254}
+            className="mt-1 bg-npb-bg3 border-npb-border text-npb-text"
           />
           <p className="mt-1 text-xs text-npb-text-muted">
-            Encontre na sua conta Kiwify em{" "}
-            <strong>Configurações → Afiliação</strong>. É um código curto e
-            único, tipo <code>BrzPdTT</code>.
+            Mesmo e-mail que você usa pra entrar na sua conta Kiwify.
+          </p>
+        </div>
+
+        <div>
+          <Label htmlFor="kiwify_name" className="text-sm text-npb-text">
+            Nome cadastrado na Kiwify <span className="text-npb-gold">*</span>
+          </Label>
+          <Input
+            id="kiwify_name"
+            name="kiwify_name"
+            placeholder="Seu nome completo igual está na Kiwify"
+            required
+            maxLength={200}
+            className="mt-1 bg-npb-bg3 border-npb-border text-npb-text"
+          />
+          <p className="mt-1 text-xs text-npb-text-muted">
+            <strong className="text-yellow-400">Importante:</strong> precisa
+            ser <strong>idêntico</strong> ao que aparece na sua conta Kiwify
+            (Configurações → Dados pessoais). Sem o nome certo, vendas chegam
+            mas ficam em modo &quot;verificação manual&quot;.
           </p>
         </div>
 
@@ -146,7 +165,7 @@ function NotLinked() {
           />
           <p className="mt-1 text-xs text-npb-text-muted">
             Pra o admin conferir caso precise auditar. Só os 4 últimos
-            dígitos ficam visíveis na UI; o resto é criptografado no banco.
+            dígitos ficam visíveis na UI.
           </p>
         </div>
 
@@ -159,10 +178,11 @@ function NotLinked() {
 
         <div className="rounded-md border border-npb-border bg-npb-bg3 p-3 text-xs text-npb-text-muted">
           <p>
-            <strong className="text-npb-text">Como funciona:</strong> seu
-            cadastro fica <strong>pendente</strong> até a 1ª venda chegar
-            no nosso sistema. A partir daí, vendas viram XP automaticamente
-            (1 XP por R$1 de comissão + 10 XP por venda).
+            <strong className="text-npb-text">Dupla verificação:</strong> a
+            vinculação é confirmada quando a 1ª venda chega no nosso sistema
+            com seu <strong>e-mail</strong> E <strong>nome</strong> batendo.
+            A partir daí, vendas viram XP automaticamente (1 XP por R$1 de
+            comissão + 10 XP por venda).
           </p>
         </div>
 
@@ -172,7 +192,13 @@ function NotLinked() {
   );
 }
 
-function Pending({ link, stats }: { link: AffiliateLinkView; stats: AffiliateStats }) {
+function Pending({
+  link,
+  stats,
+}: {
+  link: AffiliateLinkView;
+  stats: AffiliateStats;
+}) {
   const router = useRouter();
   const [showUnlink, setShowUnlink] = useState(false);
 
@@ -197,10 +223,11 @@ function Pending({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSta
             Aguardando primeira venda
           </h3>
           <p className="mt-1 text-sm text-npb-text-muted">
-            Sua vinculação Kiwify está cadastrada como{" "}
-            <code className="text-npb-text">{link.externalAffiliateId}</code>.
-            Quando a 1ª venda chegar com esse ID, sua conta vira verificada
-            automaticamente e o XP começa a contar.
+            Sua vinculação está cadastrada como{" "}
+            <strong className="text-npb-text">{link.kiwifyEmail}</strong>{" "}
+            (nome <em>{link.kiwifyName}</em>). Quando a 1ª venda chegar com
+            esse e-mail E nome batendo, sua conta vira verificada
+            automaticamente.
           </p>
           {link.cpfCnpjLast4 && (
             <p className="mt-1.5 text-xs text-npb-text-muted">
@@ -210,12 +237,22 @@ function Pending({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSta
         </div>
       </div>
 
-      {stats.totalSales > 0 && (
+      {stats.nameMismatchCount > 0 && (
+        <div className="mt-4 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-400">
+          <strong>Atenção:</strong> chegaram{" "}
+          <strong>{stats.nameMismatchCount}</strong> venda
+          {stats.nameMismatchCount > 1 ? "s" : ""} com seu e-mail mas com
+          nome diferente do cadastrado. Edite seu cadastro pra que o nome
+          bata exatamente com o que está na Kiwify.
+        </div>
+      )}
+
+      {stats.totalSales > 0 && stats.nameMismatchCount === 0 && (
         <p className="mt-4 rounded-md border border-npb-border bg-npb-bg3 p-3 text-xs text-npb-text-muted">
           ⓘ Vimos <strong className="text-npb-text">{stats.totalSales}</strong>{" "}
-          venda{stats.totalSales > 1 ? "s" : ""} com esse ID antes do
-          cadastro. Como vendas só contam a partir do registro, essas não
-          geraram XP. Vendas a partir de agora contam.
+          venda{stats.totalSales > 1 ? "s" : ""} antes do cadastro. Como
+          vendas só contam a partir do registro, essas não geraram XP. Vendas
+          a partir de agora contam.
         </p>
       )}
 
@@ -256,7 +293,13 @@ function Pending({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSta
   );
 }
 
-function Verified({ link, stats }: { link: AffiliateLinkView; stats: AffiliateStats }) {
+function Verified({
+  link,
+  stats,
+}: {
+  link: AffiliateLinkView;
+  stats: AffiliateStats;
+}) {
   const router = useRouter();
   const [showUnlink, setShowUnlink] = useState(false);
   const totalReais = (stats.totalCommissionCents / 100).toLocaleString(
@@ -287,10 +330,9 @@ function Verified({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSt
                 Conta Kiwify verificada
               </h3>
               <p className="text-xs text-npb-text-muted">
-                ID:{" "}
-                <code className="text-npb-gold">
-                  {link.externalAffiliateId}
-                </code>
+                <strong className="text-npb-gold">{link.kiwifyEmail}</strong>
+                <br />
+                {link.kiwifyName}
                 {link.cpfCnpjLast4 && (
                   <span> · CPF/CNPJ: •••{link.cpfCnpjLast4}</span>
                 )}
@@ -330,11 +372,21 @@ function Verified({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSt
               {stats.refundedSales > 0
                 ? `${stats.refundedSales} reembolsada${stats.refundedSales > 1 ? "s" : ""} · `
                 : ""}
-              {stats.totalSales} no total
+              {stats.paidSales + stats.refundedSales} no total
             </p>
           </div>
         </div>
       </div>
+
+      {stats.nameMismatchCount > 0 && (
+        <div className="rounded-md border border-yellow-500/30 bg-yellow-500/10 p-3 text-xs text-yellow-400">
+          <strong>Atenção:</strong> {stats.nameMismatchCount} venda
+          {stats.nameMismatchCount > 1 ? "s" : ""} chegaram com seu e-mail
+          mas o nome veio diferente do cadastrado e não foram atribuídas.
+          Edite o cadastro com o nome exato que está na Kiwify pra liberar
+          o backfill.
+        </div>
+      )}
 
       {stats.recentSales.length > 0 && (
         <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-5">
@@ -359,13 +411,14 @@ function Verified({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSt
                           year: "numeric",
                         })
                       : "—"}{" "}
-                    ·{" "}
-                    <StatusBadge status={s.status} />
+                    · <StatusBadge status={s.status} />
                   </p>
                 </div>
                 <p
                   className={`font-mono font-bold ${
-                    s.status === "paid" ? "text-npb-gold" : "text-red-400 line-through"
+                    s.status === "paid"
+                      ? "text-npb-gold"
+                      : "text-red-400 line-through"
                   }`}
                 >
                   R$ {(s.commissionCents / 100).toFixed(2)}
@@ -411,8 +464,7 @@ function Verified({ link, stats }: { link: AffiliateLinkView; stats: AffiliateSt
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "paid")
-    return <span className="text-green-400">paga</span>;
+  if (status === "paid") return <span className="text-green-400">paga</span>;
   if (status === "refunded")
     return <span className="text-yellow-400">reembolsada</span>;
   if (status === "chargedback")

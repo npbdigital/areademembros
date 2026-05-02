@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { AffiliateRowActions } from "@/components/admin/affiliate-row-actions";
+import { ReprocessPendingButton } from "@/components/admin/reprocess-pending-button";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,8 @@ interface LinkRow {
   id: string;
   member_user_id: string;
   source: string;
-  external_affiliate_id: string;
+  kiwify_email: string;
+  kiwify_name: string;
   cpf_cnpj_last4: string | null;
   cpf_cnpj_encrypted: string | null;
   verified: boolean;
@@ -32,7 +34,9 @@ interface UserRow {
 interface SaleRow {
   id: string;
   external_order_id: string;
-  external_affiliate_id: string;
+  kiwify_email: string;
+  kiwify_name: string | null;
+  kiwify_affiliate_id: string | null;
   member_user_id: string | null;
   product_name: string | null;
   status: string;
@@ -51,12 +55,16 @@ function formatBRL(cents: number): string {
 export default async function AdminAffiliatesPage() {
   const supabase = createAdminClient();
 
-  const [{ data: linksData }, { data: salesData }] = await Promise.all([
+  const [
+    { data: linksData },
+    { data: salesData },
+    { count: pendingCount },
+  ] = await Promise.all([
     supabase
       .schema("afiliados")
       .from("affiliate_links")
       .select(
-        "id, member_user_id, source, external_affiliate_id, cpf_cnpj_last4, cpf_cnpj_encrypted, verified, verified_at, registered_at, notes",
+        "id, member_user_id, source, kiwify_email, kiwify_name, cpf_cnpj_last4, cpf_cnpj_encrypted, verified, verified_at, registered_at, notes",
       )
       .eq("source", "kiwify")
       .order("registered_at", { ascending: false }),
@@ -64,11 +72,16 @@ export default async function AdminAffiliatesPage() {
       .schema("afiliados")
       .from("sales")
       .select(
-        "id, external_order_id, external_affiliate_id, member_user_id, product_name, status, commission_value_cents, approved_at, created_at",
+        "id, external_order_id, kiwify_email, kiwify_name, kiwify_affiliate_id, member_user_id, product_name, status, commission_value_cents, approved_at, created_at",
       )
       .eq("source", "kiwify")
       .order("approved_at", { ascending: false })
       .limit(100),
+    supabase
+      .schema("afiliados")
+      .from("sales_raw")
+      .select("id", { count: "exact", head: true })
+      .eq("processed", false),
   ]);
 
   const links = (linksData ?? []) as LinkRow[];
@@ -86,13 +99,14 @@ export default async function AdminAffiliatesPage() {
     for (const u of (usersData ?? []) as UserRow[]) usersMap.set(u.id, u);
   }
 
-  // Stats agregadas por affiliate_id
-  const statsByAff = new Map<
+  // Stats agregadas por email Kiwify (chave da vinculação agora)
+  const statsByEmail = new Map<
     string,
     { count: number; commission: number; refunded: number }
   >();
   for (const s of sales) {
-    const cur = statsByAff.get(s.external_affiliate_id) ?? {
+    const key = s.kiwify_email.toLowerCase();
+    const cur = statsByEmail.get(key) ?? {
       count: 0,
       commission: 0,
       refunded: 0,
@@ -103,12 +117,8 @@ export default async function AdminAffiliatesPage() {
     } else if (s.status === "refunded" || s.status === "chargedback") {
       cur.refunded += 1;
     }
-    statsByAff.set(s.external_affiliate_id, cur);
+    statsByEmail.set(key, cur);
   }
-
-  // Map de aluno por affiliate_id (pra coluna de vendas órfãs vs atribuídas)
-  const memberByAff = new Map<string, string>();
-  for (const l of links) memberByAff.set(l.external_affiliate_id, l.member_user_id);
 
   // Stats globais
   const totalLinks = links.length;
@@ -121,18 +131,22 @@ export default async function AdminAffiliatesPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header>
-        <div className="mb-2 inline-flex items-center gap-2 text-xs uppercase tracking-wide text-npb-gold">
-          <Wallet className="h-3.5 w-3.5" />
-          Afiliados Kiwify
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="mb-2 inline-flex items-center gap-2 text-xs uppercase tracking-wide text-npb-gold">
+            <Wallet className="h-3.5 w-3.5" />
+            Afiliados Kiwify
+          </div>
+          <h1 className="text-2xl font-bold text-npb-text md:text-3xl">
+            Vinculações & vendas
+          </h1>
+          <p className="mt-1 text-sm text-npb-text-muted">
+            Vinculação por <strong>e-mail Kiwify</strong> + dupla verificação
+            via <strong>nome</strong>. Webhook em{" "}
+            <code>/api/webhooks/kiwify</code>.
+          </p>
         </div>
-        <h1 className="text-2xl font-bold text-npb-text md:text-3xl">
-          Vinculações & vendas
-        </h1>
-        <p className="mt-1 text-sm text-npb-text-muted">
-          Aluno cadastra o ID Kiwify dele aqui. Vendas chegam via webhook em{" "}
-          <code>/api/webhooks/kiwify</code>.
-        </p>
+        <ReprocessPendingButton pendingCount={pendingCount ?? 0} />
       </header>
 
       {/* Stats globais */}
@@ -144,7 +158,7 @@ export default async function AdminAffiliatesPage() {
           color="text-npb-text"
         />
         <StatCard
-          label="Vendas (todos)"
+          label="Vendas (todas)"
           value={totalSales}
           subtitle={
             orphanSales > 0
@@ -162,7 +176,7 @@ export default async function AdminAffiliatesPage() {
         <StatCard
           label="Vendas órfãs"
           value={orphanSales}
-          subtitle="affiliate sem vinculação"
+          subtitle="email sem vinculação ou nome diferente"
           color={orphanSales > 0 ? "text-yellow-400" : "text-npb-text"}
         />
       </div>
@@ -185,7 +199,8 @@ export default async function AdminAffiliatesPage() {
               <thead className="border-b border-npb-border bg-npb-bg3 text-left text-xs uppercase tracking-wider text-npb-text-muted">
                 <tr>
                   <th className="px-4 py-2 font-semibold">Aluno</th>
-                  <th className="px-4 py-2 font-semibold">Affiliate ID</th>
+                  <th className="px-4 py-2 font-semibold">E-mail Kiwify</th>
+                  <th className="px-4 py-2 font-semibold">Nome cadastrado</th>
                   <th className="px-4 py-2 font-semibold">Status</th>
                   <th className="px-4 py-2 font-semibold">Vendas</th>
                   <th className="px-4 py-2 font-semibold">Comissão</th>
@@ -196,11 +211,12 @@ export default async function AdminAffiliatesPage() {
               <tbody className="divide-y divide-npb-border">
                 {links.map((l) => {
                   const u = usersMap.get(l.member_user_id);
-                  const stats = statsByAff.get(l.external_affiliate_id) ?? {
-                    count: 0,
-                    commission: 0,
-                    refunded: 0,
-                  };
+                  const stats =
+                    statsByEmail.get(l.kiwify_email.toLowerCase()) ?? {
+                      count: 0,
+                      commission: 0,
+                      refunded: 0,
+                    };
                   return (
                     <tr
                       key={l.id}
@@ -219,8 +235,11 @@ export default async function AdminAffiliatesPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-npb-gold">
-                        {l.external_affiliate_id}
+                      <td className="px-4 py-3 text-xs text-npb-gold">
+                        {l.kiwify_email}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-npb-text-muted">
+                        {l.kiwify_name}
                       </td>
                       <td className="px-4 py-3">
                         {l.verified ? (
@@ -289,10 +308,12 @@ export default async function AdminAffiliatesPage() {
                 <tr>
                   <th className="px-4 py-2 font-semibold">Quando</th>
                   <th className="px-4 py-2 font-semibold">Produto</th>
-                  <th className="px-4 py-2 font-semibold">Affiliate</th>
+                  <th className="px-4 py-2 font-semibold">Afiliado (Kiwify)</th>
                   <th className="px-4 py-2 font-semibold">Aluno</th>
                   <th className="px-4 py-2 font-semibold">Status</th>
-                  <th className="px-4 py-2 font-semibold text-right">Comissão</th>
+                  <th className="px-4 py-2 font-semibold text-right">
+                    Comissão
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-npb-border">
@@ -308,18 +329,20 @@ export default async function AdminAffiliatesPage() {
                         {s.approved_at
                           ? new Date(s.approved_at).toLocaleDateString(
                               "pt-BR",
-                              {
-                                day: "2-digit",
-                                month: "short",
-                              },
+                              { day: "2-digit", month: "short" },
                             )
                           : "—"}
                       </td>
                       <td className="px-4 py-2 text-xs">
                         {s.product_name ?? "(sem nome)"}
                       </td>
-                      <td className="px-4 py-2 font-mono text-xs text-npb-gold">
-                        {s.external_affiliate_id}
+                      <td className="px-4 py-2 text-xs">
+                        <div className="text-npb-gold">{s.kiwify_email}</div>
+                        {s.kiwify_name && (
+                          <div className="text-[10px] text-npb-text-muted">
+                            {s.kiwify_name}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-2 text-xs">
                         {u ? (
