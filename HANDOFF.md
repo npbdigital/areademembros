@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-01 — Etapa 10 (Comunidade) entregue completa
-**Último commit no main:** `b38b06b` (Comunidade completa: posts/comments/likes + admin moderação + CRUDs)
+**Última atualização:** 2026-05-01 — Etapa 16 (Gamification + configs) entregue
+**Último commit no main:** Gamification + configs Comunidade + Leaderboard + badges não-lidos
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,55 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 16 — Gamification + Configs avançadas (sessão Maio 2026)
+
+Sistema completo de XP/streak/conquistas/leaderboard + comunidade configurável + badges de não-lidos.
+
+**Schema (1 migration grande):**
+- Função SQL `current_xp_period_start()` retorna o 1º dia do trimestre civil atual (jan/abr/jul/out) — base do reset trimestral fixo
+- `user_xp(user_id PK, total_xp, current_level, current_streak, longest_streak, last_activity_date, current_period_start)` — agregado por aluno
+- `xp_log(id, user_id, amount, reason, reference_id, period_start, created_at)` — auditoria com **UNIQUE(user_id, reason, reference_id, period_start)** garantindo idempotência (mesma ação na mesma referência nunca dá XP 2x no trimestre)
+- `achievements(id, code UNIQUE, name, description, icon, category, required_value, xp_reward, sort_order, is_active)` — catálogo configurável
+- `user_achievements(user_id, achievement_id, unlocked_at)` — desbloqueios M:N
+- `community_space_views(user_id, gallery_id, last_seen_at)` — pra badges de não-lidos
+- **Seed de 19 conquistas** em 4 categorias: Primeira vez (6), Streak (3), Volume aulas/cursos (6), Comunidade (4)
+- **Limpou seed de galerias** da comunidade — admin cria do zero
+
+**Configs novas em `/admin/settings` (`SETTINGS_KEYS` em `lib/settings.ts`):**
+- **Comunidade**: `community_auto_approve` (toggle), `community_max_image_mb` (default 10), `community_max_comment_chars` (default 10000)
+- **Gamification**: `gamification_enabled` (kill switch), `xp_lesson_complete` (10), `xp_streak_7d` (50), `xp_first_access_day` (2), `xp_lesson_rated` (3), `xp_comment_approved` (5), `xp_post_approved` (20), `xp_course_completed` (100), `leaderboard_visible_to_admin/moderator/student`
+- Helper `canSeeLeaderboard(settings, role)` em `lib/settings.ts`
+
+**Lógica (`src/lib/gamification.ts`):**
+- `awardXp(admin, {userId, amount, reason, referenceId})` — idempotente via UNIQUE; atualiza total + level + dispara `checkAchievements`
+- `bumpStreak(admin, userId, xpStreak7d)` — compara `last_activity_date` com hoje; reseta se >1 dia, +1 se ontem, noop se hoje. Bonus XP a cada múltiplo de 7
+- `checkAchievements(admin, userId)` — calcula contadores reais (lessons completed, notes, ratings, posts, comments, courses 100%, longest_streak) e desbloqueia conquistas elegíveis (greedy)
+- `levelFromXp(xp)` — retorna level + label + pct até próximo nível (6 levels: Iniciante 0 / Estudante 100 / Dedicado 300 / Engajado 700 / Veterano 1500 / Mestre 3500+)
+- `ensureUserXp(admin, userId)` — cria registro se não existe + **aplica reset trimestral** automaticamente quando `current_period_start < current_xp_period_start()` (zera total_xp + level, preserva streaks)
+- Wrappers silent-fail `tryAwardXp` e `tryBumpStreakAndDailyXp` — chamados das actions sem bloquear UX
+
+**Hooks plugados:**
+- `toggleCompleteAction` (lesson) → +XP_LESSON_COMPLETE + checa conclusão 100% do curso (bonus XP_COURSE_COMPLETED idempotente por courseId)
+- `rateLessonAction` → +XP_LESSON_RATED (1x por aula no trimestre)
+- `logLessonViewAction` → `tryBumpStreakAndDailyXp` (streak + 1 vez por dia +XP_FIRST_ACCESS_DAY)
+- `createPostAction` (community) → respeita `community_auto_approve`; se aprovado direto (auto-approve OU autor admin/mod), XP imediato; senão XP é dado quando admin aprova
+- `createReplyAction` → +XP_COMMENT_APPROVED (idempotente por replyId)
+- `approvePostAction` → +XP_POST_APPROVED pro autor (só se mudou de não-aprovado pra aprovado)
+
+**UI aluno:**
+- `XpPill` no topbar (`src/components/xp-pill.tsx`) — level + barra XP + 🔥streak; clica pra `/profile#gamification`
+- `/profile` ganhou seção "Sua jornada" (`src/components/student/gamification-section.tsx`): 3 cards (Nível com barra de progresso, Streak atual, Melhor sequência) + grid de conquistas (desbloqueadas no topo, locked depois com 🔒)
+
+**Leaderboard:**
+- `/admin/community/leaderboard` — Top 30 alunos do trimestre, exclui admin/mod do ranking, podium colorido (1º ouro, 2º prata, 3º bronze)
+- Acesso controlado por `canSeeLeaderboard(settings, role)` — admin pode permitir alunos verem
+- Card adicionado no `/admin/community` index
+
+**Badges de não-lidos:**
+- Layout `/community` carrega `community_space_views` do user + conta posts approved mais novos por gallery (excluindo posts próprios)
+- `CommunitySidebar` mostra badge vermelho `(N)` ou `99+` em cada espaço com posts não-lidos
+- `/community/[slug]` upserta `last_seen_at = now()` ao entrar — zera o badge daquele espaço
 
 ### Etapa 10 — Comunidade (commit `b38b06b`)
 
@@ -395,13 +444,19 @@ Implementação completa estilo Circle.so adaptado pra nossa stack. **Comunidade
 ### Etapa 10 — Comunidade ✅ (commit `b38b06b`)
 Concluída — ver seção acima.
 
+### Etapa 16 — Gamification + Configs ✅
+Concluída — ver seção no topo. Configs de comunidade e gamification configuráveis em `/admin/settings`.
+
 **Polimentos sugeridos pra próximas iterações:**
 - Drag-and-drop pra reordenar espaços e atalhos (hoje só `position` numérico no DB)
 - Notificação ao autor quando post é aprovado/rejeitado (e-mail via Resend + sino in-app)
 - Notificação quando alguém responde no tópico do aluno
+- Notificação quando aluno desbloqueia conquista
 - Pinning (`is_pinned` já existe no schema, falta UI)
-- Realtime via Supabase channels (atualiza feed quando post novo aprovado)
+- Realtime via Supabase channels (atualiza feed/badges quando post novo aprovado)
 - "Curtidas em meus posts" como aba do `/profile`
+- Histórico de XP por trimestre no `/profile` (timeline com `xp_log`)
+- Conquistas com slogans no avatar (ex: "Aluno destaque" pra quem desbloqueou X conquistas) — ainda não implementado
 
 ### Etapa 13 — Notificações in-app (parcial)
 - ✅ Página `/admin/students/[id]/atividade` (timeline + stats)
@@ -649,11 +704,9 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 15 estão completas** — incluindo Etapa 10 (Comunidade completa: feed/posts/comments/likes/moderação). O cliente tem painel admin completo (métricas de alunos no dashboard), biblioteca de aluno com player (YouTube IFrame API + resume cross-device), anexos, drag-and-drop, role moderator, /admin/reports, webhook HTTP, whitelabel completo, perfil + suporte do aluno, mobile drawer no admin, e **Comunidade global única** (galerias + posts com vídeo/imagem/HTML sanitizado + comentários aninhados + moderação admin). **Próximas frentes:**
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 16 estão completas** — incluindo Comunidade (Etapa 10) e Gamification + Configs (Etapa 16). O cliente tem painel admin completo (métricas de alunos), biblioteca de aluno com player (YT IFrame + resume cross-device), anexos, drag-and-drop, role moderator, /admin/reports, webhook HTTP, whitelabel completo, perfil + suporte, mobile drawer admin, **Comunidade global única** com badges de não-lidos por espaço, e **sistema de XP/streak/conquistas/leaderboard** com reset trimestral fixo (jan/abr/jul/out). Tudo configurável em `/admin/settings`. **Próximas frentes:**
 >
-> 1. **GAMIFICATION (NOVO — pedido pelo Felipe):** XP por ação (concluir aula +10, streak +50, post aprovado +20, comentário +5), streak de dias consecutivos, conquistas (badges), levels, **leaderboard só admin/moderador**, **reset de XP a cada 3 meses**. Sem prêmios reais, só badges visuais. Spec detalhada na conversa do Claude que entregou Etapa 10.
->
-> 2. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar `/notifications`, triggers automáticos (nova aula, drip desbloqueado, resposta comunidade, post aprovado). Resend pra e-mails de eventos importantes.
+> 1. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar `/notifications`, triggers automáticos (nova aula, drip desbloqueado, resposta comunidade, post aprovado, conquista desbloqueada). Resend pra e-mails de eventos importantes.
 >
 > 3. **Trigger SQL `transactions_data` → matrícula:** depende de Felipe mapear "produto X = turma Y" em `membros.product_cohort_map` (vazia hoje). Webhook HTTP já existe.
 >
@@ -690,6 +743,8 @@ Cole essa mensagem inicial:
 | `8d99e88` | matrículas adicionais + fix RLS atividade/reports + dashboard alunos + resume cross-device + mobile drawer |
 | `ffece83` | docs: HANDOFF sessão Maio 2026 |
 | `b38b06b` | **Etapa 10 — Comunidade completa** (feed, posts com vídeo/imagem, comentários aninhados, likes, moderação admin, CRUD espaços e atalhos) |
+| `3818660` | docs: HANDOFF marca Etapa 10 concluída |
+| (atual)   | **Etapa 16 — Gamification + Configs avançadas** (XP/streak/conquistas/leaderboard com reset trimestral fixo + configs de comunidade e gamification em /admin/settings + badges de não-lidos por espaço) |
 
 ---
 
