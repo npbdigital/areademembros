@@ -558,15 +558,19 @@ affiliate_sales (
 - Vendas: 1ª · 5 · 10 · 25 · 50 · 100 · 500 · 1000
 - Comissão: R$1k · R$5k · R$10k · R$50k · R$100k · R$500k · R$1M
 
-**XP por venda:** decisão pendente — proporcional à comissão
-(`1 XP por R$1`) ou fixo (`10 XP por venda aprovada`)?
+**XP por venda (decidido):** soma das duas regras —
+- `+1 XP por R$1 de comissão` (proporcional ao tamanho da venda)
+- `+10 XP por venda aprovada` (fixo — recompensa o ato de vender)
+Ex: venda com R$ 47 de comissão → 47 + 10 = **57 XP**.
+
+Refunds/chargebacks descontam pelo `reference_id = order_id` (xp_log
+permite reverter).
 
 **Pendências bloqueantes:**
 1. Felipe precisa enviar **payload bruto** de uma venda Kiwify (Kiwify →
    Webhooks → Histórico) pra confirmar campo de `affiliate_id` e
    `commission_value`
-2. Definir XP (proporcional vs fixo)
-3. UI: tela "Afiliado" no `/profile` — design
+2. UI: tela "Afiliado" no `/profile` — design
 
 **Refunds/chargebacks:** decremental — quando vem `refunded`/`chargeback`,
 zera/inverte XP da venda original (`reference_id` do `xp_log` permite isso).
@@ -579,16 +583,18 @@ Terceira role pra **usuários de teste/seeds da comunidade**. Pra popular
 visualmente a comunidade antes de ter alunos reais bombando, e pra testar
 fluxos sem comprometer dados reais.
 
-**Comportamento:**
+**Comportamento (resumo: pode fazer TUDO que aluno faz):**
 - Roles: `student` · `moderator` · `admin` · **`ficticio`** (nova)
-- Visível como aluno normal pra todos os outros (incluindo moderador)
+- Visível como aluno normal pra todos (incluindo moderador)
 - **APENAS o admin** vê o badge "fictício" / sabe diferenciar
-- Pode comentar, postar, curtir, interagir tudo igual aluno
-- Vendas/valores de afiliado são **inseridos manualmente pelo admin OU
-  pelo próprio fictício** (sem webhook automático — esses dados vêm
-  do admin pra simular)
-- Conquistas/XP: admin pode setar manualmente também
-- NÃO conta em métricas reais (`/admin/reports` deve excluir)
+- Pode postar/comentar/curtir/interagir igual aluno
+- **Recebe XP, sobe nível, desbloqueia conquistas** normalmente pelos
+  acessos/aulas/comunidade (mesma engine de gamification do aluno)
+- **Diferença única**: vendas/valores de afiliado são **inseridos
+  manualmente** pelo admin OU pelo próprio fictício (não vêm do webhook
+  Kiwify). Idem pra XP/conquistas — admin pode setar manual pra simular.
+- NÃO conta em métricas reais (`/admin/reports`, `/admin/dashboard`
+  excluem por padrão; admin pode toggle "Mostrar fictícios")
 
 **Migration necessária:**
 ```sql
