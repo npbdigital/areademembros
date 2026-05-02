@@ -52,3 +52,28 @@ export async function markNotificationReadAction(
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }
 }
+
+export async function deleteNotificationAction(
+  id: string,
+): Promise<ActionResult> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    const { error } = await supabase
+      .schema("membros")
+      .from("notifications")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", user.id);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}

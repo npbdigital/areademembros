@@ -242,6 +242,10 @@ export async function toggleTopicLikeAction(
       user_id: userId,
       topic_id: topicId,
     });
+
+    // Notifica autor (best-effort, fire-and-forget)
+    void notifyTopicAuthorOfLike(topicId, userId);
+
     return { ok: true, data: { liked: true } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro inesperado.";
@@ -278,10 +282,152 @@ export async function toggleReplyLikeAction(
       user_id: userId,
       reply_id: replyId,
     });
+
+    // Notifica autor do comentário (best-effort, fire-and-forget)
+    void notifyReplyAuthorOfLike(replyId, userId);
+
     return { ok: true, data: { liked: true } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro inesperado.";
     return { ok: false, error: msg };
+  }
+}
+
+/**
+ * Helpers de notificação de like — separadas pra rodar em background sem
+ * bloquear o retorno do toggle. Idempotentes via reference_id seria ideal,
+ * mas como likes podem dar e tirar várias vezes, fica como notif "limite":
+ * só notifica se o autor tem < 1 notif desse like nas últimas 24h pro mesmo
+ * topic/reply (evita spam de like→unlike→like).
+ */
+async function notifyTopicAuthorOfLike(
+  topicId: string,
+  likerUserId: string,
+): Promise<void> {
+  try {
+    const adminSb = createAdminClient();
+
+    const [{ data: topicRow }, { data: likerRow }] = await Promise.all([
+      adminSb
+        .schema("membros")
+        .from("community_topics")
+        .select("user_id, title, page_id")
+        .eq("id", topicId)
+        .maybeSingle(),
+      adminSb
+        .schema("membros")
+        .from("users")
+        .select("full_name")
+        .eq("id", likerUserId)
+        .maybeSingle(),
+    ]);
+
+    const topic = topicRow as
+      | { user_id: string; title: string; page_id: string }
+      | null;
+    if (!topic || topic.user_id === likerUserId) return;
+
+    // Anti-spam: já notificou esse autor sobre likes no mesmo post nas últimas 24h?
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: recentCount } = await adminSb
+      .schema("membros")
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", topic.user_id)
+      .ilike("title", "%curtiu%")
+      .ilike("body", `%${topic.title.replace(/[%_]/g, "")}%`)
+      .gte("created_at", since);
+    if ((recentCount ?? 0) > 0) return;
+
+    const { data: pageRow } = await adminSb
+      .schema("membros")
+      .from("community_pages")
+      .select("slug")
+      .eq("id", topic.page_id)
+      .maybeSingle();
+    const slug = (pageRow as { slug: string | null } | null)?.slug;
+    const liker = (likerRow as { full_name: string | null } | null)?.full_name;
+
+    await tryNotify({
+      userId: topic.user_id,
+      title: liker
+        ? `${liker} curtiu seu post`
+        : "Alguém curtiu seu post",
+      body: `Em "${topic.title}"`,
+      link: slug ? `/community/${slug}/post/${topicId}` : "/community",
+    });
+  } catch {
+    // best-effort
+  }
+}
+
+async function notifyReplyAuthorOfLike(
+  replyId: string,
+  likerUserId: string,
+): Promise<void> {
+  try {
+    const adminSb = createAdminClient();
+
+    const { data: replyRow } = await adminSb
+      .schema("membros")
+      .from("community_replies")
+      .select("user_id, topic_id")
+      .eq("id", replyId)
+      .maybeSingle();
+    const reply = replyRow as
+      | { user_id: string; topic_id: string }
+      | null;
+    if (!reply || reply.user_id === likerUserId) return;
+
+    // Anti-spam: já notificou nas últimas 24h pro mesmo comentário?
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: recentCount } = await adminSb
+      .schema("membros")
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", reply.user_id)
+      .ilike("title", "%curtiu seu coment%")
+      .gte("created_at", since);
+    if ((recentCount ?? 0) > 0) return;
+
+    const [{ data: topicRow }, { data: likerRow }] = await Promise.all([
+      adminSb
+        .schema("membros")
+        .from("community_topics")
+        .select("title, page_id")
+        .eq("id", reply.topic_id)
+        .maybeSingle(),
+      adminSb
+        .schema("membros")
+        .from("users")
+        .select("full_name")
+        .eq("id", likerUserId)
+        .maybeSingle(),
+    ]);
+    const topic = topicRow as
+      | { title: string; page_id: string }
+      | null;
+    if (!topic) return;
+
+    const { data: pageRow } = await adminSb
+      .schema("membros")
+      .from("community_pages")
+      .select("slug")
+      .eq("id", topic.page_id)
+      .maybeSingle();
+    const slug = (pageRow as { slug: string | null } | null)?.slug;
+    const liker = (likerRow as { full_name: string | null } | null)?.full_name;
+
+    await tryNotify({
+      userId: reply.user_id,
+      title: liker
+        ? `${liker} curtiu seu comentário`
+        : "Alguém curtiu seu comentário",
+      body: `Em "${topic.title}"`,
+      link: slug ? `/community/${slug}/post/${reply.topic_id}` : "/community",
+    });
+  } catch {
+    // best-effort
   }
 }
 
