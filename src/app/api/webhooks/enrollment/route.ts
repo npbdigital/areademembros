@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/server";
 import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
 import { expiresAtFromDuration } from "@/lib/enrollment";
+import { getPlatformSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -283,9 +284,10 @@ async function sendInvite(
     const inviteUrl = linkData?.properties?.action_link;
     const loginUrl = `${origin}/login?email=${encodeURIComponent(email)}`;
 
+    const settings = await getPlatformSettings(supabase);
     const result = await sendEmail({
       to: email,
-      subject: "Bem-vindo à área de membros",
+      subject: `Bem-vindo à ${settings.platformName}`,
       html: inviteEmailHtml({
         fullName: fullName || "novo aluno",
         email,
@@ -295,6 +297,8 @@ async function sendInvite(
         password: null,
         loginUrl,
         inviteUrl,
+        platformName: settings.platformName,
+        platformLogoUrl: settings.platformLogoUrl,
       }),
     });
     return result.ok;

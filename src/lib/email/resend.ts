@@ -84,11 +84,20 @@ export function inviteEmailHtml(params: {
   /** Recovery link gerado pelo Supabase (opcional — usado como fallback). */
   inviteUrl?: string;
   platformName?: string;
+  /** URL de logo (PNG/SVG/WebP). Quando preenchida, substitui o badge dourado. */
+  platformLogoUrl?: string | null;
 }): string {
   const platformName = params.platformName ?? "Academia NPB";
   const safeName = escapeHtml(params.fullName || "novo aluno");
   const safePlatform = escapeHtml(platformName);
   const safeEmail = escapeHtml(params.email);
+
+  // Logo no topo: imagem custom (120×168 — proporção 5:7) ou badge dourado fallback.
+  const logoBlock = params.platformLogoUrl
+    ? `<img src="${params.platformLogoUrl}" alt="${safePlatform}"
+           width="120" height="168"
+           style="display:inline-block;width:120px;height:168px;max-width:120px;object-fit:contain;border-radius:12px;" />`
+    : `<div style="display:inline-block;width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#c9922a,#7a5618);text-align:center;line-height:48px;font-weight:700;color:#fff;">A</div>`;
 
   const credentialsBlock = params.password
     ? `<div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;padding:18px 20px;margin-bottom:24px;">
@@ -122,7 +131,7 @@ export function inviteEmailHtml(params: {
 <body style="margin:0;padding:0;background:#0d0d0d;color:#f0f0f0;font-family:'Segoe UI',system-ui,sans-serif;">
   <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
     <div style="text-align:center;margin-bottom:32px;">
-      <div style="display:inline-block;width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#c9922a,#7a5618);text-align:center;line-height:48px;font-weight:700;color:#fff;">A</div>
+      ${logoBlock}
       <div style="margin-top:12px;font-size:14px;letter-spacing:2px;color:#c9922a;">${safePlatform.toUpperCase()}</div>
     </div>
 

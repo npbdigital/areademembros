@@ -222,6 +222,7 @@ export async function createStudentAction(
       loginUrl,
       inviteUrl,
       platformName: settings.platformName,
+      platformLogoUrl: settings.platformLogoUrl,
     }),
   });
 
@@ -395,6 +396,7 @@ export async function resendInviteAction(
       loginUrl,
       inviteUrl,
       platformName: settings.platformName,
+      platformLogoUrl: settings.platformLogoUrl,
     }),
   });
 
