@@ -144,7 +144,7 @@ export default async function LessonPage({
     supabase
       .schema("membros")
       .from("lesson_progress")
-      .select("is_completed")
+      .select("is_completed, last_position_seconds")
       .eq("user_id", user.id)
       .eq("lesson_id", lesson.id)
       .maybeSingle(),
@@ -177,8 +177,13 @@ export default async function LessonPage({
       .order("position", { ascending: true }),
   ]);
 
-  const isCompleted = Boolean(
-    (thisProgress as { is_completed?: boolean } | null)?.is_completed,
+  const progressRow = thisProgress as
+    | { is_completed?: boolean; last_position_seconds?: number | null }
+    | null;
+  const isCompleted = Boolean(progressRow?.is_completed);
+  const initialPositionSeconds = Math.max(
+    0,
+    Math.floor(progressRow?.last_position_seconds ?? 0),
   );
   const isFavorite = Boolean(thisFavorite);
   const noteContent = (thisNote as { content?: string } | null)?.content ?? "";
@@ -222,6 +227,7 @@ export default async function LessonPage({
             <YouTubePlayer
               lessonId={lesson.id}
               videoId={lesson.youtube_video_id}
+              initialPositionSeconds={initialPositionSeconds}
             />
           )}
 

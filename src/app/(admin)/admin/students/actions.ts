@@ -328,6 +328,98 @@ export async function setStudentPasswordAction(
   }
 }
 
+// ============================================================
+// ADD ENROLLMENTS (aluno já existente)
+// ============================================================
+
+export async function addEnrollmentsAction(
+  userId: string,
+  _prev: ActionResult<{ added: number }> | null,
+  formData: FormData,
+): Promise<ActionResult<{ added: number }>> {
+  await assertAdmin();
+
+  const cohortIds = formData
+    .getAll("cohort_ids")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+
+  if (cohortIds.length === 0) {
+    return { ok: false, error: "Selecione pelo menos uma turma." };
+  }
+
+  const supabase = admin();
+
+  const { data: cohorts } = await supabase
+    .schema("membros")
+    .from("cohorts")
+    .select("id, default_duration_days")
+    .in("id", cohortIds);
+  const durationByCohort = new Map(
+    ((cohorts ?? []) as Array<{
+      id: string;
+      default_duration_days: number | null;
+    }>).map((c) => [c.id, c.default_duration_days]),
+  );
+
+  const { data: existingEnrolls } = await supabase
+    .schema("membros")
+    .from("enrollments")
+    .select("id, cohort_id")
+    .eq("user_id", userId)
+    .in("cohort_id", cohortIds);
+  const existingByCohort = new Map(
+    ((existingEnrolls ?? []) as Array<{ id: string; cohort_id: string }>).map(
+      (e) => [e.cohort_id, e.id],
+    ),
+  );
+
+  for (const cohortId of cohortIds) {
+    const expiresAt = expiresAtFromDuration(durationByCohort.get(cohortId));
+    const existingId = existingByCohort.get(cohortId);
+
+    if (existingId) {
+      await supabase
+        .schema("membros")
+        .from("enrollments")
+        .update({
+          is_active: true,
+          expires_at: expiresAt,
+          enrolled_at: new Date().toISOString(),
+        })
+        .eq("id", existingId);
+    } else {
+      await supabase.schema("membros").from("enrollments").insert({
+        user_id: userId,
+        cohort_id: cohortId,
+        expires_at: expiresAt,
+        source: "manual",
+      });
+    }
+  }
+
+  revalidatePath("/admin/students");
+  revalidatePath(`/admin/students/${userId}`);
+  for (const cId of cohortIds) revalidatePath(`/admin/cohorts/${cId}`);
+
+  return { ok: true, data: { added: cohortIds.length } };
+}
+
+export async function setEnrollmentActiveAction(
+  enrollmentId: string,
+  userId: string,
+  isActive: boolean,
+): Promise<void> {
+  await assertAdmin();
+  const { error } = await admin()
+    .schema("membros")
+    .from("enrollments")
+    .update({ is_active: isActive })
+    .eq("id", enrollmentId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/admin/students/${userId}`);
+}
+
 export async function setStudentActiveAction(
   id: string,
   isActive: boolean,

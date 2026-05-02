@@ -10,7 +10,7 @@ import {
   NotebookPen,
   PlayCircle,
 } from "lucide-react";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -64,7 +64,10 @@ export default async function StudentActivityPage({
 }: {
   params: { id: string };
 }) {
-  const supabase = createClient();
+  // RLS de access_logs / lesson_progress / lesson_notes filtra por auth.uid().
+  // Como aqui o admin lê dados de OUTRO usuário, usamos o admin client (service_role)
+  // pra contornar — a checagem de admin já roda no layout /admin.
+  const supabase = createAdminClient();
   const userId = params.id;
 
   const { data: student } = await supabase
@@ -233,9 +236,7 @@ export default async function StudentActivityPage({
     .limit(20);
   const notes = (rawNotes ?? []) as NoteRow[];
 
-  // Avaliações do aluno (admin client pra burlar RLS)
-  const adminSupabase = createAdminClient();
-  const { data: rawRatings } = await adminSupabase
+  const { data: rawRatings } = await supabase
     .schema("membros")
     .from("lesson_ratings")
     .select("id, lesson_id, rating, comment, created_at")

@@ -44,7 +44,7 @@ export default async function StudentLayout({
         platformName={settings.platformName}
         platformLogoUrl={settings.platformLogoUrl}
       />
-      <div className="flex flex-1 flex-col pl-16">
+      <div className="flex min-w-0 flex-1 flex-col pl-16">
         <Topbar
           user={{
             fullName: profile?.full_name ?? "",
@@ -55,7 +55,7 @@ export default async function StudentLayout({
           }}
           notificationsCount={notificationsCount ?? 0}
         />
-        <main className="flex-1 overflow-y-auto npb-scrollbar p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
           {children}
         </main>
       </div>

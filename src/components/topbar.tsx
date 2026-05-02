@@ -7,6 +7,8 @@ interface TopbarProps {
   showSearch?: boolean;
   searchPlaceholder?: string;
   notificationsCount?: number;
+  /** Slot opcional para botão de menu mobile (renderizado à esquerda). */
+  mobileNav?: React.ReactNode;
 }
 
 export function Topbar({
@@ -14,9 +16,11 @@ export function Topbar({
   showSearch = false,
   searchPlaceholder = "Pesquisar",
   notificationsCount = 0,
+  mobileNav,
 }: TopbarProps) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 flex-shrink-0 items-center gap-4 border-b border-[#222] bg-npb-bg2 px-6">
+    <header className="sticky top-0 z-30 flex h-14 flex-shrink-0 items-center gap-3 border-b border-[#222] bg-npb-bg2 px-4 md:px-6">
+      {mobileNav}
       <div className="ml-auto flex items-center gap-3.5">
         {showSearch && (
           <label className="hidden md:flex items-center gap-2 rounded-lg border border-npb-border bg-npb-bg3 px-3 py-1.5">

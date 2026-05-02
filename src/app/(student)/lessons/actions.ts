@@ -217,6 +217,43 @@ export async function pingWatchTimeAction(
   }
 }
 
+export async function saveLessonPositionAction(
+  lessonId: string,
+  positionSeconds: number,
+): Promise<ActionResult> {
+  try {
+    const userId = await requireUserId();
+    const supabase = createClient();
+    const safe = Math.max(0, Math.floor(positionSeconds));
+
+    const { data: existing } = await supabase
+      .schema("membros")
+      .from("lesson_progress")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("lesson_id", lessonId)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .schema("membros")
+        .from("lesson_progress")
+        .update({ last_position_seconds: safe })
+        .eq("id", existing.id);
+    } else {
+      await supabase.schema("membros").from("lesson_progress").insert({
+        user_id: userId,
+        lesson_id: lessonId,
+        last_position_seconds: safe,
+      });
+    }
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Erro inesperado.";
+    return { ok: false, error: msg };
+  }
+}
+
 export async function logLessonViewAction(
   lessonId: string,
 ): Promise<ActionResult> {

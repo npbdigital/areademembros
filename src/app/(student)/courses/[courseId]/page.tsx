@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Lock, PlaySquare } from "lucide-react";
+import { ChevronLeft, Lock, PlayCircle, PlaySquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { checkCourseAccess, isElevatedRole, getUserRole } from "@/lib/access";
 import {
@@ -98,18 +98,38 @@ export default async function CoursePage({
 
   const allLessonIds = lessons.map((l) => l.id);
   const completedSet = new Set<string>();
+  let lastWatchedLessonId: string | null = null;
   if (allLessonIds.length > 0) {
     const { data: progress } = await supabase
       .schema("membros")
       .from("lesson_progress")
-      .select("lesson_id")
+      .select("lesson_id, is_completed, last_watched_at")
       .eq("user_id", user.id)
-      .eq("is_completed", true)
       .in("lesson_id", allLessonIds);
-    for (const p of progress ?? []) {
-      completedSet.add((p as { lesson_id: string }).lesson_id);
+
+    let mostRecent: { id: string; ts: number } | null = null;
+    for (const raw of progress ?? []) {
+      const p = raw as {
+        lesson_id: string;
+        is_completed: boolean | null;
+        last_watched_at: string | null;
+      };
+      if (p.is_completed) completedSet.add(p.lesson_id);
+      if (p.last_watched_at) {
+        const ts = new Date(p.last_watched_at).getTime();
+        if (!mostRecent || ts > mostRecent.ts) {
+          mostRecent = { id: p.lesson_id, ts };
+        }
+      }
     }
+    lastWatchedLessonId = mostRecent?.id ?? null;
   }
+  // CTA "Continuar curso": quando há progresso, vai pra última aula vista.
+  // Quando é primeiro acesso, abre a primeira aula do primeiro módulo.
+  const ctaLessonId = lastWatchedLessonId ?? lessons[0]?.id ?? null;
+  const ctaLabel = lastWatchedLessonId
+    ? "Continuar de onde parou"
+    : "Começar curso";
 
   const { data: bannersData } = await supabase
     .schema("membros")
@@ -146,6 +166,17 @@ export default async function CoursePage({
           <p className="max-w-3xl text-sm leading-relaxed text-npb-text-muted">
             {course.description}
           </p>
+        )}
+        {ctaLessonId && (
+          <div>
+            <Link
+              href={`/lessons/${ctaLessonId}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-npb-gold px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-npb-gold-light"
+            >
+              <PlayCircle className="h-4 w-4" />
+              {ctaLabel}
+            </Link>
+          </div>
         )}
       </header>
 

@@ -64,7 +64,11 @@ export function AdminSidebar({
   const pathname = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 z-40 flex w-60 min-w-60 flex-col bg-npb-sidebar border-r border-[#2a2000]">
+    <aside className={cn(
+      "z-40 flex w-60 min-w-60 flex-col bg-npb-sidebar border-r border-[#2a2000]",
+      // Mobile: ocupa o drawer inteiro. Desktop: fixa lateral esquerda.
+      "h-full md:fixed md:left-0 md:top-0 md:bottom-0",
+    )}>
       <div className="flex h-14 items-center px-4 border-b border-[#2a2000]">
         <Link href="/admin/dashboard" className="flex items-center gap-2.5">
           <NpbLogo size="sm" name={platformName} logoUrl={platformLogoUrl} />

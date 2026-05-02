@@ -4,6 +4,7 @@ import { getPlatformSettings } from "@/lib/settings";
 import { AdminSidebar } from "@/components/admin-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
+import { MobileNavToggle } from "@/components/mobile-nav-toggle";
 
 export default async function AdminLayout({
   children,
@@ -30,11 +31,14 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-npb-bg">
-      <AdminSidebar
-        platformName={settings.platformName}
-        platformLogoUrl={settings.platformLogoUrl}
-      />
-      <div className="flex flex-1 flex-col pl-60">
+      {/* Sidebar fixa em desktop; em mobile fica oculta — abre via drawer no topbar */}
+      <div className="hidden md:flex">
+        <AdminSidebar
+          platformName={settings.platformName}
+          platformLogoUrl={settings.platformLogoUrl}
+        />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col md:pl-60">
         <Topbar
           user={{
             fullName: profile.full_name ?? "",
@@ -42,9 +46,16 @@ export default async function AdminLayout({
             avatarUrl: profile.avatar_url ?? null,
             isAdmin: true,
           }}
-          /* showSearch desabilitado por padrão — voltar quando definir o que ela busca */
+          mobileNav={
+            <MobileNavToggle ariaLabel="Abrir menu admin">
+              <AdminSidebar
+                platformName={settings.platformName}
+                platformLogoUrl={settings.platformLogoUrl}
+              />
+            </MobileNavToggle>
+          }
         />
-        <main className="flex-1 overflow-y-auto npb-scrollbar p-6 md:p-8">
+        <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
           {children}
         </main>
       </div>

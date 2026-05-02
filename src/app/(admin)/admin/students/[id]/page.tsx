@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StudentEditForm } from "@/components/admin/student-edit-form";
 import { ResendInviteButton } from "@/components/admin/resend-invite-button";
 import { SetPasswordForm } from "@/components/admin/set-password-form";
+import { AddEnrollmentsForm } from "@/components/admin/add-enrollments-form";
 import { updateStudentAction } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,21 @@ export default async function EditStudentPage({
     )
     .eq("user_id", userId)
     .order("enrolled_at", { ascending: false });
+
+  const { data: allCohorts } = await supabase
+    .schema("membros")
+    .from("cohorts")
+    .select("id, name")
+    .order("name");
+
+  const activeCohortIds = new Set(
+    (enrollments ?? [])
+      .filter((e) => e.is_active)
+      .map((e) => e.cohort_id),
+  );
+  const availableCohorts = (allCohorts ?? []).filter(
+    (c) => !activeCohortIds.has(c.id),
+  );
 
   const updateAction = updateStudentAction.bind(null, userId);
   const createdAt = new Date(student.created_at).toLocaleDateString("pt-BR");
@@ -153,7 +169,12 @@ export default async function EditStudentPage({
           </span>
         </div>
 
-        <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-4">
+        <div className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-4">
+          <AddEnrollmentsForm
+            userId={userId}
+            availableCohorts={availableCohorts}
+          />
+
           {enrollments && enrollments.length > 0 ? (
             <ul className="divide-y divide-npb-border">
               {enrollments.map((e) => {
@@ -214,15 +235,8 @@ export default async function EditStudentPage({
               })}
             </ul>
           ) : (
-            <p className="px-2 py-6 text-center text-sm text-npb-text-muted">
-              Nenhuma matrícula ainda. Vá em{" "}
-              <Link
-                href="/admin/cohorts"
-                className="text-npb-gold hover:text-npb-gold-light"
-              >
-                /admin/cohorts
-              </Link>{" "}
-              e matricule este aluno.
+            <p className="px-2 py-4 text-center text-sm text-npb-text-muted">
+              Nenhuma matrícula ainda. Use o botão acima para adicionar.
             </p>
           )}
         </div>

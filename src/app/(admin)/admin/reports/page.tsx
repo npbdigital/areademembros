@@ -9,7 +9,7 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { getNonStudentUserIds } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -43,8 +43,11 @@ export default async function ReportsPage({
   const selectedCourseId = searchParams.course?.trim() || null;
   const sinceIso = sinceFromPeriod(period);
 
-  const supabase = createClient();
-  const adminSupabase = createAdminClient();
+  // Usa service_role pra ler dados agregados de TODOS os alunos (RLS de
+  // access_logs/lesson_progress/users filtra por auth.uid()). A checagem
+  // de admin já é feita no layout /admin.
+  const supabase = createAdminClient();
+  const adminSupabase = supabase;
   const excludedUserIds = await getNonStudentUserIds(supabase);
 
   const { data: coursesData } = await supabase
@@ -497,7 +500,7 @@ interface CourseDetail {
 }
 
 async function getStudentCountsByCourse(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createAdminClient>,
   courseIds: string[],
   excludedUserIds: string[],
 ): Promise<Map<string, number>> {
@@ -567,7 +570,7 @@ async function getStudentCountsByCourse(
 }
 
 async function buildCourseSummary(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createAdminClient>,
   courseId: string,
   studentCount: number,
   excludedUserIds: string[],
@@ -603,7 +606,7 @@ async function buildCourseSummary(
 }
 
 async function buildCourseDetail(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createAdminClient>,
   courseId: string,
   studentCount: number,
   excludedUserIds: string[],
