@@ -93,6 +93,7 @@ export async function approvePostAction(
         body: `"${t.title}" já está visível na comunidade.`,
         link: slug ? `/community/${slug}/post/${topicId}` : `/community`,
         ctaLabel: "Ver post",
+        pushCategory: "community_post_status",
       });
     }
 
@@ -160,6 +161,7 @@ export async function rejectPostAction(
         body: `"${t.title}" não foi aprovada pela moderação.`,
         link: `/community`,
         ctaLabel: "Ir para a comunidade",
+        pushCategory: "community_post_status",
       });
     }
 

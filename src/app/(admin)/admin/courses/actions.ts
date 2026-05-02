@@ -151,7 +151,7 @@ export async function updateCourseAction(
   if (error) return { ok: false, error: error.message };
 
   if (justPublished) {
-    // Fire-and-forget: notifica + e-mail (evento importante)
+    // Fire-and-forget: notifica + e-mail + push (evento importante)
     void notifyEnrolledInCourse({
       courseId: id,
       title: `Novo curso disponível: ${title}`,
@@ -159,6 +159,7 @@ export async function updateCourseAction(
       link: `/courses/${id}`,
       ctaLabel: "Acessar curso",
       withEmail: true,
+      pushCategory: "lesson_drip",
     });
   }
 
@@ -359,6 +360,7 @@ export async function createLessonAction(
       link: lessonId ? `/lessons/${lessonId}` : `/courses/${courseId}`,
       ctaLabel: "Assistir agora",
       withEmail: false,
+      pushCategory: "lesson_drip",
     });
   }
 

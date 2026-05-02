@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { WelcomeModal } from "@/components/student/welcome-modal";
 import { StudentMobileNav } from "@/components/student-mobile-nav";
 import { StudentChromeWrapper } from "@/components/student-chrome-wrapper";
+import { PushPermissionPrompt } from "@/components/push-permission-prompt";
 
 export default async function StudentLayout({
   children,
@@ -149,6 +150,10 @@ export default async function StudentLayout({
           buttonLabel={settings.welcomeButtonLabel}
         />
       )}
+      <PushPermissionPrompt
+        vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""}
+        enabled={settings.pushNotificationsEnabled}
+      />
       <Toaster
         theme="dark"
         position="top-right"

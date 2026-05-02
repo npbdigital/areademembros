@@ -362,6 +362,7 @@ async function notifyTopicAuthorOfLike(
         : "Alguém curtiu seu post",
       body: `Em "${topic.title}"`,
       link: slug ? `/community/${slug}/post/${topicId}` : "/community",
+      pushCategory: "community_comment",
     });
   } catch {
     // best-effort
@@ -432,6 +433,7 @@ async function notifyReplyAuthorOfLike(
         : "Alguém curtiu seu comentário",
       body: `Em "${topic.title}"`,
       link: slug ? `/community/${slug}/post/${reply.topic_id}` : "/community",
+      pushCategory: "community_reply",
     });
   } catch {
     // best-effort
@@ -530,6 +532,7 @@ export async function createReplyAction(
             body: `Em "${topic.title}"`,
             link: link ?? "/community",
             ctaLabel: "Ver comentário",
+            pushCategory: "community_comment",
           })
         : Promise.resolve(),
       parent && parent.user_id !== userId && parent.user_id !== topic?.user_id
@@ -539,6 +542,7 @@ export async function createReplyAction(
             body: topic?.title ? `Em "${topic.title}"` : undefined,
             link: link ?? "/community",
             ctaLabel: "Ver resposta",
+            pushCategory: "community_reply",
           })
         : Promise.resolve(),
     ]);

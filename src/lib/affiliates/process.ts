@@ -239,6 +239,7 @@ async function processApproved(
           title: "Nome no Kiwify não bate com o cadastrado",
           body: `Vimos uma venda chegando no email ${emailNorm}, mas o nome no Kiwify ("${nameFromKiwify}") é diferente do que você cadastrou ("${link.kiwify_name}"). Atualize seu perfil.`,
           link: "/profile#afiliado",
+          pushCategory: "kiwify_sale_attributed",
         });
       }
       continue;
@@ -261,6 +262,7 @@ async function processApproved(
         body: "Sua primeira venda foi detectada! A partir de agora, vendas geram XP e desbloqueiam conquistas.",
         link: "/profile#afiliado",
         ctaLabel: "Ver meu perfil",
+        pushCategory: "kiwify_sale_attributed",
       });
     }
 
@@ -352,6 +354,7 @@ async function processReversal(
               : "Venda reembolsada",
           body: s.product_name ?? "Uma venda foi revertida.",
           link: "/profile#afiliado",
+          pushCategory: "kiwify_sale_attributed",
         });
       } catch (e) {
         console.error("[kiwify process] erro reverter XP:", e);
@@ -442,6 +445,7 @@ async function evaluateKiwifyAchievements(
         ach.description ??
         (ach.xp_reward > 0 ? `+${ach.xp_reward} XP` : null),
       link: "/profile#gamification",
+      pushCategory: "achievement_unlocked",
     });
   }
 }

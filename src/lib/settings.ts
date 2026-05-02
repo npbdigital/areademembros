@@ -37,6 +37,8 @@ export const SETTINGS_KEYS = {
   LEADERBOARD_VISIBLE_TO_ADMIN: "leaderboard_visible_to_admin",
   LEADERBOARD_VISIBLE_TO_MODERATOR: "leaderboard_visible_to_moderator",
   LEADERBOARD_VISIBLE_TO_STUDENT: "leaderboard_visible_to_student",
+  // Push notifications
+  PUSH_NOTIFICATIONS_ENABLED: "push_notifications_enabled",
 } as const;
 
 export type SettingKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -71,6 +73,7 @@ export interface PlatformSettings {
   leaderboardVisibleToAdmin: boolean;
   leaderboardVisibleToModerator: boolean;
   leaderboardVisibleToStudent: boolean;
+  pushNotificationsEnabled: boolean;
 }
 
 /** Defaults aplicados quando a chave não está no banco. */
@@ -102,6 +105,7 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   leaderboardVisibleToAdmin: true,
   leaderboardVisibleToModerator: true,
   leaderboardVisibleToStudent: false,
+  pushNotificationsEnabled: true,
 };
 
 /** Lê todas as configs num único hit. */
@@ -199,6 +203,10 @@ export async function getPlatformSettings(
     leaderboardVisibleToStudent: parseBool(
       map.get(SETTINGS_KEYS.LEADERBOARD_VISIBLE_TO_STUDENT),
       SETTINGS_DEFAULTS.leaderboardVisibleToStudent,
+    ),
+    pushNotificationsEnabled: parseBool(
+      map.get(SETTINGS_KEYS.PUSH_NOTIFICATIONS_ENABLED),
+      SETTINGS_DEFAULTS.pushNotificationsEnabled,
     ),
   };
 }

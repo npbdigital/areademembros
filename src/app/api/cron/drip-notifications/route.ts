@@ -131,6 +131,7 @@ export async function GET(req: NextRequest) {
         body: `"${lesson.title}" acabou de abrir no seu acesso.`,
         link,
         ctaLabel: "Ver aula",
+        pushCategory: "lesson_drip",
       });
       notified++;
     }

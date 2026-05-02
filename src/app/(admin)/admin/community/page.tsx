@@ -4,6 +4,7 @@ import {
   Crown,
   ExternalLink,
   GalleryHorizontal,
+  Megaphone,
   MessageCircle,
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -17,7 +18,6 @@ export default async function AdminCommunityIndex() {
     { count: pendingCount },
     { count: spacesCount },
     { count: pagesCount },
-    { count: postsTotal },
   ] = await Promise.all([
     supabase
       .schema("membros")
@@ -32,11 +32,6 @@ export default async function AdminCommunityIndex() {
       .schema("membros")
       .from("community_pages")
       .select("id", { count: "exact", head: true }),
-    supabase
-      .schema("membros")
-      .from("community_topics")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "approved"),
   ]);
 
   return (
@@ -67,9 +62,11 @@ export default async function AdminCommunityIndex() {
           highlight={Boolean(pendingCount && pendingCount > 0)}
         />
         <AdminCard
-          icon={MessageCircle}
-          label="Posts aprovados"
-          value={postsTotal ?? 0}
+          icon={Megaphone}
+          label="Enviar anúncio"
+          value={0}
+          href="/admin/notifications/broadcast"
+          subtitle="Push pra alunos"
         />
         <AdminCard
           icon={Crown}

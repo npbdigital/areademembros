@@ -13,6 +13,7 @@ import {
   type AffiliateStats,
   AffiliateSection,
 } from "@/components/student/affiliate-section";
+import { PushSettingsSection } from "@/components/student/push-settings-section";
 import { formatDateBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
@@ -218,6 +219,37 @@ export default async function ProfilePage() {
     };
   }
 
+  // PUSH: dispositivos cadastrados + preferências por categoria
+  const [{ data: pushDevicesRaw }, { data: pushPrefsRaw }] = await Promise.all([
+    adminSb
+      .schema("membros")
+      .from("push_subscriptions")
+      .select("id, endpoint, user_agent, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    adminSb
+      .schema("membros")
+      .from("user_notification_prefs")
+      .select("category, push_enabled")
+      .eq("user_id", user.id),
+  ]);
+  const pushDevices = (pushDevicesRaw ?? []) as Array<{
+    id: string;
+    endpoint: string;
+    user_agent: string | null;
+    created_at: string;
+  }>;
+  const pushPrefs = (
+    (pushPrefsRaw ?? []) as Array<{
+      category: string;
+      push_enabled: boolean;
+    }>
+  ).map((p) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    category: p.category as any,
+    pushEnabled: p.push_enabled,
+  }));
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
@@ -251,6 +283,13 @@ export default async function ProfilePage() {
       {gamification && <GamificationSection {...gamification} />}
 
       <AffiliateSection link={affiliateLink} stats={affiliateStats} />
+
+      <PushSettingsSection
+        vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""}
+        enabledGlobal={settings.pushNotificationsEnabled}
+        devices={pushDevices}
+        prefs={pushPrefs}
+      />
 
       <section>
         <h2 className="mb-3 inline-flex items-center gap-2 text-lg font-bold text-npb-text">

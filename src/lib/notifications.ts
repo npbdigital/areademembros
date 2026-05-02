@@ -10,12 +10,19 @@
 import { createAdminClient } from "@/lib/supabase/server";
 import { notificationEmailHtml, sendEmail } from "@/lib/email/resend";
 import { getPlatformSettings } from "@/lib/settings";
+import { type PushCategory, tryPushToUser } from "@/lib/push";
 
 export interface NotifyParams {
   userId: string;
   title: string;
   body?: string | null;
   link?: string | null;
+  /**
+   * Categoria pra disparo de push notification. Quando passada, dispara
+   * push pra todas as subscriptions ativas do user (respeitando
+   * preferências). Sem categoria = só in-app, sem push.
+   */
+  pushCategory?: PushCategory;
 }
 
 export async function tryNotify(params: NotifyParams): Promise<void> {
@@ -28,6 +35,19 @@ export async function tryNotify(params: NotifyParams): Promise<void> {
       body: params.body ?? null,
       link: params.link ?? null,
     });
+
+    // Push (best-effort, não bloqueia)
+    if (params.pushCategory) {
+      await tryPushToUser({
+        userId: params.userId,
+        category: params.pushCategory,
+        payload: {
+          title: params.title,
+          body: params.body ?? undefined,
+          link: params.link ?? undefined,
+        },
+      });
+    }
   } catch {
     // best-effort
   }
@@ -51,6 +71,23 @@ export async function tryNotifyMany(
           link: payload.link ?? null,
         })),
       );
+
+    // Push em batch (best-effort, não bloqueia)
+    if (payload.pushCategory) {
+      await Promise.all(
+        userIds.map((userId) =>
+          tryPushToUser({
+            userId,
+            category: payload.pushCategory!,
+            payload: {
+              title: payload.title,
+              body: payload.body ?? undefined,
+              link: payload.link ?? undefined,
+            },
+          }),
+        ),
+      );
+    }
   } catch {
     // best-effort
   }
@@ -126,15 +163,17 @@ export async function notifyEnrolledInCourse(params: {
   link?: string | null;
   ctaLabel?: string;
   withEmail?: boolean;
+  pushCategory?: PushCategory;
 }): Promise<void> {
   const userIds = await getActiveEnrollmentsForCourse(params.courseId);
   if (userIds.length === 0) return;
 
-  // In-app sempre, em batch
+  // In-app + push (se pushCategory passada) sempre, em batch
   await tryNotifyMany(userIds, {
     title: params.title,
     body: params.body,
     link: params.link,
+    pushCategory: params.pushCategory,
   });
 
   if (params.withEmail) {

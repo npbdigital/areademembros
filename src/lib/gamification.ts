@@ -432,6 +432,7 @@ export async function checkAchievements(
             ach.description ??
             (ach.xp_reward > 0 ? `+${ach.xp_reward} XP` : null),
           link: "/profile#gamification",
+          pushCategory: "achievement_unlocked",
         });
       }
     }
