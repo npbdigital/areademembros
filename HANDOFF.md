@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-01 — sessão de polimento (matrículas adicionais, fix RLS, dashboard, resume cross-device, mobile)
-**Último commit no main:** `8d99e88` (matrículas adicionais + dashboard alunos + resume cross-device + mobile drawer)
+**Última atualização:** 2026-05-01 — Etapa 10 (Comunidade) entregue completa
+**Último commit no main:** `b38b06b` (Comunidade completa: posts/comments/likes + admin moderação + CRUDs)
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,42 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 10 — Comunidade (commit `b38b06b`)
+
+Implementação completa estilo Circle.so adaptado pra nossa stack. **Comunidade global única** (sem múltiplas comunidades por curso) — admin define quais turmas têm acesso via `cohort_courses.has_community_access`.
+
+**Schema (4 migrations Supabase):**
+- `community_topics` ganhou: `status` (`pending`/`approved`/`rejected` default `pending`), `approved_by`, `approved_at`, `video_url`, `image_url`, `likes_count`, `replies_count`
+- `community_replies` ganhou: `parent_id` (1 nível de aninhamento), `likes_count`
+- `community_galleries` ganhou: `slug` (UNIQUE), `icon`
+- Nova tabela `community_sidebar_links` (atalhos custom — label, URL, ícone, abrir nova aba)
+- Triggers automáticos pra `likes_count`/`replies_count`
+- Index full-text português em `community_topics(title + content_html)`
+- Bucket `community-post-images` (público, 10MB max, jpeg/png/webp/gif)
+- Seed inicial: 4 espaços (Comece Aqui, Geral, Dúvidas, Conquistas)
+
+**Aluno (`/community/*`):**
+- Layout com **second sidebar** de espaços + atalhos + busca
+- `/community` redireciona pro primeiro espaço visível
+- `/community/[slug]` feed paginado (20 por vez) de posts aprovados; box no topo mostra próprios posts pendentes
+- Card de post: avatar + autor + tempo + título + preview + vídeo embed (YT/Vimeo) + imagem; like otimista, link pra detalhe
+- **Modal "Nova publicação"**: TipTap rich text + URL vídeo + upload de imagem; aluno → `pending`, admin/mod → `approved` direto
+- `/community/[slug]/post/[postId]`: detalhe com vídeo/imagem/HTML sanitizado, like, badges admin/moderador, **thread de comentários** (root + 1 nível de respostas, likes em comentários, excluir próprio ou admin)
+- Acesso bloqueado pra quem não tem `has_community_access` em nenhuma turma ativa
+
+**Admin (`/admin/community/*`):**
+- Index com 4 cards (pendentes destacado em amarelo se > 0, aprovados, espaços, atalhos)
+- `/queue` — fila de moderação com Aprovar/Rejeitar (links pro vídeo/imagem/post completo pra revisar)
+- `/spaces` — CRUD de galerias (ícone emoji + nome + slug auto-gerado + descrição + ativo)
+- `/links` — CRUD de atalhos da sidebar (ícone + label + URL + nova aba)
+
+**Helpers (`src/lib/community.ts`):**
+- `userHasCommunityAccess(supabase, userId, role)` — gate de acesso
+- `slugify(input)` — slug seguro
+- `videoEmbedUrl(url)` — converte YouTube/Vimeo URL pra embed
+- `sanitizePostHtml(html)` — XSS guard (remove script/style/iframe/on*=, javascript:)
+- `timeAgoPtBr(iso)` — "há 2h", "ontem", etc.
 
 ### Sessão Maio 2026 — Polimento e fixes críticos (commits `4eff355` → `8d99e88`)
 
@@ -356,16 +392,16 @@ SaaS de área de membros multi-curso, multi-turma, com:
 - **Suporte e-mail não chegou** (reportado 2026-05-01) — sintoma: chunks `.next` 404 no console (`main-app.js`, `support/page.js`). Form é client-side, então quando o JS não carrega, clicar em "Enviar" não dispara nada. Fix do dev: `Remove-Item -Recurse -Force .next; npm run dev` + Ctrl+Shift+R. Se persistir após cache limpo, investigar Resend (RESEND_API_KEY ausente, domínio não verificado, etc.) e adicionar log persistente em `webhook_logs`
 - **"Sistema quebrou abrindo/fechando telas"** (relato anterior, sem repro recente) — provável mesmo problema de cache `.next` velho. Se voltar, capturar console + terminal
 
-### Etapa 10 — Comunidade (PRÓXIMA GRANDE) 🎯
-- `/community` — galerias (categorias de tópicos)
-- `/community/[gallery]` — lista de tópicos (fixados no topo)
-- `/community/[gallery]/[topic]` — tópico + respostas aninhadas (1 nível) + likes
-- Editor TipTap (já temos o componente) pra criar tópico/resposta
-- Moderação: admin/moderator pode deletar/responder qualquer coisa, marcar fixado, marcar `is_moderated`
+### Etapa 10 — Comunidade ✅ (commit `b38b06b`)
+Concluída — ver seção acima.
+
+**Polimentos sugeridos pra próximas iterações:**
+- Drag-and-drop pra reordenar espaços e atalhos (hoje só `position` numérico no DB)
+- Notificação ao autor quando post é aprovado/rejeitado (e-mail via Resend + sino in-app)
 - Notificação quando alguém responde no tópico do aluno
-- Tabelas já criadas no schema: `community_galleries`, `community_topics`, `community_replies`, `community_likes`
-- **Reusar:** `isElevatedRole()` pra gatear ações de moderação
-- Acesso: `has_community_access` em `cohort_courses` controla se a turma libera comunidade — admin/moderator sempre vê
+- Pinning (`is_pinned` já existe no schema, falta UI)
+- Realtime via Supabase channels (atualiza feed quando post novo aprovado)
+- "Curtidas em meus posts" como aba do `/profile`
 
 ### Etapa 13 — Notificações in-app (parcial)
 - ✅ Página `/admin/students/[id]/atividade` (timeline + stats)
@@ -613,11 +649,11 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 8, 11, 12, 13 (parcial), 14 e 15 estão completas** (ver changelog do HANDOFF). O cliente tem: painel admin completo (incl. métricas de alunos no dashboard), biblioteca de aluno com player (YouTube IFrame API + resume cross-device via `lesson_progress.last_position_seconds`), anexos, drag-and-drop, role moderator, /admin/reports, webhook HTTP, whitelabel completo (settings + welcome modal + logo custom no email), perfil + suporte do aluno, mobile drawer no admin. **Próximas frentes:**
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 15 estão completas** — incluindo Etapa 10 (Comunidade completa: feed/posts/comments/likes/moderação). O cliente tem painel admin completo (métricas de alunos no dashboard), biblioteca de aluno com player (YouTube IFrame API + resume cross-device), anexos, drag-and-drop, role moderator, /admin/reports, webhook HTTP, whitelabel completo, perfil + suporte do aluno, mobile drawer no admin, e **Comunidade global única** (galerias + posts com vídeo/imagem/HTML sanitizado + comentários aninhados + moderação admin). **Próximas frentes:**
 >
-> 1. **Etapa 10 — Comunidade (PRÓXIMA GRANDE):** tabelas já existem (`community_galleries`, `community_topics`, `community_replies`, `community_likes`). Construir `/community`, `/community/[gallery]`, `/community/[gallery]/[topic]` com TipTap, likes, moderação (admin/moderator usa `isElevatedRole()` de `src/lib/access.ts`). Acesso baseado em `cohort_courses.has_community_access`.
+> 1. **GAMIFICATION (NOVO — pedido pelo Felipe):** XP por ação (concluir aula +10, streak +50, post aprovado +20, comentário +5), streak de dias consecutivos, conquistas (badges), levels, **leaderboard só admin/moderador**, **reset de XP a cada 3 meses**. Sem prêmios reais, só badges visuais. Spec detalhada na conversa do Claude que entregou Etapa 10.
 >
-> 2. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar `/notifications`, triggers automáticos (nova aula, drip desbloqueado, resposta comunidade). Resend pra e-mails de eventos importantes.
+> 2. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar `/notifications`, triggers automáticos (nova aula, drip desbloqueado, resposta comunidade, post aprovado). Resend pra e-mails de eventos importantes.
 >
 > 3. **Trigger SQL `transactions_data` → matrícula:** depende de Felipe mapear "produto X = turma Y" em `membros.product_cohort_map` (vazia hoje). Webhook HTTP já existe.
 >
@@ -651,7 +687,9 @@ Cole essa mensagem inicial:
 | `a2dee21` | feat: logo custom, welcome modal (popup primeiro acesso), banners global, esconde busca |
 | `4c2b957` | feat: senha padrão 123456, multi-cohort no aluno, video picker no welcome |
 | `17f5045` | feat: logo custom no email de boas-vindas (120x168, 5:7) |
-| `8d99e88` | **matrículas adicionais + fix RLS atividade/reports + dashboard alunos + resume cross-device + mobile drawer** (este commit) |
+| `8d99e88` | matrículas adicionais + fix RLS atividade/reports + dashboard alunos + resume cross-device + mobile drawer |
+| `ffece83` | docs: HANDOFF sessão Maio 2026 |
+| `b38b06b` | **Etapa 10 — Comunidade completa** (feed, posts com vídeo/imagem, comentários aninhados, likes, moderação admin, CRUD espaços e atalhos) |
 
 ---
 
