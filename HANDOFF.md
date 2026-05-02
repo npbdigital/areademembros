@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-02 — Etapa 21: PWA instalável
-**Último commit no main:** `7fc70b6` — feat(pwa): aplicativo instalavel desktop + mobile com botao na sidebar
+**Última atualização:** 2026-05-02 — Etapa 22: Push notifications + Broadcast admin
+**Último commit no main:** `9434a01` — feat(push): web push notifications + broadcast admin
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,91 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 22 — Push Notifications + Broadcast admin (sessão Maio 2026)
+
+Notificações push nativas via Web Push API + sistema de broadcast manual
+do admin pra avisar lives, anúncios, etc.
+
+**Schema (migration `push_notifications_setup`):**
+- `push_subscriptions(user_id, endpoint UNIQUE, keys_p256dh, keys_auth,
+  user_agent, last_used_at)` — uma por dispositivo/browser
+- `user_notification_prefs(user_id, category, push_enabled)` PK composta
+  esparsa (default true se ausente)
+- `push_broadcasts(id, sent_by, title, body, link, audience JSONB,
+  recipients_count, delivered_count, failed_count)` — histórico
+
+**Categorias** (em `lib/push.ts > PushCategory`):
+- `community_comment` — comentário/like no meu post
+- `community_reply` — resposta/like ao meu comentário
+- `community_post_status` — meu post aprovado/rejeitado
+- `achievement_unlocked` — conquista desbloqueada
+- `lesson_drip` — nova aula liberada
+- `kiwify_sale_attributed` — venda Kiwify atribuída
+- `broadcast` — anúncios manuais admin (sempre on, user não desliga)
+
+**Core (lib/push.ts):**
+- `sendPushToUser({userId, category, payload})` — verifica setting global
+  + preferência per-categoria, dispara pra todas as subs ativas, remove
+  410 Gone
+- `resolveBroadcastAudience(audience)` — filtra users elegíveis por
+  roles + include_cohort_ids (TODAS precisam estar) + exclude_cohort_ids
+  (NENHUMA pode estar)
+- `sendBroadcast(...)` — itera audience em batches de 50, cria notif
+  in-app + dispara push, atualiza contadores em push_broadcasts
+
+**Service worker** (`public/sw.js` v2):
+- listener `push` mostra notificação nativa (com tag pra evitar spam)
+- listener `notificationclick` foca aba existente do app + navega, ou
+  abre nova
+- listener `pushsubscriptionchange` avisa client pra re-subscribe
+
+**lib/push-client.ts** (helpers no browser):
+- `requestPushPermissionAndSubscribe(vapidKey)` — pede permissão +
+  subscribe + manda pro server
+- `unsubscribeCurrentDevice()` — desfaz no browser + remove do server
+- `pushPermissionState()` — retorna `granted | denied | default | unsupported`
+
+**Integração:** `tryNotify` ganhou `pushCategory?: PushCategory`. Quando
+passado, dispara push junto com in-app. Hooks plugados em todos os
+triggers existentes (community approve/reject/comment/like, achievement
+unlock, course publish + lesson create, drip cron, affiliates).
+
+**UI aluno:**
+- `PushPermissionPrompt` no student layout — modal flutuante no canto
+  inferior direito. Aparece na 2ª sessão OU após 5min na 1ª (rastreio
+  via localStorage). Se rejeitado, espera 7 dias antes de tentar de
+  novo. Detecta `permission=denied` (browser bloqueou) e desiste.
+- `PushSettingsSection` no `/profile` — entre Afiliado e Trocar Senha:
+  status do dispositivo atual (ativar/desativar), lista dos últimos 5
+  cadastrados (descrição user agent), checkboxes por categoria com
+  update otimista. Broadcast não aparece (sempre on).
+
+**UI admin:**
+- `/admin/notifications/broadcast` — form com título (max 80 chars),
+  body (max 200), link, perfis (admin/moderator/student/ficticio),
+  filtro de cohorts em **3 estados** (neutral → include verde →
+  exclude vermelho — clica pra alternar). Modal de confirmação com
+  preview antes de enviar. Histórico dos últimos 20 com contagens.
+- Card "Enviar anúncio" no `/admin/community` index aponta pra broadcast.
+
+**Setting global:** `SETTINGS_KEYS.PUSH_NOTIFICATIONS_ENABLED` em
+`lib/settings.ts` (default true) — kill switch admin.
+
+**VAPID env vars** (necessárias em prod):
+- `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — exposta no client
+- `VAPID_PRIVATE_KEY` — só server
+- `VAPID_SUBJECT` — `mailto:suporte@felipesempe.com.br`
+- Sem essas vars setadas, `sendPushToUser` faz silent-noop (app continua
+  funcionando, push não envia)
+
+**Compatibilidade:**
+- Chrome/Edge desktop+Android: ✅ funciona com app aberto ou fechado
+- iOS Safari 16.4+: ✅ **só** se aluno instalou PWA na home screen
+- Firefox desktop: ✅
+- Firefox iOS: ❌ não suporta push
+
+**Lib instalada:** `web-push` + `@types/web-push`
 
 ### Etapa 21 — PWA instalável (sessão Maio 2026)
 
