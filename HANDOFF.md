@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-02 — Etapa 20.1: bugs UX mobile (lesson nav + community bar)
-**Último commit no main:** `24ccaa3` — fix(mobile): NavButtons em linha separada + CommunityMobileBar dinâmica
+**Última atualização:** 2026-05-02 — Etapa 21: PWA instalável
+**Último commit no main:** `7fc70b6` — feat(pwa): aplicativo instalavel desktop + mobile com botao na sidebar
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,45 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 21 — PWA instalável (sessão Maio 2026)
+
+App pode ser instalado no desktop (Chrome/Edge/Brave) e mobile
+(Android/iOS) como app standalone — vira ícone na home/Dock/Iniciar
+sem barra de URL.
+
+**Arquivos novos:**
+- `public/pwa-icon.svg` — escudo dourado "A" 512x512 (fallback quando
+  admin não setou logo customizada)
+- `public/sw.js` — service worker mínimo (install/activate/fetch
+  passthrough). Não cacheia nada — só existe pra qualificar como PWA
+  pro Chrome disparar `beforeinstallprompt`
+- `src/app/manifest.webmanifest/route.ts` — manifest dinâmico via route
+  handler. Lê `platformName` + `platformLogoUrl` das settings em runtime;
+  cache 5min browser + 1h edge. Quando admin troca logo/nome, app
+  atualiza na próxima visita
+- `src/components/pwa-install-button.tsx` — componente client com 4
+  estados:
+  - `loading` → renderiza nada por 3s aguardando evento
+  - `installed` → "App instalado" verde com check (detecta
+    `display-mode: standalone` ou `navigator.standalone` no iOS)
+  - `promptable` → captura `beforeinstallprompt`, click chama
+    `prompt.prompt()`. Atualiza estado em `appinstalled`
+  - `ios` → click abre `IosInstructionsModal` (3 passos: Compartilhar
+    → Adicionar à Tela de Início → Adicionar)
+  - `unsupported` → renderiza nada (Firefox desktop, etc)
+
+**Integração:**
+- `StudentSidebar`: item "Instalar aplicativo" (ícone Download) entre
+  Perfil e Suporte. PwaInstallButton substitui o Link quando renderiza
+- Root `layout.tsx`: `generateMetadata` aponta `manifest`,
+  `appleWebApp.capable=true`, `apple-touch-icon` (logo custom ou
+  pwa-icon.svg); `viewport` com `themeColor: "#0d0d0d"` (preto)
+- `lib/supabase/middleware.ts`: libera `/manifest.webmanifest`, `/sw.js`
+  e `/pwa-icon.svg` pra usuários sem sessão (browser baixa esses
+  assets antes do login)
+
+
 
 ### Etapa 20.1 — Bugs UX mobile + validação webhook ponta-a-ponta (2026-05-02)
 
