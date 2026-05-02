@@ -59,24 +59,26 @@ export function MobileNavToggle({ children, ariaLabel = "Menu" }: Props) {
               onClick={() => setOpen(false)}
               className="absolute inset-0 bg-black/60"
             />
-            {/* drawer */}
+            {/* drawer — flex column com botão fechar embutido no topo */}
             <div
-              className="absolute left-0 top-0 bottom-0 w-[260px] max-w-[85vw] animate-in slide-in-from-left duration-200"
+              className="absolute inset-y-0 left-0 flex w-[280px] max-w-[85vw] flex-col bg-npb-sidebar shadow-2xl animate-in slide-in-from-left duration-200"
               onClick={(e) => {
                 // fecha quando clica em qualquer link dentro
                 const target = e.target as HTMLElement;
                 if (target.closest("a")) setOpen(false);
               }}
             >
-              <button
-                type="button"
-                aria-label="Fechar menu"
-                onClick={() => setOpen(false)}
-                className="absolute right-2 top-2 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text"
-              >
-                <X className="h-4 w-4" />
-              </button>
-              {children}
+              <div className="flex items-center justify-end border-b border-[#2a2000] px-2 py-1.5">
+                <button
+                  type="button"
+                  aria-label="Fechar menu"
+                  onClick={() => setOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md text-npb-text-muted transition-colors hover:bg-npb-bg3 hover:text-npb-text"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
             </div>
           </div>,
           document.body,

@@ -26,6 +26,17 @@ export default async function PostDetailPage({
   const role = await getUserRole(supabase, user.id);
   const adminSupabase = createAdminClient();
 
+  // Profile do user atual — usado pra optimistic UI no CommentThread
+  const { data: currentProfile } = await supabase
+    .schema("membros")
+    .from("users")
+    .select("full_name, avatar_url")
+    .eq("id", user.id)
+    .maybeSingle();
+  const currentUserProfile = currentProfile as
+    | { full_name: string | null; avatar_url: string | null }
+    | null;
+
   const { data: topic } = await supabase
     .schema("membros")
     .from("community_topics")
@@ -267,6 +278,8 @@ export default async function PostDetailPage({
           topicId={t.id}
           rootNodes={rootNodes}
           currentUserId={user.id}
+          currentUserName={currentUserProfile?.full_name ?? "Você"}
+          currentUserAvatarUrl={currentUserProfile?.avatar_url ?? null}
           currentRole={role}
         />
       </section>

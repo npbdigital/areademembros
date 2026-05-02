@@ -6,7 +6,7 @@ import { StudentSidebar } from "@/components/student-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { WelcomeModal } from "@/components/student/welcome-modal";
-import { MobileNavToggle } from "@/components/mobile-nav-toggle";
+import { StudentMobileNav } from "@/components/student-mobile-nav";
 
 export default async function StudentLayout({
   children,
@@ -119,12 +119,12 @@ export default async function StudentLayout({
           notificationsItems={notificationsItems}
           xp={xpInfo}
           mobileNav={
-            <MobileNavToggle ariaLabel="Abrir menu">
+            <StudentMobileNav>
               <StudentSidebar
                 platformName={settings.platformName}
                 platformLogoUrl={settings.platformLogoUrl}
               />
-            </MobileNavToggle>
+            </StudentMobileNav>
           }
         />
         <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">

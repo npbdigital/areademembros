@@ -292,7 +292,7 @@ export async function createReplyAction(
   topicId: string,
   parentId: string | null,
   bodyHtml: string,
-): Promise<ActionResult<{ replyId: string }>> {
+): Promise<ActionResult<{ replyId: string; createdAt: string }>> {
   try {
     const userId = await requireUserId();
     await assertCommunityAccess(userId);
@@ -303,90 +303,96 @@ export async function createReplyAction(
       return { ok: false, error: "Comentário muito longo." };
 
     const supabase = createClient();
-    const safe = sanitizePostHtml(trimmed);
-    const { data, error } = await supabase
-      .schema("membros")
-      .from("community_replies")
-      .insert({
-        topic_id: topicId,
-        user_id: userId,
-        content_html: safe,
-        parent_id: parentId,
-      })
-      .select("id")
-      .single();
-
-    if (error || !data)
-      return { ok: false, error: error?.message ?? "Falha." };
-
-    // XP por comentário (idempotente por replyId)
     const adminSb = createAdminClient();
-    const settings = await getPlatformSettings(adminSb);
-    if (settings.gamificationEnabled) {
-      await tryAwardXp({
-        userId,
-        reason: "comment_approved",
-        amount: settings.xpCommentApproved,
-        referenceId: data.id,
-      });
-    }
+    const safe = sanitizePostHtml(trimmed);
 
-    // Notifica autor do tópico (se diferente do comentarista) e autor do
-    // comentário pai (se for resposta aninhada)
-    const { data: topicRow } = await adminSb
-      .schema("membros")
-      .from("community_topics")
-      .select("user_id, title, page_id")
-      .eq("id", topicId)
-      .maybeSingle();
-    const topic = topicRow as
+    // Insert + reads em paralelo — reduz latência total.
+    const [insertRes, settings, topicRes, parentRes] = await Promise.all([
+      supabase
+        .schema("membros")
+        .from("community_replies")
+        .insert({
+          topic_id: topicId,
+          user_id: userId,
+          content_html: safe,
+          parent_id: parentId,
+        })
+        .select("id, created_at")
+        .single(),
+      getPlatformSettings(adminSb),
+      adminSb
+        .schema("membros")
+        .from("community_topics")
+        .select("user_id, title, page_id")
+        .eq("id", topicId)
+        .maybeSingle(),
+      parentId
+        ? adminSb
+            .schema("membros")
+            .from("community_replies")
+            .select("user_id")
+            .eq("id", parentId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    if (insertRes.error || !insertRes.data)
+      return { ok: false, error: insertRes.error?.message ?? "Falha." };
+
+    const reply = insertRes.data as { id: string; created_at: string };
+    const topic = topicRes.data as
       | { user_id: string; title: string; page_id: string }
       | null;
+    const parent = parentRes.data as { user_id: string } | null;
 
-    let pageSlug: string | null = null;
-    if (topic) {
+    // Busca slug + dispara XP/notificações em paralelo. Awaita pra não
+    // morrer em serverless, mas não bloqueia retorno mais que necessário.
+    const buildLink = async () => {
+      if (!topic) return null;
       const { data: pageRow } = await adminSb
         .schema("membros")
         .from("community_pages")
         .select("slug")
         .eq("id", topic.page_id)
         .maybeSingle();
-      pageSlug = (pageRow as { slug: string | null } | null)?.slug ?? null;
+      const slug = (pageRow as { slug: string | null } | null)?.slug ?? null;
+      return slug ? `/community/${slug}/post/${topicId}` : "/community";
+    };
 
-      if (topic.user_id !== userId) {
-        await tryNotify({
-          userId: topic.user_id,
-          title: "Novo comentário no seu post",
-          body: `Em "${topic.title}"`,
-          link: pageSlug
-            ? `/community/${pageSlug}/post/${topicId}`
-            : "/community",
-        });
-      }
-    }
+    const link = await buildLink();
 
-    if (parentId) {
-      const { data: parentRow } = await adminSb
-        .schema("membros")
-        .from("community_replies")
-        .select("user_id")
-        .eq("id", parentId)
-        .maybeSingle();
-      const parentUserId = (parentRow as { user_id: string } | null)?.user_id;
-      if (parentUserId && parentUserId !== userId && parentUserId !== topic?.user_id) {
-        await tryNotify({
-          userId: parentUserId,
-          title: "Alguém respondeu seu comentário",
-          body: topic?.title ? `Em "${topic.title}"` : undefined,
-          link: pageSlug
-            ? `/community/${pageSlug}/post/${topicId}`
-            : "/community",
-        });
-      }
-    }
+    await Promise.allSettled([
+      settings.gamificationEnabled
+        ? tryAwardXp({
+            userId,
+            reason: "comment_approved",
+            amount: settings.xpCommentApproved,
+            referenceId: reply.id,
+          })
+        : Promise.resolve(),
+      topic && topic.user_id !== userId
+        ? tryNotify({
+            userId: topic.user_id,
+            title: "Novo comentário no seu post",
+            body: `Em "${topic.title}"`,
+            link: link ?? "/community",
+          })
+        : Promise.resolve(),
+      parent && parent.user_id !== userId && parent.user_id !== topic?.user_id
+        ? tryNotify({
+            userId: parent.user_id,
+            title: "Alguém respondeu seu comentário",
+            body: topic?.title ? `Em "${topic.title}"` : undefined,
+            link: link ?? "/community",
+          })
+        : Promise.resolve(),
+    ]);
 
     revalidatePath(`/community/[slug]/post/${topicId}`, "page");
-    return { ok: true, data: { replyId: data.id } };
+    return {
+      ok: true,
+      data: { replyId: reply.id, createdAt: reply.created_at },
+    };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro inesperado.";
     return { ok: false, error: msg };

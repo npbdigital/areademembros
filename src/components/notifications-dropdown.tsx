@@ -67,7 +67,11 @@ export function NotificationsDropdown({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-2 w-80 overflow-hidden rounded-lg border border-npb-border bg-npb-bg2 shadow-xl"
+          className="
+            fixed right-2 top-14 z-50 w-[calc(100vw-1rem)] max-w-md
+            sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-80 sm:max-w-none
+            overflow-hidden rounded-lg border border-npb-border bg-npb-bg2 shadow-xl
+          "
         >
           <div className="flex items-center justify-between border-b border-npb-border px-4 py-3">
             <span className="text-sm font-semibold text-npb-text">

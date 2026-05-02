@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { Heart, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
 import { sanitizePostHtml, timeAgoPtBr } from "@/lib/community";
 import { isElevatedRole, type AccessRole } from "@/lib/access";
 import { Avatar } from "@/components/community/post-card";
@@ -30,6 +29,8 @@ interface Props {
   topicId: string;
   rootNodes: CommentNode[];
   currentUserId: string;
+  currentUserName: string;
+  currentUserAvatarUrl: string | null;
   currentRole: AccessRole;
 }
 
@@ -37,27 +38,99 @@ export function CommentThread({
   topicId,
   rootNodes,
   currentUserId,
+  currentUserName,
+  currentUserAvatarUrl,
   currentRole,
 }: Props) {
-  const router = useRouter();
   const [draft, setDraft] = useState("");
   const [pending, startTransition] = useTransition();
+
+  // Comentários "otimistas" — adicionados imediatamente após enviar, sem
+  // esperar o reload da página. Quando a action retorna, o id placeholder é
+  // substituído pelo real (ou removido em caso de erro).
+  const [localRoot, setLocalRoot] = useState<CommentNode[]>([]);
+  const [localReplies, setLocalReplies] = useState<
+    Record<string, CommentNode[]>
+  >({});
+
+  function buildOptimistic(
+    parentId: string | null,
+    body: string,
+  ): CommentNode {
+    return {
+      id: `optimistic-${crypto.randomUUID()}`,
+      authorId: currentUserId,
+      authorName: currentUserName,
+      authorAvatarUrl: currentUserAvatarUrl,
+      contentHtml: body,
+      likesCount: 0,
+      createdAt: new Date().toISOString(),
+      liked: false,
+      parentId,
+      replies: [],
+    };
+  }
 
   function handleSubmitRoot(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = draft.trim();
     if (!trimmed) return;
+
+    const optimistic = buildOptimistic(null, sanitizePostHtml(trimmed));
+    setLocalRoot((p) => [...p, optimistic]);
+    setDraft("");
+
     startTransition(async () => {
       const res = await createReplyAction(topicId, null, trimmed);
-      if (res.ok) {
-        setDraft("");
-        toast.success("Comentário enviado.");
-        router.refresh();
+      if (res.ok && res.data) {
+        // Substitui o placeholder pelo id real (mantém posição/conteúdo)
+        setLocalRoot((p) =>
+          p.map((c) =>
+            c.id === optimistic.id
+              ? { ...c, id: res.data!.replyId, createdAt: res.data!.createdAt }
+              : c,
+          ),
+        );
       } else {
-        toast.error(res.error ?? "Falha.");
+        // Rollback
+        setLocalRoot((p) => p.filter((c) => c.id !== optimistic.id));
+        toast.error(res.error ?? "Falha ao enviar comentário.");
       }
     });
   }
+
+  function addOptimisticReply(rootId: string, optimistic: CommentNode) {
+    setLocalReplies((map) => ({
+      ...map,
+      [rootId]: [...(map[rootId] ?? []), optimistic],
+    }));
+  }
+
+  function replaceOptimisticReply(
+    rootId: string,
+    optimisticId: string,
+    realId: string,
+    realCreatedAt: string,
+  ) {
+    setLocalReplies((map) => ({
+      ...map,
+      [rootId]: (map[rootId] ?? []).map((r) =>
+        r.id === optimisticId
+          ? { ...r, id: realId, createdAt: realCreatedAt }
+          : r,
+      ),
+    }));
+  }
+
+  function removeOptimisticReply(rootId: string, optimisticId: string) {
+    setLocalReplies((map) => ({
+      ...map,
+      [rootId]: (map[rootId] ?? []).filter((r) => r.id !== optimisticId),
+    }));
+  }
+
+  // Agrega: nodes do servidor + nodes locais (ordem natural)
+  const allRootNodes = [...rootNodes, ...localRoot];
 
   return (
     <div className="space-y-5">
@@ -76,46 +149,57 @@ export function CommentThread({
             disabled={pending || !draft.trim()}
             className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-npb-gold-light disabled:opacity-50"
           >
-            {pending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : null}
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Comentar
           </button>
         </div>
       </form>
 
-      {rootNodes.length === 0 ? (
+      {allRootNodes.length === 0 ? (
         <p className="py-6 text-center text-sm text-npb-text-muted">
           Seja o primeiro a comentar.
         </p>
       ) : (
         <ul className="space-y-4">
-          {rootNodes.map((node) => (
-            <li key={node.id}>
-              <CommentItem
-                node={node}
-                topicId={topicId}
-                currentUserId={currentUserId}
-                currentRole={currentRole}
-                isReply={false}
-              />
-              {node.replies.length > 0 && (
-                <ul className="mt-3 space-y-3 border-l-2 border-npb-border pl-4">
-                  {node.replies.map((reply) => (
-                    <li key={reply.id}>
-                      <CommentItem
-                        node={reply}
-                        topicId={topicId}
-                        currentUserId={currentUserId}
-                        currentRole={currentRole}
-                        isReply={true}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
+          {allRootNodes.map((node) => {
+            const localChildren = localReplies[node.id] ?? [];
+            const allChildren = [...node.replies, ...localChildren];
+            return (
+              <li key={node.id}>
+                <CommentItem
+                  node={node}
+                  topicId={topicId}
+                  currentUserId={currentUserId}
+                  currentUserName={currentUserName}
+                  currentUserAvatarUrl={currentUserAvatarUrl}
+                  currentRole={currentRole}
+                  isReply={false}
+                  onOptimisticReply={(opt) => addOptimisticReply(node.id, opt)}
+                  onReplySuccess={(optId, realId, createdAt) =>
+                    replaceOptimisticReply(node.id, optId, realId, createdAt)
+                  }
+                  onReplyFail={(optId) => removeOptimisticReply(node.id, optId)}
+                />
+                {allChildren.length > 0 && (
+                  <ul className="mt-3 space-y-3 border-l-2 border-npb-border pl-4">
+                    {allChildren.map((reply) => (
+                      <li key={reply.id}>
+                        <CommentItem
+                          node={reply}
+                          topicId={topicId}
+                          currentUserId={currentUserId}
+                          currentUserName={currentUserName}
+                          currentUserAvatarUrl={currentUserAvatarUrl}
+                          currentRole={currentRole}
+                          isReply={true}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -126,16 +210,29 @@ function CommentItem({
   node,
   topicId,
   currentUserId,
+  currentUserName,
+  currentUserAvatarUrl,
   currentRole,
   isReply,
+  onOptimisticReply,
+  onReplySuccess,
+  onReplyFail,
 }: {
   node: CommentNode;
   topicId: string;
   currentUserId: string;
+  currentUserName: string;
+  currentUserAvatarUrl: string | null;
   currentRole: AccessRole;
   isReply: boolean;
+  onOptimisticReply?: (optimistic: CommentNode) => void;
+  onReplySuccess?: (
+    optimisticId: string,
+    realId: string,
+    createdAt: string,
+  ) => void;
+  onReplyFail?: (optimisticId: string) => void;
 }) {
-  const router = useRouter();
   const [liked, setLiked] = useState(node.liked);
   const [count, setCount] = useState(node.likesCount);
   const [pendingLike, startLike] = useTransition();
@@ -145,11 +242,14 @@ function CommentItem({
   const [pendingReply, startReply] = useTransition();
   const [hidden, setHidden] = useState(false);
 
+  const isOptimistic = node.id.startsWith("optimistic-");
   const canDelete =
-    node.authorId === currentUserId || isElevatedRole(currentRole);
+    !isOptimistic &&
+    (node.authorId === currentUserId || isElevatedRole(currentRole));
   const safeHtml = sanitizePostHtml(node.contentHtml);
 
   function handleLike() {
+    if (isOptimistic) return; // ainda não foi salvo
     setLiked((p) => !p);
     setCount((c) => (liked ? Math.max(c - 1, 0) : c + 1));
     startLike(async () => {
@@ -178,16 +278,31 @@ function CommentItem({
   function handleReplySubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = replyText.trim();
-    if (!trimmed) return;
+    if (!trimmed || !onOptimisticReply) return;
+
+    const optimistic: CommentNode = {
+      id: `optimistic-${crypto.randomUUID()}`,
+      authorId: currentUserId,
+      authorName: currentUserName,
+      authorAvatarUrl: currentUserAvatarUrl,
+      contentHtml: sanitizePostHtml(trimmed),
+      likesCount: 0,
+      createdAt: new Date().toISOString(),
+      liked: false,
+      parentId: node.id,
+      replies: [],
+    };
+    onOptimisticReply(optimistic);
+    setReplyText("");
+    setReplying(false);
+
     startReply(async () => {
       const res = await createReplyAction(topicId, node.id, trimmed);
-      if (res.ok) {
-        setReplyText("");
-        setReplying(false);
-        toast.success("Resposta enviada.");
-        router.refresh();
-      } else {
-        toast.error(res.error ?? "Falha.");
+      if (res.ok && res.data && onReplySuccess) {
+        onReplySuccess(optimistic.id, res.data.replyId, res.data.createdAt);
+      } else if (onReplyFail) {
+        onReplyFail(optimistic.id);
+        toast.error(res.error ?? "Falha ao responder.");
       }
     });
   }
@@ -202,13 +317,17 @@ function CommentItem({
         className="h-7 w-7"
       />
       <div className="min-w-0 flex-1">
-        <div className="rounded-lg bg-npb-bg3 p-3">
+        <div
+          className={`rounded-lg bg-npb-bg3 p-3 ${
+            isOptimistic ? "opacity-70" : ""
+          }`}
+        >
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-sm font-semibold text-npb-text">
               {node.authorName}
             </span>
             <span className="text-[10px] text-npb-text-muted">
-              {timeAgoPtBr(node.createdAt)}
+              {isOptimistic ? "enviando…" : timeAgoPtBr(node.createdAt)}
             </span>
           </div>
           <div
@@ -221,15 +340,15 @@ function CommentItem({
           <button
             type="button"
             onClick={handleLike}
-            disabled={pendingLike}
+            disabled={pendingLike || isOptimistic}
             className={`inline-flex items-center gap-1 transition ${
               liked ? "text-red-400" : "text-npb-text-muted hover:text-red-400"
-            }`}
+            } disabled:opacity-50`}
           >
             <Heart className={`h-3 w-3 ${liked ? "fill-current" : ""}`} />
             {count}
           </button>
-          {!isReply && (
+          {!isReply && !isOptimistic && (
             <button
               type="button"
               onClick={() => setReplying((v) => !v)}

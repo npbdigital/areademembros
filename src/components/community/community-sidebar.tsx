@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -66,6 +67,15 @@ export function CommunitySidebar({
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-npb-border bg-npb-bg2 md:w-64 md:min-w-64">
+      {/* Voltar ao menu principal — só visível no mobile, dentro do drawer */}
+      <Link
+        href="/dashboard"
+        className="flex items-center gap-2 border-b border-npb-border bg-npb-bg3 px-4 py-2.5 text-xs text-npb-text-muted transition-colors hover:bg-npb-bg4 hover:text-npb-text md:hidden"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Voltar ao menu principal
+      </Link>
+
       <div className="border-b border-npb-border p-4">
         <div className="mb-3 flex items-center gap-2">
           <Smile className="h-5 w-5 text-npb-gold" />
