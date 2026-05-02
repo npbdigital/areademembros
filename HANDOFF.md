@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-01 — Etapa 16 (Gamification + configs) entregue
-**Último commit no main:** Gamification + configs Comunidade + Leaderboard + badges não-lidos
+**Última atualização:** 2026-05-01 — Etapa 17 (Comunidade Circle.so + Notificações) entregue
+**Último commit no main:** Comunidade restruturada (spaces > pages, sidebar inline admin) + sino real + /notifications
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,55 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 17 — Comunidade Circle.so style + Notificações (sessão Maio 2026)
+
+Reestruturação da Comunidade pra modelo de **Espaços (grupos não-clicáveis) > Páginas (com feed)** + sistema de notificações in-app real.
+
+**Schema (1 migration):**
+- Nova tabela `community_spaces(id, title, position, is_active)` — grupos
+- `community_galleries` renomeada → `community_pages` + adicionada `space_id` (FK nullable em `community_spaces` — DELETE SET NULL)
+- `community_topics.gallery_id` → `page_id`
+- `community_space_views` → `community_page_views` + `gallery_id` → `page_id` (incluindo policies/index renomeados)
+- Index `idx_topics_page_status_created` substitui o antigo
+
+**Estrutura nova da sidebar `/community`:**
+- **Feed** (atalho fixo no topo, ícone gold) → `/community/feed`
+- **Grupos colapsáveis por espaço** (`▼ Comece por aqui`, `▼ Mentoria 20K`, etc) — title não-clicável, só expand/collapse
+- **Páginas dentro do espaço** (`📋 Regras`, `🚪 Apresente-se`, ...) — clicáveis, abrem o feed daquela página
+- **Páginas órfãs** (sem `space_id`) ficam num grupo "Sem espaço"
+- **Links / Atalhos** no fim (URLs externas, abrem em nova aba)
+
+**Páginas:**
+- `/community` redireciona pra `/community/feed`
+- `/community/feed` — feed agregado de todos os posts approved de TODAS as páginas ativas (30 por vez, mais recentes primeiro)
+- `/community/[slug]` — feed de uma página específica
+- `/community/[slug]/post/[postId]` — detalhe + comentários
+
+**Admin inline na sidebar (substitui /admin/community/spaces+links):**
+- Quando `role IN (admin, moderator)`, controles aparecem ao passar mouse:
+  - **Espaços**: botão "+ Adicionar espaço" no fim, menu `...` em cada (Renomear / Excluir — paginas viram órfãs)
+  - **Páginas**: botão "+ Adicionar página" dentro de cada espaço (form inline com ícone + nome), menu `...` em cada (Editar / Excluir — apaga posts)
+  - **Atalhos**: botão "+ Adicionar link" no fim (form inline com ícone + label + URL), trash no hover de cada
+- Tudo via Server Actions com `router.refresh()` + toast
+- Páginas `/admin/community/spaces` e `/admin/community/links` REMOVIDAS — admin agora gerencia direto da `/community`
+
+**Componentes novos/modificados:**
+- `src/components/community/community-sidebar.tsx` — re-escrita completa com `SpaceGroup`, `PageRow`, `SpaceActions`, `PageActions`, `CreateSpaceButton`, `CreatePageButton`, `EditSpaceForm`, `EditPageForm`, `CreateLinkButton`, `SidebarLinkRow`
+- `src/app/(admin)/admin/community/actions.ts` — nova surface: `createSpace`/`updateSpace`/`deleteSpace`, `createPage`/`updatePage`/`deletePage` (substituiu `createGalleryAction` etc)
+- `src/lib/community.ts` — `CommunitySpaceRow` + `CommunityPageRow` (substitui `CommunityGalleryRow`)
+
+**Notificações in-app:**
+- `src/lib/notifications.ts` — `tryNotify({userId, title, body, link})` silent-fail + `tryNotifyMany`
+- Tabela `notifications` (já existia) usada pra TODOS os eventos
+- **Hooks plugados** automaticamente:
+  - `approvePostAction` → "Sua publicação foi aprovada" pro autor com link
+  - `rejectPostAction` → "Sua publicação foi recusada" pro autor
+  - `createReplyAction` → "Novo comentário no seu post" pro autor do tópico (se ≠ comentarista) + "Alguém respondeu seu comentário" pro autor do parent (se for resposta aninhada)
+  - `checkAchievements` → "Conquista desbloqueada: {nome}" + descrição/XP no body
+- **Sino do topbar**: agora real — mostra badge com `count` de não-lidas + dropdown com 8 mais recentes (cada uma vira `Link` se tiver `link`); items vêm do `student/layout.tsx` que carrega via `Promise.all`
+- **`/notifications`**: lista das 100 mais recentes, badge dourado em não-lidas, "Marcar todas como lidas" via `markAllNotificationsReadAction`
+- **`/notifications/actions.ts`**: `markAllNotificationsReadAction` + `markNotificationReadAction`
 
 ### Etapa 16 — Gamification + Configs avançadas (sessão Maio 2026)
 
@@ -704,9 +753,9 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 16 estão completas** — incluindo Comunidade (Etapa 10) e Gamification + Configs (Etapa 16). O cliente tem painel admin completo (métricas de alunos), biblioteca de aluno com player (YT IFrame + resume cross-device), anexos, drag-and-drop, role moderator, /admin/reports, webhook HTTP, whitelabel completo, perfil + suporte, mobile drawer admin, **Comunidade global única** com badges de não-lidos por espaço, e **sistema de XP/streak/conquistas/leaderboard** com reset trimestral fixo (jan/abr/jul/out). Tudo configurável em `/admin/settings`. **Próximas frentes:**
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 17 estão completas** — incluindo Comunidade Circle.so style (Etapas 10+17), Gamification (Etapa 16), Notificações in-app (Etapa 17). Estrutura comunidade: **Espaços (grupos) > Páginas (com feed)**, admin gerencia inline na sidebar (`/community`). Sino do topbar mostra notificações reais. Triggers automáticos: post aprovado/rejeitado, comentário recebido, conquista desbloqueada. **Próximas frentes:**
 >
-> 1. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar `/notifications`, triggers automáticos (nova aula, drip desbloqueado, resposta comunidade, post aprovado, conquista desbloqueada). Resend pra e-mails de eventos importantes.
+> 1. **E-mail transacional via Resend** pros eventos de notificação (hoje só in-app). Boas candidatas: post aprovado, novo comentário no meu post, conquista importante.
 >
 > 3. **Trigger SQL `transactions_data` → matrícula:** depende de Felipe mapear "produto X = turma Y" em `membros.product_cohort_map` (vazia hoje). Webhook HTTP já existe.
 >
@@ -744,7 +793,9 @@ Cole essa mensagem inicial:
 | `ffece83` | docs: HANDOFF sessão Maio 2026 |
 | `b38b06b` | **Etapa 10 — Comunidade completa** (feed, posts com vídeo/imagem, comentários aninhados, likes, moderação admin, CRUD espaços e atalhos) |
 | `3818660` | docs: HANDOFF marca Etapa 10 concluída |
-| (atual)   | **Etapa 16 — Gamification + Configs avançadas** (XP/streak/conquistas/leaderboard com reset trimestral fixo + configs de comunidade e gamification em /admin/settings + badges de não-lidos por espaço) |
+| `bda91d2` | **Etapa 16 — Gamification + Configs avançadas** (XP/streak/conquistas/leaderboard com reset trimestral fixo + configs de comunidade e gamification em /admin/settings + badges de não-lidos por espaço) |
+| `d232aa2` | docs: HANDOFF marca Etapa 16 |
+| (atual)   | **Etapa 17 — Comunidade Circle.so style + Notificações** (spaces > pages, sidebar inline admin, /feed agregado, sino real conectado à tabela notifications, /notifications, triggers em approve/reject/reply/achievement) |
 
 ---
 
