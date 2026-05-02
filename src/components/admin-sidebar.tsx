@@ -13,6 +13,7 @@ import {
   PlaySquare,
   Settings,
   Users,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NpbLogo } from "@/components/npb-logo";
@@ -43,6 +44,7 @@ const groups = [
     label: "Análises",
     items: [
       { href: "/admin/reports", label: "Relatórios", icon: BarChart3 },
+      { href: "/admin/affiliates", label: "Afiliados Kiwify", icon: Wallet },
     ],
   },
   {

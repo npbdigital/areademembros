@@ -1,0 +1,410 @@
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Wallet,
+} from "lucide-react";
+import { createAdminClient } from "@/lib/supabase/server";
+import { AffiliateRowActions } from "@/components/admin/affiliate-row-actions";
+
+export const dynamic = "force-dynamic";
+
+interface LinkRow {
+  id: string;
+  member_user_id: string;
+  source: string;
+  external_affiliate_id: string;
+  cpf_cnpj_last4: string | null;
+  cpf_cnpj_encrypted: string | null;
+  verified: boolean;
+  verified_at: string | null;
+  registered_at: string;
+  notes: string | null;
+}
+
+interface UserRow {
+  id: string;
+  full_name: string | null;
+  email: string;
+  role: string;
+}
+
+interface SaleRow {
+  id: string;
+  external_order_id: string;
+  external_affiliate_id: string;
+  member_user_id: string | null;
+  product_name: string | null;
+  status: string;
+  commission_value_cents: number;
+  approved_at: string | null;
+  created_at: string;
+}
+
+function formatBRL(cents: number): string {
+  return (cents / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+export default async function AdminAffiliatesPage() {
+  const supabase = createAdminClient();
+
+  const [{ data: linksData }, { data: salesData }] = await Promise.all([
+    supabase
+      .schema("afiliados")
+      .from("affiliate_links")
+      .select(
+        "id, member_user_id, source, external_affiliate_id, cpf_cnpj_last4, cpf_cnpj_encrypted, verified, verified_at, registered_at, notes",
+      )
+      .eq("source", "kiwify")
+      .order("registered_at", { ascending: false }),
+    supabase
+      .schema("afiliados")
+      .from("sales")
+      .select(
+        "id, external_order_id, external_affiliate_id, member_user_id, product_name, status, commission_value_cents, approved_at, created_at",
+      )
+      .eq("source", "kiwify")
+      .order("approved_at", { ascending: false })
+      .limit(100),
+  ]);
+
+  const links = (linksData ?? []) as LinkRow[];
+  const sales = (salesData ?? []) as SaleRow[];
+
+  // Hidrata users dos links
+  const userIds = Array.from(new Set(links.map((l) => l.member_user_id)));
+  const usersMap = new Map<string, UserRow>();
+  if (userIds.length > 0) {
+    const { data: usersData } = await supabase
+      .schema("membros")
+      .from("users")
+      .select("id, full_name, email, role")
+      .in("id", userIds);
+    for (const u of (usersData ?? []) as UserRow[]) usersMap.set(u.id, u);
+  }
+
+  // Stats agregadas por affiliate_id
+  const statsByAff = new Map<
+    string,
+    { count: number; commission: number; refunded: number }
+  >();
+  for (const s of sales) {
+    const cur = statsByAff.get(s.external_affiliate_id) ?? {
+      count: 0,
+      commission: 0,
+      refunded: 0,
+    };
+    if (s.status === "paid") {
+      cur.count += 1;
+      cur.commission += s.commission_value_cents;
+    } else if (s.status === "refunded" || s.status === "chargedback") {
+      cur.refunded += 1;
+    }
+    statsByAff.set(s.external_affiliate_id, cur);
+  }
+
+  // Map de aluno por affiliate_id (pra coluna de vendas órfãs vs atribuídas)
+  const memberByAff = new Map<string, string>();
+  for (const l of links) memberByAff.set(l.external_affiliate_id, l.member_user_id);
+
+  // Stats globais
+  const totalLinks = links.length;
+  const verifiedLinks = links.filter((l) => l.verified).length;
+  const totalSales = sales.length;
+  const totalCommission = sales
+    .filter((s) => s.status === "paid")
+    .reduce((sum, s) => sum + s.commission_value_cents, 0);
+  const orphanSales = sales.filter((s) => !s.member_user_id).length;
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6">
+      <header>
+        <div className="mb-2 inline-flex items-center gap-2 text-xs uppercase tracking-wide text-npb-gold">
+          <Wallet className="h-3.5 w-3.5" />
+          Afiliados Kiwify
+        </div>
+        <h1 className="text-2xl font-bold text-npb-text md:text-3xl">
+          Vinculações & vendas
+        </h1>
+        <p className="mt-1 text-sm text-npb-text-muted">
+          Aluno cadastra o ID Kiwify dele aqui. Vendas chegam via webhook em{" "}
+          <code>/api/webhooks/kiwify</code>.
+        </p>
+      </header>
+
+      {/* Stats globais */}
+      <div className="grid gap-3 sm:grid-cols-4">
+        <StatCard
+          label="Vinculações"
+          value={totalLinks}
+          subtitle={`${verifiedLinks} verificadas`}
+          color="text-npb-text"
+        />
+        <StatCard
+          label="Vendas (todos)"
+          value={totalSales}
+          subtitle={
+            orphanSales > 0
+              ? `${orphanSales} órfã${orphanSales > 1 ? "s" : ""}`
+              : "todas atribuídas"
+          }
+          color="text-npb-text"
+        />
+        <StatCard
+          label="Comissão acumulada"
+          value={`R$ ${formatBRL(totalCommission)}`}
+          subtitle="só vendas pagas"
+          color="text-npb-gold"
+        />
+        <StatCard
+          label="Vendas órfãs"
+          value={orphanSales}
+          subtitle="affiliate sem vinculação"
+          color={orphanSales > 0 ? "text-yellow-400" : "text-npb-text"}
+        />
+      </div>
+
+      {/* Vinculações */}
+      <section className="rounded-2xl border border-npb-border bg-npb-bg2">
+        <header className="flex items-center justify-between border-b border-npb-border px-5 py-3">
+          <h2 className="text-base font-bold text-npb-text">
+            Vinculações ({links.length})
+          </h2>
+        </header>
+
+        {links.length === 0 ? (
+          <p className="px-5 py-8 text-center text-sm text-npb-text-muted">
+            Nenhum aluno vinculou Kiwify ainda.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-npb-border bg-npb-bg3 text-left text-xs uppercase tracking-wider text-npb-text-muted">
+                <tr>
+                  <th className="px-4 py-2 font-semibold">Aluno</th>
+                  <th className="px-4 py-2 font-semibold">Affiliate ID</th>
+                  <th className="px-4 py-2 font-semibold">Status</th>
+                  <th className="px-4 py-2 font-semibold">Vendas</th>
+                  <th className="px-4 py-2 font-semibold">Comissão</th>
+                  <th className="px-4 py-2 font-semibold">Cadastro</th>
+                  <th className="px-4 py-2 font-semibold">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-npb-border">
+                {links.map((l) => {
+                  const u = usersMap.get(l.member_user_id);
+                  const stats = statsByAff.get(l.external_affiliate_id) ?? {
+                    count: 0,
+                    commission: 0,
+                    refunded: 0,
+                  };
+                  return (
+                    <tr
+                      key={l.id}
+                      className="transition-colors hover:bg-npb-bg3/50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-npb-text">
+                          {u?.full_name ?? "—"}
+                        </div>
+                        <div className="text-xs text-npb-text-muted">
+                          {u?.email ?? l.member_user_id}
+                          {u?.role && u.role !== "student" && (
+                            <span className="ml-1.5 rounded bg-npb-bg3 px-1 py-0.5 text-[9px]">
+                              {u.role}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-xs text-npb-gold">
+                        {l.external_affiliate_id}
+                      </td>
+                      <td className="px-4 py-3">
+                        {l.verified ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            Verificado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">
+                            <Clock className="h-2.5 w-2.5" />
+                            Pendente
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-npb-text">
+                        {stats.count}
+                        {stats.refunded > 0 && (
+                          <span className="ml-1 text-xs text-red-400">
+                            (−{stats.refunded})
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-npb-gold">
+                        R$ {formatBRL(stats.commission)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-npb-text-muted">
+                        {new Date(l.registered_at).toLocaleDateString("pt-BR")}
+                      </td>
+                      <td className="px-4 py-3">
+                        <AffiliateRowActions
+                          linkId={l.id}
+                          verified={l.verified}
+                          hasCpfCnpj={Boolean(l.cpf_cnpj_encrypted)}
+                          cpfCnpjLast4={l.cpf_cnpj_last4}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      {/* Últimas vendas */}
+      <section className="rounded-2xl border border-npb-border bg-npb-bg2">
+        <header className="flex items-center justify-between border-b border-npb-border px-5 py-3">
+          <h2 className="text-base font-bold text-npb-text">
+            Últimas vendas ({sales.length})
+          </h2>
+          <span className="text-[10px] text-npb-text-muted">
+            mostrando últimas 100
+          </span>
+        </header>
+
+        {sales.length === 0 ? (
+          <div className="px-5 py-8 text-center text-sm text-npb-text-muted">
+            <AlertCircle className="mx-auto mb-2 h-6 w-6 opacity-40" />
+            Nenhuma venda registrada ainda.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b border-npb-border bg-npb-bg3 text-left text-xs uppercase tracking-wider text-npb-text-muted">
+                <tr>
+                  <th className="px-4 py-2 font-semibold">Quando</th>
+                  <th className="px-4 py-2 font-semibold">Produto</th>
+                  <th className="px-4 py-2 font-semibold">Affiliate</th>
+                  <th className="px-4 py-2 font-semibold">Aluno</th>
+                  <th className="px-4 py-2 font-semibold">Status</th>
+                  <th className="px-4 py-2 font-semibold text-right">Comissão</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-npb-border">
+                {sales.map((s) => {
+                  const memberId = s.member_user_id;
+                  const u = memberId ? usersMap.get(memberId) : null;
+                  return (
+                    <tr
+                      key={s.id}
+                      className="transition-colors hover:bg-npb-bg3/50"
+                    >
+                      <td className="px-4 py-2 text-xs text-npb-text-muted whitespace-nowrap">
+                        {s.approved_at
+                          ? new Date(s.approved_at).toLocaleDateString(
+                              "pt-BR",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                              },
+                            )
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {s.product_name ?? "(sem nome)"}
+                      </td>
+                      <td className="px-4 py-2 font-mono text-xs text-npb-gold">
+                        {s.external_affiliate_id}
+                      </td>
+                      <td className="px-4 py-2 text-xs">
+                        {u ? (
+                          <span className="text-npb-text">
+                            {u.full_name ?? u.email}
+                          </span>
+                        ) : (
+                          <span className="text-yellow-400">órfã</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        <SaleStatusBadge status={s.status} />
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono">
+                        <span
+                          className={
+                            s.status === "paid"
+                              ? "text-npb-gold"
+                              : "text-red-400 line-through"
+                          }
+                        >
+                          R$ {formatBRL(s.commission_value_cents)}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  subtitle,
+  color,
+}: {
+  label: string;
+  value: number | string;
+  subtitle?: string;
+  color: string;
+}) {
+  return (
+    <div className="rounded-xl border border-npb-border bg-npb-bg2 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-npb-text-muted">
+        {label}
+      </p>
+      <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
+      {subtitle && (
+        <p className="mt-0.5 text-[10px] text-npb-text-muted">{subtitle}</p>
+      )}
+    </div>
+  );
+}
+
+function SaleStatusBadge({ status }: { status: string }) {
+  if (status === "paid") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
+        paga
+      </span>
+    );
+  }
+  if (status === "refunded") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">
+        reembolsada
+      </span>
+    );
+  }
+  if (status === "chargedback") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
+        chargeback
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-semibold text-npb-text-muted">
+      {status}
+    </span>
+  );
+}
