@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** após Etapas 8 + 11 + 12 (biblioteca aluno + relatórios + drag-and-drop + role moderator + webhook)
-**Último commit no main:** `64648b4` (mega-commit cobrindo Etapas 8/11/12 + bug fixes)
+**Última atualização:** 2026-05-01 — sessão de polimento (matrículas adicionais, fix RLS, dashboard, resume cross-device, mobile)
+**Último commit no main:** `8d99e88` (matrículas adicionais + dashboard alunos + resume cross-device + mobile drawer)
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,47 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Sessão Maio 2026 — Polimento e fixes críticos (commits `4eff355` → `8d99e88`)
+
+**Whitelabel + Welcome (Etapa 14):**
+- `/admin/settings` com 4 fieldsets: Identidade (nome + logo URL), E-mail (sender name/email), Suporte (e-mail + WhatsApp), Boas-vindas (toggle + título + descrição + vídeo + termos + label do botão)
+- `lib/settings.ts` centraliza `getPlatformSettings()` + chaves consts. `buildResendFrom()` resolve sender preferindo settings → env → default
+- `WelcomeModal` (portal) dispara no primeiro acesso quando `welcomeEnabled && !welcome_accepted_at && role==='student'` — popup com vídeo embed + descrição + termos opcional + checkbox aceitar + CTA. Aceitar grava `users.welcome_accepted_at`
+- Sidebar/topbar/email/login renderizam `platformName` + `platformLogoUrl` (com fallback "A" dourado quando logo não setado). Logo no email: `<img>` 120×168 com `object-fit:contain`
+
+**Perfil + Suporte (Etapa 15):**
+- `/profile` — avatar upload (Storage `avatars` bucket), trocar senha (reauth com senha atual antes), telefone, lista de matrículas (turma + data + expira)
+- `/support` — card WhatsApp (link `wa.me/{digits}`) + form de e-mail. Subject prefixado com `cohorts.support_prefix` quando o aluno escolhe um curso. Sender configurável via settings, fallback `suporte@felipesempe.com.br`
+- Coluna `cohorts.support_prefix` adicionada (admin define no form de turma)
+
+**Estrutura de matrícula:**
+- `createStudentAction` aceita **multi-cohort** via `formData.getAll("cohort_ids")`, loop idempotente (insert ou reativa)
+- Senha padrão `"123456"` definida em `DEFAULT_STUDENT_PASSWORD` (constante interna não-exportada). E-mail mostra credenciais; botão "Acessar minha conta" vai pra `/login?email=` (não mais recovery)
+- `/admin/students/[id]` ganhou seção "Adicionar matrícula" — mesmo padrão de checkboxes, filtra cohorts onde aluno já está ativo, reativa inativas
+- Action `addEnrollmentsAction(userId, formData)` + `setEnrollmentActiveAction` (preparada para uso futuro)
+
+**Métricas e bug fixes críticos de RLS:**
+- 🐛 **`/admin/students/[id]/atividade`** mostrava 0 em todos os cards — RLS de `access_logs`/`lesson_progress`/`lesson_notes` filtra por `auth.uid()`, então admin lendo dados de OUTRO aluno via session client retorna vazio. Fix: página inteira passa a usar `createAdminClient()` (gate de admin já vem do layout)
+- 🐛 **`/admin/reports`** sofria do mesmo bug — também migrado pra admin client
+- `/admin/dashboard` ganhou seção "Alunos": Cadastrados, Ao vivo agora (5min), Hoje, 7d, 30d (distintos com `last_watched_at` no período). Badge verde quando "ao vivo > 0"
+
+**UX de retomada:**
+- `/courses/[courseId]` ganhou CTA dourado abaixo do título: "Começar curso" no primeiro acesso, "Continuar de onde parou" depois (busca aula com `last_watched_at` mais recente daquele curso)
+- **Resume position dentro do vídeo (cross-device)**:
+  - Migration `add_last_position_to_lesson_progress`: coluna `last_position_seconds INTEGER NOT NULL DEFAULT 0`
+  - Action `saveLessonPositionAction(lessonId, positionSeconds)` com upsert
+  - `YouTubePlayer` migrado de iframe simples → **YouTube IFrame Player API** (`script https://www.youtube.com/iframe_api`)
+  - Posição salva: server a cada 10s (delta ≥ 3s) + visibilitychange + beforeunload + unmount; localStorage como cache otimista entre saves; resume usa o MAX(server, local)
+  - Watch-time ping agora baseado em `getPlayerState() === 1` (playing real, não "tempo na página")
+
+**Responsividade — admin mobile drawer:**
+- Sidebar fixa de 240px ocupava 64% de tela 375px (admin inutilizável em mobile)
+- Novo `MobileNavToggle` (drawer client com portal, ESC, click-outside, fecha ao clicar em link)
+- Admin layout: sidebar fixa só `md:flex`; em mobile renderizada dentro do drawer via `mobileNav` slot do Topbar (botão hamburger)
+- Topbar aceita slot `mobileNav` (esquerda); padding ajustado `px-4 md:px-6`
+- Aluno: `min-w-0` na coluna principal, `p-4 md:p-8`. Sidebar slim de 64px funciona até 320px
+- Tabela `/admin/students` ganhou `overflow-x-auto` + `min-w-[640px]`
 
 ### Etapa 8 — Biblioteca + Player do aluno (commit `64648b4`)
 **Aluno:**
@@ -311,13 +352,9 @@ SaaS de área de membros multi-curso, multi-turma, com:
 
 ## 🚧 Pendente (próximos passos)
 
-### 🐛 Bugs em aberto
-- **"Sistema quebrou abrindo/fechando telas"** (reportado pelo Felipe) — sem stacktrace ainda. Quando reproduzir: pegar erro do console do browser (F12) + terminal do `npm run dev` e investigar. Hipóteses: vazamento do timer do YouTube player, modal portal não limpa `document.body.style.overflow` em algum caso, HMR do dev quebrado.
-
-### Etapa 9 — Drip content
-- ✅ Helper `isContentReleased()` feito (Etapa 8)
-- ✅ Bloqueio server-side em `/courses/[id]` e `/lessons/[id]` (Etapa 8)
-- Notificação automática quando conteúdo é desbloqueado (cruza com Etapa 13 de notificações)
+### 🐛 Bugs / observações
+- **Suporte e-mail não chegou** (reportado 2026-05-01) — sintoma: chunks `.next` 404 no console (`main-app.js`, `support/page.js`). Form é client-side, então quando o JS não carrega, clicar em "Enviar" não dispara nada. Fix do dev: `Remove-Item -Recurse -Force .next; npm run dev` + Ctrl+Shift+R. Se persistir após cache limpo, investigar Resend (RESEND_API_KEY ausente, domínio não verificado, etc.) e adicionar log persistente em `webhook_logs`
+- **"Sistema quebrou abrindo/fechando telas"** (relato anterior, sem repro recente) — provável mesmo problema de cache `.next` velho. Se voltar, capturar console + terminal
 
 ### Etapa 10 — Comunidade (PRÓXIMA GRANDE) 🎯
 - `/community` — galerias (categorias de tópicos)
@@ -333,19 +370,11 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ### Etapa 13 — Notificações in-app (parcial)
 - ✅ Página `/admin/students/[id]/atividade` (timeline + stats)
 - ✅ `/admin/reports` (engajamento + ratings)
+- ✅ `/admin/dashboard` (alunos cadastrados/ao vivo/hoje/7d/30d)
 - ❌ Sino com badge no topbar — hoje é só placeholder. Conectar à tabela `notifications` (já existe)
 - ❌ Página `/notifications` com histórico
 - ❌ Triggers automáticos: nova aula publicada, conteúdo desbloqueado por drip, resposta na comunidade
 - ❌ E-mail transacional via Resend pros eventos importantes
-
-### Etapa 14 — Whitelabel
-- `/admin/settings` — form pra logo, cor primária, sender de e-mail (escreve em `platform_settings`)
-- Substituir hardcoded "Academia NPB" + dourado por valores das settings
-- Resend `from` vir de `platform_settings.email_sender`
-
-### Etapa 15 — Perfil e suporte do aluno
-- `/profile` — editar nome/telefone/avatar (upload pra Storage), trocar senha, ver histórico de matrículas. Link já existe na sidebar
-- `/support` — placeholder hoje. Decidir formato (form de e-mail? link pro WhatsApp?)
 
 ### 🔌 Integração `transactions_data` → matrícula automática (PENDENTE — bloqueado em input do Felipe)
 - ✅ Webhook HTTP `POST /api/webhooks/enrollment` pronto pra fontes externas (Kiwify/Hubla)
@@ -359,12 +388,13 @@ SaaS de área de membros multi-curso, multi-turma, com:
 
 ### Polimentos pequenos
 - Quick-edit de **aula** (popup com título + cover + duração) — hoje só módulo tem
+- "Aula default do curso" — admin escolher qual aula abre na primeira vez (hoje a regra é automática: 1ª aula do 1º módulo no first access, depois última assistida via CTA)
+- Editor de aula em mobile (TipTap + abas pode apertar < 500px)
 - Edição inline de banner (delete+recriar funciona, mas é ruim)
 - Bucket `lesson-attachments` está OK mas anexos são públicos por URL UUID — se for armazenar PDFs sensíveis, trocar pra signed URLs
 - Rate limiting no webhook (`@upstash/ratelimit` ou solução simples com timestamp em Redis/Supabase)
-- Domínio próprio no Resend (hoje sender `onboarding@resend.dev` só envia pro dono da conta)
+- Domínio próprio no Resend (hoje sender `onboarding@resend.dev` só envia pro dono da conta — Felipe disse que adicionou domínio, aguardar propagação DNS)
 - Limpar `ReorderControls` (`src/components/admin/reorder-controls.tsx`) e os `move*Action` antigos — órfãos depois do drag-and-drop
-- Player YouTube usa iframe simples; trocar pra YouTube IFrame API pra ter eventos reais de play/pause/end (hoje o ping de watch_time é otimista — assume aba ativa = vendo)
 
 ---
 
@@ -583,17 +613,17 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 8, 11 e 12 estão completas** (ver changelog do HANDOFF). O cliente já tem painel admin completo, biblioteca de aluno, player com tracking, anexos, drag-and-drop em todas as listas, role moderator com bypass de matrícula, /admin/reports com analytics, webhook HTTP de matrícula. **Próximas frentes pendentes:**
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 8, 11, 12, 13 (parcial), 14 e 15 estão completas** (ver changelog do HANDOFF). O cliente tem: painel admin completo (incl. métricas de alunos no dashboard), biblioteca de aluno com player (YouTube IFrame API + resume cross-device via `lesson_progress.last_position_seconds`), anexos, drag-and-drop, role moderator, /admin/reports, webhook HTTP, whitelabel completo (settings + welcome modal + logo custom no email), perfil + suporte do aluno, mobile drawer no admin. **Próximas frentes:**
 >
-> 1. **🐛 BUG sem reproduzir:** Felipe relatou que "abrindo e fechando telas o sistema quebra". Sem stacktrace ainda. Precisa pegar console do browser (F12) e terminal do `npm run dev` na próxima vez que reproduzir. Hipóteses: vazamento do timer do YouTube player ao desmontar, modal portal não limpa `document.body.style.overflow` em casos específicos.
+> 1. **Etapa 10 — Comunidade (PRÓXIMA GRANDE):** tabelas já existem (`community_galleries`, `community_topics`, `community_replies`, `community_likes`). Construir `/community`, `/community/[gallery]`, `/community/[gallery]/[topic]` com TipTap, likes, moderação (admin/moderator usa `isElevatedRole()` de `src/lib/access.ts`). Acesso baseado em `cohort_courses.has_community_access`.
 >
-> 2. **Etapa 10 — Comunidade (PRÓXIMA GRANDE):** tabelas já existem (`community_galleries`, `community_topics`, `community_replies`, `community_likes`). Construir `/community`, `/community/[gallery]`, `/community/[gallery]/[topic]` com TipTap pra tópicos/respostas, likes, moderação (admin/moderator pode deletar/responder/fixar — usar `isElevatedRole()` de `src/lib/access.ts`). Acesso baseado em `cohort_courses.has_community_access`.
+> 2. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar `/notifications`, triggers automáticos (nova aula, drip desbloqueado, resposta comunidade). Resend pra e-mails de eventos importantes.
 >
-> 3. **Etapa 13 — Notificações reais:** sino do topbar é placeholder. Conectar à tabela `notifications`, adicionar página `/notifications`, e triggers automáticos (nova aula, drip desbloqueado, resposta na comunidade). Resend pra e-mails dos eventos importantes.
+> 3. **Trigger SQL `transactions_data` → matrícula:** depende de Felipe mapear "produto X = turma Y" em `membros.product_cohort_map` (vazia hoje). Webhook HTTP já existe.
 >
-> 4. **Trigger SQL `transactions_data` → matrícula:** depende do Felipe mapear "produto X = turma Y" em `membros.product_cohort_map` (vazia hoje). Webhook HTTP já existe pra fontes externas.
+> 4. **Bug em aberto:** suporte e-mail não chega — provavelmente cache `.next` velho (chunks 404 no console). Se persistir após `Remove-Item .next + npm run dev + hard reload`, investigar Resend (domínio Felipe disse que configurou, esperar propagação DNS).
 >
-> 5. **Polimentos:** quick-edit de aula (hoje só módulo tem); domínio próprio no Resend; rate limit no webhook; deletar `ReorderControls` órfão; trocar player YouTube por IFrame API pra ter eventos reais de play/pause.
+> 5. **Polimentos:** quick-edit de aula; campo "aula default do curso" no admin; rate limit no webhook; deletar `ReorderControls` órfão; signed URLs pra anexos.
 
 ---
 
@@ -616,6 +646,12 @@ Cole essa mensagem inicial:
 | `4eff355` | **Etapa 7: Turmas + Matrículas + criar aluno** (Resend invite com fallback de link manual) |
 | `4146364` | feat(cohorts): duração de acesso a nível de turma (não mais por aluno) |
 | `64648b4` | **Etapas 8/11/12 + 5.5 + role moderator + bug fixes** (mega-commit — biblioteca aluno, banners admin, webhook, drag-and-drop, anexos, /admin/reports, /admin/students/[id]/atividade, /favorites, /notes, magic link fix, role moderator com bypass de matrícula) |
+| `70579e1` | **Etapas 14 + 15 + cohort prefix** (whitelabel /admin/settings, perfil do aluno, /support com WhatsApp + e-mail, support_prefix em turmas) |
+| `a49e4ea` | feat: nome da plataforma vem de platform_settings (sidebar/topbar/email) |
+| `a2dee21` | feat: logo custom, welcome modal (popup primeiro acesso), banners global, esconde busca |
+| `4c2b957` | feat: senha padrão 123456, multi-cohort no aluno, video picker no welcome |
+| `17f5045` | feat: logo custom no email de boas-vindas (120x168, 5:7) |
+| `8d99e88` | **matrículas adicionais + fix RLS atividade/reports + dashboard alunos + resume cross-device + mobile drawer** (este commit) |
 
 ---
 
