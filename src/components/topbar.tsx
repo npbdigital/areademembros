@@ -16,6 +16,8 @@ interface XpInfo {
 
 interface TopbarProps {
   user: UserDropdownProps;
+  /** ID do user atual — usado pelo NotificationsDropdown pra subscribe realtime. */
+  currentUserId?: string;
   showSearch?: boolean;
   searchPlaceholder?: string;
   notificationsCount?: number;
@@ -28,6 +30,7 @@ interface TopbarProps {
 
 export function Topbar({
   user,
+  currentUserId,
   showSearch = false,
   searchPlaceholder = "Pesquisar",
   notificationsCount = 0,
@@ -52,6 +55,7 @@ export function Topbar({
         )}
 
         <NotificationsDropdown
+          currentUserId={currentUserId}
           count={notificationsCount}
           items={notificationsItems}
         />

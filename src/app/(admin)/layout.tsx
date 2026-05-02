@@ -46,6 +46,7 @@ export default async function AdminLayout({
             avatarUrl: profile.avatar_url ?? null,
             isAdmin: true,
           }}
+          currentUserId={user.id}
           mobileNav={
             <MobileNavToggle ariaLabel="Abrir menu admin">
               <AdminSidebar

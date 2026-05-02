@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Bell, X } from "lucide-react";
 import { timeAgoPtBr } from "@/lib/community";
+import { createClient } from "@/lib/supabase/client";
 import {
   deleteNotificationAction,
   markNotificationReadAction,
@@ -19,18 +20,30 @@ export interface NotificationItem {
 }
 
 interface NotificationsDropdownProps {
+  /** ID do user atual — usado pra inscrever no realtime. */
+  currentUserId?: string;
   count?: number;
   items?: NotificationItem[];
 }
 
+interface IncomingNotificationRow {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
 export function NotificationsDropdown({
+  currentUserId,
   count = 0,
   items = [],
 }: NotificationsDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Estado local pra optimistic updates (mark-as-read + dismiss)
+  // Estado local pra optimistic updates (mark-as-read + dismiss + incoming).
   // Reseta quando os items vindos do server mudarem (após revalidate).
   const [local, setLocal] = useState<NotificationItem[]>(items);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -38,6 +51,46 @@ export function NotificationsDropdown({
     setLocal(items);
     setDismissed(new Set());
   }, [items]);
+
+  // Realtime: escuta INSERTs em membros.notifications pro user atual e
+  // adiciona no topo da lista local. RLS garante que só chega o que é dele.
+  useEffect(() => {
+    if (!currentUserId) return;
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`notifications:${currentUserId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "membros",
+          table: "notifications",
+          filter: `user_id=eq.${currentUserId}`,
+        },
+        (payload) => {
+          const row = payload.new as IncomingNotificationRow;
+          setLocal((prev) => {
+            // dedupe por id
+            if (prev.some((n) => n.id === row.id)) return prev;
+            return [
+              {
+                id: row.id,
+                title: row.title,
+                body: row.body,
+                link: row.link,
+                isRead: row.is_read,
+                createdAt: row.created_at,
+              },
+              ...prev,
+            ];
+          });
+        },
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [currentUserId]);
 
   useEffect(() => {
     if (!open) return;

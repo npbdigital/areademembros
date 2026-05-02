@@ -115,6 +115,7 @@ export default async function StudentLayout({
             isAdmin: profile?.role === "admin",
             isModerator: profile?.role === "moderator",
           }}
+          currentUserId={user.id}
           notificationsCount={notificationsCount ?? 0}
           notificationsItems={notificationsItems}
           xp={xpInfo}
