@@ -1,31 +1,30 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
+import { processSalesRaw } from "@/lib/affiliates/process";
+import { verifyKiwifySignature } from "@/lib/affiliates/hmac";
 
 /**
- * Webhook Kiwify — Fase A (só captura/log).
+ * Webhook Kiwify — Fase B (recebe + processa).
  *
- * Estratégia:
- * - Aceita POST com body JSON
- * - Valida ?token=... contra KIWIFY_WEBHOOK_TOKEN (env var)
- * - Salva o payload completo + headers + query string em afiliados.sales_raw
- * - Retorna 200 OK sempre que conseguir gravar (mesmo se algo falhar no parse,
- *   a gente NÃO devolve erro pra Kiwify não ficar reenviando — investigamos
- *   pelo log no banco)
- *
- * Quando tivermos dados reais, a Fase B vai processar (vincular ao aluno,
- * atribuir XP, criar conquistas).
+ * Pipeline:
+ *  1. Valida ?token=... contra KIWIFY_WEBHOOK_TOKEN (autenticidade básica)
+ *  2. Tenta validar HMAC-SHA1 via ?signature=... (defesa em camada — se a
+ *     Kiwify mandou signature e bateu, marca como verificado; se não bateu,
+ *     loga e rejeita)
+ *  3. Salva tudo em afiliados.sales_raw (raw_payload + raw_headers + query)
+ *  4. Chama processSalesRaw em background (cria afiliados.sales, atribui
+ *     XP, dispara conquistas)
+ *  5. Retorna 200 sempre (mesmo com erro de processamento — Kiwify não
+ *     deve reenviar, a gente vê pelos logs e marca processed=false)
  */
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   const url = new URL(req.url);
-  const expected = process.env.KIWIFY_WEBHOOK_TOKEN;
+  const expectedToken = process.env.KIWIFY_WEBHOOK_TOKEN;
 
-  // Token vindo da query string (?token=XXX) — formato Kiwify suporta
-  const tokenFromQuery = url.searchParams.get("token");
-
-  if (!expected) {
+  if (!expectedToken) {
     console.error("[kiwify webhook] KIWIFY_WEBHOOK_TOKEN não configurado");
     return NextResponse.json(
       { ok: false, error: "Webhook não configurado." },
@@ -33,20 +32,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!tokenFromQuery || tokenFromQuery !== expected) {
+  const tokenFromQuery = url.searchParams.get("token");
+  if (!tokenFromQuery || tokenFromQuery !== expectedToken) {
     return NextResponse.json(
       { ok: false, error: "Token inválido." },
       { status: 401 },
     );
   }
 
-  // Captura headers brutos pra investigar HMAC/signature da Kiwify
+  // Headers brutos (auditoria + investigar futuras mudanças do contrato Kiwify)
   const headersObj: Record<string, string> = {};
   req.headers.forEach((value, key) => {
     headersObj[key] = value;
   });
 
-  // Lê body cru e tenta parsear como JSON. Se falhar, salva como texto.
+  // Lê o body cru ANTES de parsear — necessário pra HMAC bater certinho
   const rawText = await req.text();
   let parsed: unknown = null;
   try {
@@ -55,7 +55,27 @@ export async function POST(req: NextRequest) {
     parsed = { _raw_text: rawText };
   }
 
-  // Extrai campos top-level conhecidos pra busca rápida no banco
+  // Validação HMAC (defesa em camada)
+  const signature = url.searchParams.get("signature");
+  const sigCheck = verifyKiwifySignature({
+    rawBody: rawText,
+    signature,
+    secret: expectedToken,
+  });
+  if (sigCheck === false) {
+    // Assinatura PRESENTE mas INVÁLIDA — rejeita (não é Kiwify ou foi adulterado)
+    console.warn(
+      "[kiwify webhook] HMAC inválido — possível tentativa de forjar webhook",
+    );
+    return NextResponse.json(
+      { ok: false, error: "Assinatura inválida." },
+      { status: 401 },
+    );
+  }
+  // sigCheck === null = sem signature na query (aceita: kiwify pode mudar)
+  // sigCheck === true = signature válida (continua)
+
+  // Extrai campos top-level pra busca rápida
   const p = (parsed ?? {}) as Record<string, unknown>;
   const orderId =
     typeof p.order_id === "string"
@@ -73,9 +93,10 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-real-ip") ??
     null;
 
+  let rawId: string | null = null;
   try {
     const supabase = createAdminClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .schema("afiliados")
       .from("sales_raw")
       .insert({
@@ -87,20 +108,33 @@ export async function POST(req: NextRequest) {
         raw_headers: headersObj,
         query_string: url.search || null,
         ip_address: ip,
-      });
+      })
+      .select("id")
+      .single();
 
     if (error) {
-      console.error("[kiwify webhook] erro ao salvar:", error.message);
-      // Mesmo com erro, retorna 200 pra Kiwify não reenviar — a gente vê
-      // pelo log do servidor que algo deu errado e investiga
+      console.error("[kiwify webhook] erro ao salvar raw:", error.message);
       return NextResponse.json({ ok: false, logged: false }, { status: 200 });
     }
-
-    return NextResponse.json({ ok: true });
+    rawId = (data as { id: string }).id;
   } catch (e) {
-    console.error("[kiwify webhook] exceção:", e);
+    console.error("[kiwify webhook] exceção salvando raw:", e);
     return NextResponse.json({ ok: false, logged: false }, { status: 200 });
   }
+
+  // Processa em paralelo (sem aguardar) — webhook responde rápido pra Kiwify
+  // não dar timeout. Em serverless (Vercel), o `await` é necessário pra não
+  // matar o handler. Trade-off: webhook fica ~50-200ms mais lento.
+  if (rawId) {
+    try {
+      await processSalesRaw(rawId);
+    } catch (e) {
+      console.error("[kiwify webhook] erro no process:", e);
+      // não falha — raw já está salvo, dá pra reprocessar manualmente
+    }
+  }
+
+  return NextResponse.json({ ok: true });
 }
 
 // GET pra healthcheck rápido (acessível direto no browser)

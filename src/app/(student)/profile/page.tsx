@@ -8,6 +8,11 @@ import {
   type AchievementView,
   GamificationSection,
 } from "@/components/student/gamification-section";
+import {
+  type AffiliateLinkView,
+  type AffiliateStats,
+  AffiliateSection,
+} from "@/components/student/affiliate-section";
 
 export const dynamic = "force-dynamic";
 
@@ -135,6 +140,85 @@ export default async function ProfilePage() {
     }
   }
 
+  // Afiliado Kiwify
+  const { data: linkRow } = await adminSb
+    .schema("afiliados")
+    .from("affiliate_links")
+    .select(
+      "external_affiliate_id, verified, verified_at, registered_at, cpf_cnpj_last4",
+    )
+    .eq("member_user_id", user.id)
+    .eq("source", "kiwify")
+    .maybeSingle();
+
+  const affiliateLink: AffiliateLinkView | null = linkRow
+    ? {
+        externalAffiliateId: (linkRow as { external_affiliate_id: string })
+          .external_affiliate_id,
+        verified: (linkRow as { verified: boolean }).verified,
+        verifiedAt: (linkRow as { verified_at: string | null }).verified_at,
+        registeredAt: (linkRow as { registered_at: string }).registered_at,
+        cpfCnpjLast4: (linkRow as { cpf_cnpj_last4: string | null })
+          .cpf_cnpj_last4,
+      }
+    : null;
+
+  // Vendas — usa o external_affiliate_id pra pegar tudo (até as anteriores ao
+  // cadastro, que aparecem como info no card "pendente")
+  const externalAffId = affiliateLink?.externalAffiliateId;
+  let affiliateStats: AffiliateStats = {
+    totalSales: 0,
+    paidSales: 0,
+    refundedSales: 0,
+    totalCommissionCents: 0,
+    recentSales: [],
+  };
+
+  if (externalAffId) {
+    const { data: salesData } = await adminSb
+      .schema("afiliados")
+      .from("sales")
+      .select(
+        "id, product_name, status, commission_value_cents, approved_at, member_user_id",
+      )
+      .eq("source", "kiwify")
+      .eq("external_affiliate_id", externalAffId)
+      .order("approved_at", { ascending: false })
+      .limit(10);
+
+    const all = (salesData ?? []) as Array<{
+      id: string;
+      product_name: string | null;
+      status: string;
+      commission_value_cents: number;
+      approved_at: string | null;
+      member_user_id: string | null;
+    }>;
+    // Stats consideram só vendas atribuídas ao próprio user (após registro)
+    const mine = all.filter((s) => s.member_user_id === user.id);
+    const paid = mine.filter((s) => s.status === "paid");
+    const refunded = mine.filter(
+      (s) => s.status === "refunded" || s.status === "chargedback",
+    );
+
+    affiliateStats = {
+      totalSales: all.length,
+      paidSales: paid.length,
+      refundedSales: refunded.length,
+      totalCommissionCents: paid.reduce(
+        (sum, s) => sum + s.commission_value_cents,
+        0,
+      ),
+      recentSales: mine.slice(0, 5).map((s) => ({
+        id: s.id,
+        productName: s.product_name,
+        status: s.status,
+        commissionCents: s.commission_value_cents,
+        approvedAt: s.approved_at,
+      })),
+    };
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
@@ -166,6 +250,8 @@ export default async function ProfilePage() {
       </section>
 
       {gamification && <GamificationSection {...gamification} />}
+
+      <AffiliateSection link={affiliateLink} stats={affiliateStats} />
 
       <section>
         <h2 className="mb-3 inline-flex items-center gap-2 text-lg font-bold text-npb-text">

@@ -26,7 +26,9 @@ export type XpReason =
   | "comment_approved"
   | "post_approved"
   | "course_completed"
-  | "achievement_unlock";
+  | "achievement_unlock"
+  | "kiwify_sale"
+  | "kiwify_sale_reversal";
 
 export interface UserXpRow {
   user_id: string;
