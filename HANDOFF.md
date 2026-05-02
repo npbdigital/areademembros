@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-02 — Etapa 20: pendências batidas (CSV, gráfico, pinning, realtime, cron, manual sale)
-**Último commit no main:** `7385a31` — feat: Etapa 20 - sweep de pendências
+**Última atualização:** 2026-05-02 — Etapa 20.1: bugs UX mobile (lesson nav + community bar)
+**Último commit no main:** atualiza neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,24 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 20.1 — Bugs UX mobile + validação webhook ponta-a-ponta (2026-05-02)
+
+Pequeno follow-up à Etapa 20 com 2 bugs visuais reportados pelo Felipe + confirmação que o webhook Kiwify está 100% funcional.
+
+**1. Lesson page mobile — NavButtons quebrando o layout:**
+- Antes: `<h1>` + botões "Anterior/Próxima" no mesmo `flex-wrap items-start justify-between`. Em mobile estreito quebrava embaixo do título e os botões "Aula concluída"/"Salvar nos favoritos" (linha de baixo) ficavam apertados/cortados.
+- Agora: criada **linha separada acima do título** com módulo (à esquerda) + NavButtons (à direita). NavButtons compactos no mobile (só ícone, texto "Anterior"/"Próxima" só em sm+). LessonActionsRow ganhou textos curtos pra mobile ("Concluir" / "Favoritar") + textos completos em sm+.
+
+**2. Comunidade mobile — header duplicado:**
+- Antes: topbar tinha "Comunidade" estática no `CommunityMobileBar` E o header da página de novo ("Feed", "Regras", etc.) → 3 níveis de header redundantes ocupando muito espaço vertical em mobile.
+- Agora: `CommunityMobileBar` lê `usePathname()` e mostra dinamicamente **"Comunidade · {nomePágina}"** (Feed, ou nome da página /community/[slug], etc.). O header redundante das pages /community/feed e /community/[slug] fica `hidden md:block` (escondido no mobile). Em md+ a sidebar é fixa e o header da page volta a aparecer.
+- Padding do CommunityMobileBar reduzido (`py-1.5` em vez de `py-2`).
+
+**Validação webhook ponta-a-ponta** (commit anterior, agora confirmado):
+- Felipe trocou `KIWIFY_WEBHOOK_TOKEN` no Vercel pro valor do `?token=` da URL salva (`gB2j81…`) e adicionou `KIWIFY_WEBHOOK_SECRET=yjdnig1x8xc`. Redeploy.
+- Várias vendas de teste reais chegaram: `order_approved` (criou sale paid), `order_refunded` (atualizou pra refunded + reverteu XP), `pix_created` (loga raw mas não cria sale — esperado).
+- Matheus: 194 XP / Nível 2 (subiu de 101 com novas vendas + conquista "Primeira venda" liberando os 50 XP).
 
 ### Etapa 20 — Sweep de pendências (2026-05-02 noite)
 

@@ -130,7 +130,10 @@ export default async function CommunityFeedPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <RealtimeFeedRefresher />
-      <header>
+      {/* Header escondido em mobile — a CommunityMobileBar já mostra
+          "Comunidade · Feed" no topo. Em md+ a sidebar é fixa, então
+          o título ajuda a contextualizar. */}
+      <header className="hidden md:block">
         <div className="flex items-center gap-2">
           <LayoutList className="h-6 w-6 text-npb-gold" />
           <h1 className="text-xl font-bold text-npb-text md:text-2xl">Feed</h1>

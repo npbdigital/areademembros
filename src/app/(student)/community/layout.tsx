@@ -136,7 +136,7 @@ export default async function CommunityLayout({
       {/* Sidebar fixa em desktop */}
       <div className="hidden md:flex">{sidebarEl}</div>
       {/* Barra mobile com botão hamburger pra abrir sidebar */}
-      <CommunityMobileBar>{sidebarEl}</CommunityMobileBar>
+      <CommunityMobileBar pages={pages}>{sidebarEl}</CommunityMobileBar>
       <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
         {children}
       </main>

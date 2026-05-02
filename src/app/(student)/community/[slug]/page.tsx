@@ -153,8 +153,10 @@ export default async function CommunityPagePage({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <RealtimeFeedRefresher pageId={page.id} />
+      {/* Em mobile só mostra o botão "Nova publicação" (título já vem na
+          CommunityMobileBar). Em md+ mostra título + descrição completos. */}
       <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="hidden md:block">
           <div className="flex items-center gap-2">
             <span className="text-2xl leading-none">{page.icon ?? "💬"}</span>
             <h1 className="text-xl font-bold text-npb-text md:text-2xl">

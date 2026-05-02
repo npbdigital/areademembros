@@ -232,22 +232,25 @@ export default async function LessonPage({
           )}
 
           <div className="space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-npb-gold">
-                  {moduleRow.title}
-                </p>
-                <h1 className="mt-1 text-xl font-bold text-npb-text md:text-2xl">
-                  {lesson.title}
-                </h1>
-                {lesson.duration_seconds ? (
-                  <p className="mt-1 inline-flex items-center gap-1 text-xs text-npb-text-muted">
-                    <Clock className="h-3.5 w-3.5" />
-                    {formatDuration(lesson.duration_seconds)}
-                  </p>
-                ) : null}
-              </div>
+            {/* Linha de navegação separada (Anterior/Próxima) — fica acima
+                do título pra não quebrar/cortar no mobile. */}
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-npb-gold">
+                {moduleRow.title}
+              </p>
               <NavButtons prev={prev} next={next} />
+            </div>
+
+            <div>
+              <h1 className="text-xl font-bold text-npb-text md:text-2xl">
+                {lesson.title}
+              </h1>
+              {lesson.duration_seconds ? (
+                <p className="mt-1 inline-flex items-center gap-1 text-xs text-npb-text-muted">
+                  <Clock className="h-3.5 w-3.5" />
+                  {formatDuration(lesson.duration_seconds)}
+                </p>
+              ) : null}
             </div>
 
             <LessonActionsRow
@@ -375,22 +378,24 @@ function NavButtons({
   next: { id: string } | null;
 }) {
   return (
-    <div className="flex gap-2">
+    <div className="flex flex-shrink-0 gap-2">
       {prev ? (
         <Link
           href={`/lessons/${prev.id}`}
-          className="inline-flex items-center gap-1 rounded-lg border border-npb-border bg-npb-bg2 px-3 py-1.5 text-xs font-semibold text-npb-text transition hover:border-npb-gold"
+          aria-label="Aula anterior"
+          className="inline-flex items-center gap-1 rounded-lg border border-npb-border bg-npb-bg2 px-2.5 py-1.5 text-xs font-semibold text-npb-text transition hover:border-npb-gold"
         >
           <ChevronLeft className="h-4 w-4" />
-          Anterior
+          <span className="hidden sm:inline">Anterior</span>
         </Link>
       ) : null}
       {next ? (
         <Link
           href={`/lessons/${next.id}`}
-          className="inline-flex items-center gap-1 rounded-lg bg-npb-gold px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-npb-gold-light"
+          aria-label="Próxima aula"
+          className="inline-flex items-center gap-1 rounded-lg bg-npb-gold px-2.5 py-1.5 text-xs font-semibold text-black transition hover:bg-npb-gold-light"
         >
-          Próxima
+          <span className="hidden sm:inline">Próxima</span>
           <ChevronRight className="h-4 w-4" />
         </Link>
       ) : null}
