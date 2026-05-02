@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="-90 -90 180 180">
+  <defs>
+    <linearGradient id="gbg-4" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1A0533"/>
+      <stop offset="100%" stop-color="#3B0764"/>
+    </linearGradient>
+  </defs>
+  <polygon points="0,-72 62,-36 62,36 0,72 -62,36 -62,-36" fill="url(#gbg-4)"/>
+  <polygon points="0,-72 62,-36 62,36 0,72 -62,36 -62,-36" fill="none" stroke="#C084FC" stroke-width="2.5"/>
+  <polygon points="0,-58 50,-29 50,29 0,58 -50,29 -50,-29" fill="none" stroke="#C084FC" stroke-width="0.8" opacity="0.4"/>
+  <polygon points="0,-64 56,-32 56,32 0,64 -56,32 -56,-32" fill="none" stroke="#A855F7" stroke-width="0.5" opacity="0.3"/>
+  <text font-family="Arial, sans-serif" font-size="10" font-weight="400" text-anchor="middle" letter-spacing="2.5" x="0" y="-8" fill="#C084FC">NÍVEL IV</text>
+  <text font-family="Arial, sans-serif" font-size="13" font-weight="700" text-anchor="middle" letter-spacing="0.5" x="0" y="12" fill="#E9D5FF">Autoridade</text>
+</svg>

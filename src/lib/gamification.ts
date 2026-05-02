@@ -39,18 +39,23 @@ export interface UserXpRow {
   updated_at: string;
 }
 
+/**
+ * 5 níveis com badges hexagonais (SVG em /imagens/levels/).
+ * Thresholds calibrados pra que cada nível leve em torno de 1-3 meses
+ * de uso engajado pra alcançar.
+ */
 const LEVEL_THRESHOLDS = [
-  { level: 1, min: 0, label: "Iniciante" },
-  { level: 2, min: 100, label: "Estudante" },
-  { level: 3, min: 300, label: "Dedicado" },
-  { level: 4, min: 700, label: "Engajado" },
-  { level: 5, min: 1500, label: "Veterano" },
-  { level: 6, min: 3500, label: "Mestre" },
+  { level: 1, min: 0,    label: "Recruta",      iconUrl: "/imagens/levels/nivel-1.svg" },
+  { level: 2, min: 100,  label: "Estrategista", iconUrl: "/imagens/levels/nivel-2.svg" },
+  { level: 3, min: 300,  label: "Especialista", iconUrl: "/imagens/levels/nivel-3.svg" },
+  { level: 4, min: 700,  label: "Autoridade",   iconUrl: "/imagens/levels/nivel-4.svg" },
+  { level: 5, min: 1500, label: "Elite",        iconUrl: "/imagens/levels/nivel-5.svg" },
 ];
 
 export function levelFromXp(xp: number): {
   level: number;
   label: string;
+  iconUrl: string;
   currentMin: number;
   nextMin: number | null;
   progressPct: number;
@@ -68,6 +73,7 @@ export function levelFromXp(xp: number): {
   return {
     level: current.level,
     label: current.label,
+    iconUrl: current.iconUrl,
     currentMin: current.min,
     nextMin: next?.min ?? null,
     progressPct,

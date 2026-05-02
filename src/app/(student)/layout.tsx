@@ -77,6 +77,7 @@ export default async function StudentLayout({
         totalXp: number;
         level: number;
         levelLabel: string;
+        levelIconUrl: string;
         progressPct: number;
         currentStreak: number;
       }
@@ -90,6 +91,7 @@ export default async function StudentLayout({
         totalXp: xp.total_xp,
         level: lvl.level,
         levelLabel: lvl.label,
+        levelIconUrl: lvl.iconUrl,
         progressPct: lvl.progressPct,
         currentStreak: xp.current_streak,
       };

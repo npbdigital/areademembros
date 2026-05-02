@@ -10,6 +10,7 @@ interface XpInfo {
   totalXp: number;
   level: number;
   levelLabel: string;
+  levelIconUrl?: string;
   progressPct: number;
   currentStreak: number;
 }

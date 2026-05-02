@@ -16,6 +16,7 @@ interface Props {
   totalXp: number;
   level: number;
   levelLabel: string;
+  levelIconUrl?: string;
   progressPct: number;
   nextMin: number | null;
   currentStreak: number;
@@ -28,6 +29,7 @@ export function GamificationSection({
   totalXp,
   level,
   levelLabel,
+  levelIconUrl,
   progressPct,
   nextMin,
   currentStreak,
@@ -53,21 +55,38 @@ export function GamificationSection({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-5">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-npb-text-muted">
-            Nível
+            Nível atual
           </p>
-          <p className="mt-1 text-2xl font-bold text-npb-text">
-            {level} <span className="text-base text-npb-gold">{levelLabel}</span>
-          </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-npb-bg4">
-            <div
-              className="h-full bg-npb-gold-gradient"
-              style={{ width: `${progressPct}%` }}
-            />
+          <div className="mt-2 flex items-center gap-3">
+            {levelIconUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={levelIconUrl}
+                alt={`Nível ${level} — ${levelLabel}`}
+                className="h-20 w-20 flex-shrink-0"
+              />
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-xl font-bold text-npb-gold leading-tight">
+                {levelLabel}
+              </p>
+              <p className="text-[10px] uppercase tracking-wider text-npb-text-muted">
+                Nível {level}
+              </p>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-npb-bg4">
+                <div
+                  className="h-full bg-npb-gold-gradient"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-npb-text-muted">
+                {totalXp} XP
+                {nextMin
+                  ? ` · faltam ${Math.max(nextMin - totalXp, 0)} pro próximo`
+                  : " · nível máximo"}
+              </p>
+            </div>
           </div>
-          <p className="mt-1 text-[10px] text-npb-text-muted">
-            {totalXp} XP
-            {nextMin ? ` · faltam ${Math.max(nextMin - totalXp, 0)} pro próximo nível` : " · nível máximo"}
-          </p>
         </div>
 
         <div className="rounded-2xl border border-orange-500/30 bg-orange-500/5 p-5">

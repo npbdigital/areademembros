@@ -55,6 +55,7 @@ export default async function ProfilePage() {
     totalXp: number;
     level: number;
     levelLabel: string;
+    levelIconUrl: string;
     progressPct: number;
     nextMin: number | null;
     currentStreak: number;
@@ -121,6 +122,7 @@ export default async function ProfilePage() {
         totalXp: xp.total_xp,
         level: lvl.level,
         levelLabel: lvl.label,
+        levelIconUrl: lvl.iconUrl,
         progressPct: lvl.progressPct,
         nextMin: lvl.nextMin,
         currentStreak: xp.current_streak,

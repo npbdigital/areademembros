@@ -517,6 +517,99 @@ Implementação completa estilo Circle.so adaptado pra nossa stack. **Comunidade
 
 ## 🚧 Pendente (próximos passos)
 
+### 🎯 Spec — Sistema de afiliado Kiwify (a validar com Felipe)
+
+Tracking de vendas de afiliado (cada aluno é afiliado de produtos Kiwify do
+Felipe). O aluno vê os próprios resultados; o admin vê tudo de todos.
+
+**Privacidade decidida:**
+- Vendas/valores **não são públicos** (sem leaderboard exposto entre alunos)
+- Só o **admin** vê tudo (pode editar manual também)
+- Moderador NÃO vê dados financeiros
+
+**Vinculação aluno↔Kiwify (dupla verificação):**
+- Aluno preenche no perfil: **CPF/CNPJ** + **affiliate_id Kiwify** (UUID interno)
+- Status fica `pendente` até a **primeira venda chegar** com aquele
+  `affiliate_id` AND aquele CPF/CNPJ — só então marca `verified` e libera
+  contagem
+- Vendas são **contabilizadas a partir do cadastro** (não retroativo —
+  evita inflar números de quem cadastra tarde)
+- `affiliate_id` em `user_kiwify_link` é UNIQUE (impede 2 alunos pegarem
+  o mesmo)
+
+**Tabelas planejadas (`membros.*`):**
+```sql
+user_kiwify_link (
+  id, user_id FK, kiwify_affiliate_id UNIQUE, cpf_cnpj,
+  verified BOOL, verified_at, registered_at
+)
+affiliate_sales (
+  id, user_id FK (nullable até reconciliar), kiwify_order_id UNIQUE,
+  kiwify_affiliate_id, product_name, status, gross_amount_cents,
+  commission_amount_cents, approved_at, refunded_at, raw_payload JSONB
+)
+```
+
+**Endpoint:** `POST /api/webhooks/kiwify` (validar HMAC) → insere em
+`affiliate_sales` + atribui `user_id` se vinculação `verified` existe pro
+`affiliate_id`.
+
+**Conquistas a adicionar (sugestão de tiers):**
+- Vendas: 1ª · 5 · 10 · 25 · 50 · 100 · 500 · 1000
+- Comissão: R$1k · R$5k · R$10k · R$50k · R$100k · R$500k · R$1M
+
+**XP por venda:** decisão pendente — proporcional à comissão
+(`1 XP por R$1`) ou fixo (`10 XP por venda aprovada`)?
+
+**Pendências bloqueantes:**
+1. Felipe precisa enviar **payload bruto** de uma venda Kiwify (Kiwify →
+   Webhooks → Histórico) pra confirmar campo de `affiliate_id` e
+   `commission_value`
+2. Definir XP (proporcional vs fixo)
+3. UI: tela "Afiliado" no `/profile` — design
+
+**Refunds/chargebacks:** decremental — quando vem `refunded`/`chargeback`,
+zera/inverte XP da venda original (`reference_id` do `xp_log` permite isso).
+
+---
+
+### 👤 Spec — Role `FICTICIO` (a implementar)
+
+Terceira role pra **usuários de teste/seeds da comunidade**. Pra popular
+visualmente a comunidade antes de ter alunos reais bombando, e pra testar
+fluxos sem comprometer dados reais.
+
+**Comportamento:**
+- Roles: `student` · `moderator` · `admin` · **`ficticio`** (nova)
+- Visível como aluno normal pra todos os outros (incluindo moderador)
+- **APENAS o admin** vê o badge "fictício" / sabe diferenciar
+- Pode comentar, postar, curtir, interagir tudo igual aluno
+- Vendas/valores de afiliado são **inseridos manualmente pelo admin OU
+  pelo próprio fictício** (sem webhook automático — esses dados vêm
+  do admin pra simular)
+- Conquistas/XP: admin pode setar manualmente também
+- NÃO conta em métricas reais (`/admin/reports` deve excluir)
+
+**Migration necessária:**
+```sql
+ALTER TABLE membros.users
+  ADD CONSTRAINT users_role_check CHECK (
+    role IN ('student','moderator','admin','ficticio')
+  );
+-- (precisa DROP do constraint atual antes — verificar nome com pg_constraint)
+```
+
+**Mudanças no código:**
+- `getUserRole()` retorna `ficticio` quando aplicável
+- `isElevatedRole()` mantém só admin/moderator
+- Em `/admin/students` aparecer toggle "Mostrar fictícios" (default off)
+- Filtros de `/admin/reports`, `/admin/dashboard` excluem `ficticio` por padrão
+- Admin pode mudar role student↔ficticio direto na edição do aluno
+- Quando role = `ficticio`, o card de afiliado no `/profile` permite
+  editar manual (admin OU o próprio user logado como fictício)
+
+---
+
 ### 🐛 Bugs / observações
 - **Suporte e-mail não chegou** (reportado 2026-05-01) — sintoma: chunks `.next` 404 no console (`main-app.js`, `support/page.js`). Form é client-side, então quando o JS não carrega, clicar em "Enviar" não dispara nada. Fix do dev: `Remove-Item -Recurse -Force .next; npm run dev` + Ctrl+Shift+R. Se persistir após cache limpo, investigar Resend (RESEND_API_KEY ausente, domínio não verificado, etc.) e adicionar log persistente em `webhook_logs`
 - **"Sistema quebrou abrindo/fechando telas"** (relato anterior, sem repro recente) — provável mesmo problema de cache `.next` velho. Se voltar, capturar console + terminal
@@ -526,6 +619,20 @@ Concluída — ver seção acima.
 
 ### Etapa 16 — Gamification + Configs ✅
 Concluída — ver seção no topo. Configs de comunidade e gamification configuráveis em `/admin/settings`.
+
+**5 níveis com badges hexagonais** (atualizado pós-Etapa 16, badges em
+`public/imagens/levels/`):
+
+| # | Label        | XP min | Cor       |
+|---|--------------|--------|-----------|
+| 1 | Recruta      | 0      | Cinza     |
+| 2 | Estrategista | 100    | Verde     |
+| 3 | Especialista | 300    | Azul      |
+| 4 | Autoridade   | 700    | Roxo      |
+| 5 | Elite        | 1500   | Dourado   |
+
+Badge SVG aparece no `XpPill` (topbar) e no `GamificationSection` (perfil).
+Configurado em `LEVEL_THRESHOLDS` em `src/lib/gamification.ts`.
 
 **Polimentos sugeridos pra próximas iterações:**
 - Drag-and-drop pra reordenar espaços e atalhos (hoje só `position` numérico no DB)

@@ -1,43 +1,52 @@
 import Link from "next/link";
-import { Flame, Trophy } from "lucide-react";
+import { Flame } from "lucide-react";
 
 interface Props {
   totalXp: number;
   level: number;
   levelLabel: string;
+  levelIconUrl?: string;
   progressPct: number;
   currentStreak: number;
 }
 
 /**
- * Pill compacto pro topbar: nível + barra de XP + streak.
- * Server component (não tem state).
+ * Pill compacto pro topbar: badge do nível + label + barra de XP + streak.
  */
 export function XpPill({
   totalXp,
   level,
   levelLabel,
+  levelIconUrl,
   progressPct,
   currentStreak,
 }: Props) {
   return (
     <Link
       href="/profile#gamification"
-      className="hidden sm:flex items-center gap-3 rounded-lg border border-npb-border bg-npb-bg3 px-3 py-1.5 transition hover:border-npb-gold-dim"
+      className="hidden sm:flex items-center gap-2.5 rounded-lg border border-npb-border bg-npb-bg3 px-2.5 py-1 transition hover:border-npb-gold-dim"
       title={`Nível ${level} — ${levelLabel} · ${totalXp} XP`}
     >
-      <div className="flex items-center gap-1.5 text-xs">
-        <Trophy className="h-3.5 w-3.5 text-npb-gold" />
-        <span className="font-semibold text-npb-text">N{level}</span>
-        <span className="hidden text-npb-text-muted md:inline">
+      {levelIconUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={levelIconUrl}
+          alt=""
+          className="h-7 w-7 flex-shrink-0"
+        />
+      ) : (
+        <span className="text-xs font-semibold text-npb-gold">N{level}</span>
+      )}
+      <div className="flex flex-col gap-0.5">
+        <span className="hidden text-xs font-semibold text-npb-text leading-none md:inline">
           {levelLabel}
         </span>
-      </div>
-      <div className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-npb-bg4 md:block">
-        <div
-          className="h-full bg-npb-gold-gradient"
-          style={{ width: `${progressPct}%` }}
-        />
+        <div className="hidden h-1 w-16 overflow-hidden rounded-full bg-npb-bg4 md:block">
+          <div
+            className="h-full bg-npb-gold-gradient"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
       </div>
       <span className="hidden text-[10px] text-npb-text-muted md:inline">
         {totalXp} XP
