@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-01 — Etapa 17 (Comunidade Circle.so + Notificações) entregue
-**Último commit no main:** Comunidade restruturada (spaces > pages, sidebar inline admin) + sino real + /notifications
+**Última atualização:** 2026-05-01 — Etapa 18 (correções UX comunidade) entregue
+**Último commit no main:** `07b9e78` — mobile drawer, EmojiPicker, imagens inline, editar post, espaçamento
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,37 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 18 — Correções UX comunidade (sessão Maio 2026)
+
+8 ajustes baseados em feedback real de uso:
+
+1. **Sidebar do aluno** — antes era slim 64px só com ícones, agora 240px com **ícone+nome** dos itens. Mobile: `hidden md:flex` + drawer via `MobileNavToggle` (botão hamburger no topbar). Items: Início, Favoritos, Anotações, Comunidade, Notificações, Perfil, Suporte.
+
+2. **Sidebar da comunidade no mobile** — antes era `hidden md:flex` (sumida no mobile, admin não conseguia criar nada). Agora aparece via `CommunityMobileBar` (barra sticky superior só mobile com botão "Comunidade" que abre drawer com a sidebar inteira). Admin/moderador gerencia espaços/páginas/links pelo mobile também.
+
+3. **Botão "Ver comunidade"** dourado no header de `/admin/community`.
+
+4. **EmojiPicker** (`src/components/emoji-picker.tsx`) — ~200 emojis catalogados em 8 categorias (Pessoas, Comunicação, Estudo, Conquistas, Símbolos, Tech, Negócios, Diversos) + busca por nome. Componente reusável com portal, click-outside, ESC. Substitui inputs de digitar emoji em `CreatePageButton`, `EditPageForm`, `CreateLinkButton`.
+
+5. **Fonte do nome do espaço** — antes `text-[11px] font-semibold uppercase tracking-widest text-npb-text-muted`, agora `text-sm font-bold text-npb-text` (sem uppercase, hover dourado).
+
+6. **Espaçamento entre parágrafos** — nova classe `.community-html` em `globals.css` aplica spacing real em `<p>` (margin-block 0.85em + line-height 1.65), `<h1-3>`, `<ul>/<ol>/<li>`, `<a>`, `<strong>`, `<img>` (border-radius + border + my), `<blockquote>` (border-left dourado), `<code>`. Usada em `PostDetail`, `CommentItem` e `RichTextEditor` (preview já com spacing certo).
+
+7. **Imagens inline no editor + vídeo no fim**:
+   - Instalado `@tiptap/extension-image@^3.22.5`
+   - `RichTextEditor` ganhou prop `uploadImage?: (file) => Promise<string>` que habilita botão de imagem na toolbar (faz upload + insere `<img>` no editor)
+   - `CreatePostModal` passa `uploadImage` (usa `uploadPostImageAction` existente)
+   - **Campo separado de imagem REMOVIDO** — agora tudo inline no texto
+   - Vídeo continua em campo dedicado e renderiza no FIM (depois do conteúdo)
+   - Coluna `image_url` no banco continua mas não é mais setada por novos posts (legado)
+
+8. **Editar/excluir próprio post**:
+   - Nova `editPostAction(topicId, formData)` em `app/(student)/community/actions.ts` — verifica autoria via admin client (RLS bloquearia leitura cruzada), aceita autor ou admin/mod
+   - `PostCard` ganhou menu `MoreHorizontal` (`...`) com opções Editar / Excluir quando `currentUserId === post.authorId` OU `isElevatedRole(currentRole)`
+   - "Editar" reusa `CreatePostModal` com prop `editing={topicId, title, bodyHtml, videoUrl}` pré-preenchida; submit chama `editPostAction` em vez de `createPostAction` (via dynamic import pra evitar circular dep)
+   - `PostCardData` ganhou `authorId`, `pageId`, `pageTitle`; `currentUserId` é passado pelas pages que listam (`/community/[slug]` e `/community/feed`)
+   - **Comentários**: admin/moderador já podiam excluir qualquer comentário via `canDelete = isElevatedRole(currentRole)` em `CommentItem` — confirmado e mantido
 
 ### Etapa 17 — Comunidade Circle.so style + Notificações (sessão Maio 2026)
 
@@ -753,7 +784,7 @@ git push                       # Deploy automático na Vercel
 
 Cole essa mensagem inicial:
 
-> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 17 estão completas** — incluindo Comunidade Circle.so style (Etapas 10+17), Gamification (Etapa 16), Notificações in-app (Etapa 17). Estrutura comunidade: **Espaços (grupos) > Páginas (com feed)**, admin gerencia inline na sidebar (`/community`). Sino do topbar mostra notificações reais. Triggers automáticos: post aprovado/rejeitado, comentário recebido, conquista desbloqueada. **Próximas frentes:**
+> Estou continuando o projeto da Área de Membros Academia NPB. Leia primeiro o `HANDOFF.md` e o `SPEC_AREA_DE_MEMBROS.md` na raiz do repo. O Supabase está em `hblyregbowxaxzpnerhf` (schema `membros`). **Etapas 1 a 18 estão completas** — Comunidade Circle.so style (Etapas 10+17+18), Gamification (Etapa 16), Notificações in-app (Etapa 17). Comunidade: Espaços > Páginas, admin inline na sidebar, EmojiPicker com busca, imagens inline no TipTap, editar/excluir próprio post, mobile drawer funcional pra aluno+admin, espaçamento real entre parágrafos via `.community-html`. **Próximas frentes:**
 >
 > 1. **E-mail transacional via Resend** pros eventos de notificação (hoje só in-app). Boas candidatas: post aprovado, novo comentário no meu post, conquista importante.
 >
@@ -795,7 +826,9 @@ Cole essa mensagem inicial:
 | `3818660` | docs: HANDOFF marca Etapa 10 concluída |
 | `bda91d2` | **Etapa 16 — Gamification + Configs avançadas** (XP/streak/conquistas/leaderboard com reset trimestral fixo + configs de comunidade e gamification em /admin/settings + badges de não-lidos por espaço) |
 | `d232aa2` | docs: HANDOFF marca Etapa 16 |
-| (atual)   | **Etapa 17 — Comunidade Circle.so style + Notificações** (spaces > pages, sidebar inline admin, /feed agregado, sino real conectado à tabela notifications, /notifications, triggers em approve/reject/reply/achievement) |
+| `ea786ad` | **Etapa 17 — Comunidade Circle.so style + Notificações** (spaces > pages, sidebar inline admin, /feed agregado, sino real conectado à tabela notifications, /notifications, triggers em approve/reject/reply/achievement) |
+| `0e76bd6` | docs: HANDOFF marca Etapa 17 |
+| `07b9e78` | **Etapa 18 — Correções UX comunidade** (sidebar aluno com nomes + drawer mobile, sidebar comunidade no mobile, EmojiPicker com busca, fonte do espaço maior, espaçamento parágrafos, imagens inline no editor TipTap, editar/excluir próprio post) |
 
 ---
 
