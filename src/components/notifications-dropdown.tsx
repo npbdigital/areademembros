@@ -3,12 +3,26 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
+import { timeAgoPtBr } from "@/lib/community";
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
 
 interface NotificationsDropdownProps {
   count?: number;
+  items?: NotificationItem[];
 }
 
-export function NotificationsDropdown({ count = 0 }: NotificationsDropdownProps) {
+export function NotificationsDropdown({
+  count = 0,
+  items = [],
+}: NotificationsDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -68,14 +82,48 @@ export function NotificationsDropdown({ count = 0 }: NotificationsDropdownProps)
             </Link>
           </div>
           <div className="max-h-80 overflow-y-auto npb-scrollbar">
-            {count === 0 ? (
+            {items.length === 0 ? (
               <div className="px-4 py-10 text-center text-sm text-npb-text-muted">
-                Você ainda não tem notificações.
+                Nenhuma notificação.
               </div>
             ) : (
-              <div className="px-4 py-6 text-center text-sm text-npb-text-muted">
-                Em breve.
-              </div>
+              <ul className="divide-y divide-npb-border">
+                {items.slice(0, 8).map((n) => {
+                  const inner = (
+                    <div className="flex items-start gap-2 px-4 py-3 transition hover:bg-npb-bg3">
+                      {!n.isRead && (
+                        <div className="mt-1.5 h-2 w-2 flex-shrink-0 rounded-full bg-npb-gold" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`text-xs ${n.isRead ? "text-npb-text-muted" : "font-semibold text-npb-text"}`}
+                        >
+                          {n.title}
+                        </p>
+                        {n.body && (
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-npb-text-muted">
+                            {n.body}
+                          </p>
+                        )}
+                        <p className="mt-1 text-[10px] text-npb-text-muted">
+                          {timeAgoPtBr(n.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                  return (
+                    <li key={n.id}>
+                      {n.link ? (
+                        <Link href={n.link} onClick={() => setOpen(false)}>
+                          {inner}
+                        </Link>
+                      ) : (
+                        inner
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </div>
         </div>

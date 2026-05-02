@@ -16,6 +16,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getPlatformSettings } from "@/lib/settings";
+import { tryNotify } from "@/lib/notifications";
 
 export type XpReason =
   | "lesson_complete"
@@ -286,7 +287,7 @@ export async function checkAchievements(
     admin
       .schema("membros")
       .from("achievements")
-      .select("id, code, required_value, xp_reward")
+      .select("id, code, name, description, icon, required_value, xp_reward")
       .eq("is_active", true),
     admin
       .schema("membros")
@@ -322,6 +323,9 @@ export async function checkAchievements(
   for (const ach of (achievementsData ?? []) as Array<{
     id: string;
     code: string;
+    name: string;
+    description: string | null;
+    icon: string;
     required_value: number;
     xp_reward: number;
   }>) {
@@ -388,6 +392,15 @@ export async function checkAchievements(
             referenceId: ach.id,
           });
         }
+        // Notifica conquista desbloqueada
+        await tryNotify({
+          userId,
+          title: `Conquista desbloqueada: ${ach.name}`,
+          body:
+            ach.description ??
+            (ach.xp_reward > 0 ? `+${ach.xp_reward} XP` : null),
+          link: "/profile#gamification",
+        });
       }
     }
   }

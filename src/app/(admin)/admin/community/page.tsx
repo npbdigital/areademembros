@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ArrowRight, Crown, GalleryHorizontal, Link2, MessageCircle } from "lucide-react";
+import {
+  ArrowRight,
+  Crown,
+  ExternalLink,
+  GalleryHorizontal,
+  MessageCircle,
+} from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -9,8 +15,8 @@ export default async function AdminCommunityIndex() {
 
   const [
     { count: pendingCount },
-    { count: galleriesCount },
-    { count: linksCount },
+    { count: spacesCount },
+    { count: pagesCount },
     { count: postsTotal },
   ] = await Promise.all([
     supabase
@@ -20,11 +26,11 @@ export default async function AdminCommunityIndex() {
       .eq("status", "pending"),
     supabase
       .schema("membros")
-      .from("community_galleries")
+      .from("community_spaces")
       .select("id", { count: "exact", head: true }),
     supabase
       .schema("membros")
-      .from("community_sidebar_links")
+      .from("community_pages")
       .select("id", { count: "exact", head: true }),
     supabase
       .schema("membros")
@@ -38,11 +44,19 @@ export default async function AdminCommunityIndex() {
       <header>
         <h1 className="text-xl font-bold text-npb-text">Comunidade</h1>
         <p className="text-sm text-npb-text-muted">
-          Modere publicações, gerencie espaços e atalhos.
+          Modere publicações e veja o ranking. Espaços, páginas e atalhos da
+          sidebar são gerenciados direto da{" "}
+          <Link
+            href="/community"
+            className="text-npb-gold hover:text-npb-gold-light"
+          >
+            tela da comunidade
+          </Link>
+          .
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <AdminCard
           icon={MessageCircle}
           label="Aguardando aprovação"
@@ -63,15 +77,9 @@ export default async function AdminCommunityIndex() {
         />
         <AdminCard
           icon={GalleryHorizontal}
-          label="Espaços"
-          value={galleriesCount ?? 0}
-          href="/admin/community/spaces"
-        />
-        <AdminCard
-          icon={Link2}
-          label="Atalhos da sidebar"
-          value={linksCount ?? 0}
-          href="/admin/community/links"
+          label="Espaços / páginas"
+          value={(spacesCount ?? 0) + (pagesCount ?? 0)}
+          subtitle={`${spacesCount ?? 0} espaço${spacesCount === 1 ? "" : "s"} · ${pagesCount ?? 0} página${pagesCount === 1 ? "" : "s"}`}
         />
       </div>
 
@@ -79,15 +87,34 @@ export default async function AdminCommunityIndex() {
         <h2 className="text-base font-semibold text-npb-text">Como funciona</h2>
         <ul className="mt-3 space-y-2 text-sm text-npb-text-muted">
           <li>
-            • Toda publicação criada por aluno fica como{" "}
-            <strong>pendente</strong> até admin/moderador aprovar.
+            • <strong>Espaços</strong> agrupam páginas (ex: &quot;Comece por aqui&quot;,
+            &quot;Mentoria 20K&quot;). Não são clicáveis.
           </li>
           <li>
-            • Posts criados por admin/moderador entram já aprovados (auto-publish).
+            • <strong>Páginas</strong> ficam dentro de um espaço e têm seu
+            próprio feed (ex: &quot;Regras&quot;, &quot;Apresente-se&quot;).
+          </li>
+          <li>
+            • Pra criar/editar, vá em{" "}
+            <Link
+              href="/community"
+              className="inline-flex items-center gap-1 text-npb-gold hover:text-npb-gold-light"
+            >
+              /community
+              <ExternalLink className="h-3 w-3" />
+            </Link>{" "}
+            e use os controles inline na sidebar (ícones que aparecem ao passar
+            o mouse).
+          </li>
+          <li>
+            • Toda publicação criada por aluno fica como{" "}
+            <strong>pendente</strong> até admin/moderador aprovar (configurável
+            em Configurações → Comunidade).
           </li>
           <li>
             • Acesso à comunidade é gateado por{" "}
-            <code>cohort_courses.has_community_access</code> — defina nas turmas.
+            <code>cohort_courses.has_community_access</code> — defina nas
+            turmas.
           </li>
         </ul>
       </div>
@@ -101,12 +128,14 @@ function AdminCard({
   value,
   href,
   highlight,
+  subtitle,
 }: {
   icon: typeof MessageCircle;
   label: string;
   value: number;
   href?: string;
   highlight?: boolean;
+  subtitle?: string;
 }) {
   const inner = (
     <>
@@ -122,6 +151,9 @@ function AdminCard({
       <div className="text-xs uppercase tracking-wider text-npb-text-muted">
         {label}
       </div>
+      {subtitle && (
+        <div className="mt-0.5 text-[10px] text-npb-text-muted">{subtitle}</div>
+      )}
     </>
   );
   const className = `block rounded-xl border p-4 transition-colors ${

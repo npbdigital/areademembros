@@ -23,7 +23,7 @@ export interface PostCardData {
   authorName: string;
   authorAvatarUrl: string | null;
   liked: boolean;
-  gallerySlug: string;
+  pageSlug: string;
 }
 
 interface Props {
@@ -40,7 +40,8 @@ export function PostCard({ post, currentRole }: Props) {
 
   const embed = videoEmbedUrl(post.videoUrl);
   const preview = stripHtml(post.contentHtml ?? "").slice(0, 240);
-  const detailUrl = `/community/${post.gallerySlug}/post/${post.id}`;
+  const detailUrl = `/community/${post.pageSlug}/post/${post.id}`;
+
 
   function handleLike() {
     setLiked((p) => !p);
@@ -59,7 +60,7 @@ export function PostCard({ post, currentRole }: Props) {
   function handleDelete() {
     if (!confirm(`Excluir "${post.title}"?`)) return;
     startDeleteTransition(async () => {
-      const res = await deleteTopicAction(post.id, post.gallerySlug);
+      const res = await deleteTopicAction(post.id, post.pageSlug);
       if (res.ok) {
         setHidden(true);
         toast.success("Publicação excluída.");

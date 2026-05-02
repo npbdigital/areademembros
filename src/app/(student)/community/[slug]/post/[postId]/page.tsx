@@ -30,7 +30,7 @@ export default async function PostDetailPage({
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, gallery_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, status, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, status, created_at",
     )
     .eq("id", params.postId)
     .maybeSingle();
@@ -39,7 +39,7 @@ export default async function PostDetailPage({
 
   const t = topic as {
     id: string;
-    gallery_id: string;
+    page_id: string;
     user_id: string;
     title: string;
     content_html: string | null;
@@ -61,11 +61,11 @@ export default async function PostDetailPage({
     notFound();
   }
 
-  const { data: gallery } = await supabase
+  const { data: page } = await supabase
     .schema("membros")
-    .from("community_galleries")
+    .from("community_pages")
     .select("title, slug")
-    .eq("id", t.gallery_id)
+    .eq("id", t.page_id)
     .maybeSingle();
 
   const { data: authorRow } = await adminSupabase
@@ -181,11 +181,11 @@ export default async function PostDetailPage({
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <Link
-        href={`/community/${gallery?.slug ?? params.slug}`}
+        href={`/community/${page?.slug ?? params.slug}`}
         className="inline-flex items-center gap-1 text-sm text-npb-text-muted hover:text-npb-gold"
       >
         <ChevronLeft className="h-4 w-4" />
-        Voltar para {gallery?.title ?? "espaço"}
+        Voltar para {page?.title ?? "espaço"}
       </Link>
 
       <article className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">

@@ -13,11 +13,11 @@ import { videoEmbedUrl } from "@/lib/community";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 
 interface Props {
-  galleryId: string;
-  galleryTitle: string;
+  pageId: string;
+  pageTitle: string;
 }
 
-export function CreatePostButton({ galleryId, galleryTitle }: Props) {
+export function CreatePostButton({ pageId, pageTitle }: Props) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -31,8 +31,8 @@ export function CreatePostButton({ galleryId, galleryTitle }: Props) {
       </button>
       {open && (
         <CreatePostModal
-          galleryId={galleryId}
-          galleryTitle={galleryTitle}
+          pageId={pageId}
+          pageTitle={pageTitle}
           onClose={() => setOpen(false)}
         />
       )}
@@ -41,12 +41,12 @@ export function CreatePostButton({ galleryId, galleryTitle }: Props) {
 }
 
 function CreatePostModal({
-  galleryId,
-  galleryTitle,
+  pageId,
+  pageTitle,
   onClose,
 }: {
-  galleryId: string;
-  galleryTitle: string;
+  pageId: string;
+  pageTitle: string;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -92,7 +92,7 @@ function CreatePostModal({
     const form = e.currentTarget;
     // Pega `body` direto do hidden input do RichTextEditor
     const fd = new FormData(form);
-    fd.set("gallery_id", galleryId);
+    fd.set("page_id", pageId);
     fd.set("title", title.trim());
     if (videoUrl.trim()) fd.set("video_url", videoUrl.trim());
     if (imageUrl) fd.set("image_url", imageUrl);
@@ -128,7 +128,7 @@ function CreatePostModal({
             <h2 className="text-base font-bold text-npb-text">
               Nova publicação
             </h2>
-            <p className="text-xs text-npb-text-muted">em {galleryTitle}</p>
+            <p className="text-xs text-npb-text-muted">em {pageTitle}</p>
           </div>
           <button
             type="button"

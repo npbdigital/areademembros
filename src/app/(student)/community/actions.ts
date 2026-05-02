@@ -9,6 +9,7 @@ import {
 } from "@/lib/community";
 import { getPlatformSettings } from "@/lib/settings";
 import { tryAwardXp } from "@/lib/gamification";
+import { tryNotify } from "@/lib/notifications";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -43,13 +44,13 @@ export async function createPostAction(
     const userId = await requireUserId();
     await assertCommunityAccess(userId);
 
-    const galleryId = String(formData.get("gallery_id") ?? "").trim();
+    const pageId = String(formData.get("page_id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
     const bodyHtml = String(formData.get("body") ?? "").trim();
     const videoUrl = String(formData.get("video_url") ?? "").trim() || null;
     const imageUrl = String(formData.get("image_url") ?? "").trim() || null;
 
-    if (!galleryId) return { ok: false, error: "Espaço inválido." };
+    if (!pageId) return { ok: false, error: "Página inválida." };
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (title.length > 150)
       return { ok: false, error: "Título muito longo (máx. 150)." };
@@ -72,7 +73,7 @@ export async function createPostAction(
       .schema("membros")
       .from("community_topics")
       .insert({
-        gallery_id: galleryId,
+        page_id: pageId,
         user_id: userId,
         title,
         content_html: safeHtml,
@@ -272,6 +273,60 @@ export async function createReplyAction(
       });
     }
 
+    // Notifica autor do tópico (se diferente do comentarista) e autor do
+    // comentário pai (se for resposta aninhada)
+    const { data: topicRow } = await adminSb
+      .schema("membros")
+      .from("community_topics")
+      .select("user_id, title, page_id")
+      .eq("id", topicId)
+      .maybeSingle();
+    const topic = topicRow as
+      | { user_id: string; title: string; page_id: string }
+      | null;
+
+    let pageSlug: string | null = null;
+    if (topic) {
+      const { data: pageRow } = await adminSb
+        .schema("membros")
+        .from("community_pages")
+        .select("slug")
+        .eq("id", topic.page_id)
+        .maybeSingle();
+      pageSlug = (pageRow as { slug: string | null } | null)?.slug ?? null;
+
+      if (topic.user_id !== userId) {
+        await tryNotify({
+          userId: topic.user_id,
+          title: "Novo comentário no seu post",
+          body: `Em "${topic.title}"`,
+          link: pageSlug
+            ? `/community/${pageSlug}/post/${topicId}`
+            : "/community",
+        });
+      }
+    }
+
+    if (parentId) {
+      const { data: parentRow } = await adminSb
+        .schema("membros")
+        .from("community_replies")
+        .select("user_id")
+        .eq("id", parentId)
+        .maybeSingle();
+      const parentUserId = (parentRow as { user_id: string } | null)?.user_id;
+      if (parentUserId && parentUserId !== userId && parentUserId !== topic?.user_id) {
+        await tryNotify({
+          userId: parentUserId,
+          title: "Alguém respondeu seu comentário",
+          body: topic?.title ? `Em "${topic.title}"` : undefined,
+          link: pageSlug
+            ? `/community/${pageSlug}/post/${topicId}`
+            : "/community",
+        });
+      }
+    }
+
     revalidatePath(`/community/[slug]/post/${topicId}`, "page");
     return { ok: true, data: { replyId: data.id } };
   } catch (e) {
@@ -302,7 +357,7 @@ export async function deleteReplyAction(
 
 export async function deleteTopicAction(
   topicId: string,
-  gallerySlug: string,
+  pageSlug: string,
 ): Promise<ActionResult> {
   try {
     await requireUserId();
@@ -313,7 +368,7 @@ export async function deleteTopicAction(
       .delete()
       .eq("id", topicId);
     if (error) return { ok: false, error: error.message };
-    revalidatePath(`/community/${gallerySlug}`);
+    revalidatePath(`/community/${pageSlug}`);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erro inesperado.";

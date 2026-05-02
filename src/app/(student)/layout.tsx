@@ -26,12 +26,42 @@ export default async function StudentLayout({
     .eq("id", user.id)
     .single();
 
-  const { count: notificationsCount } = await supabase
-    .schema("membros")
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("is_read", false);
+  const [
+    { count: notificationsCount },
+    { data: notificationsRaw },
+  ] = await Promise.all([
+    supabase
+      .schema("membros")
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("is_read", false),
+    supabase
+      .schema("membros")
+      .from("notifications")
+      .select("id, title, body, link, is_read, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(8),
+  ]);
+
+  const notificationsItems = (
+    (notificationsRaw ?? []) as Array<{
+      id: string;
+      title: string;
+      body: string | null;
+      link: string | null;
+      is_read: boolean;
+      created_at: string;
+    }>
+  ).map((n) => ({
+    id: n.id,
+    title: n.title,
+    body: n.body,
+    link: n.link,
+    isRead: n.is_read,
+    createdAt: n.created_at,
+  }));
 
   const settings = await getPlatformSettings(supabase);
   const showWelcome =
@@ -82,6 +112,7 @@ export default async function StudentLayout({
             isModerator: profile?.role === "moderator",
           }}
           notificationsCount={notificationsCount ?? 0}
+          notificationsItems={notificationsItems}
           xp={xpInfo}
         />
         <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
 
-export default async function CommunityGalleryPage({
+export default async function CommunityPagePage({
   params,
 }: {
   params: { slug: string };
@@ -21,27 +21,27 @@ export default async function CommunityGalleryPage({
   const role = await getUserRole(supabase, user.id);
   const adminSupabase = createAdminClient();
 
-  const { data: gallery } = await supabase
+  const { data: page } = await supabase
     .schema("membros")
-    .from("community_galleries")
+    .from("community_pages")
     .select("id, title, slug, icon, description")
     .eq("slug", params.slug)
     .eq("is_active", true)
     .maybeSingle();
 
-  if (!gallery) notFound();
+  if (!page) notFound();
 
-  // Marca o espaço como visto agora — zera o badge da sidebar.
+  // Marca a página como vista agora — zera o badge da sidebar.
   await supabase
     .schema("membros")
-    .from("community_space_views")
+    .from("community_page_views")
     .upsert(
       {
         user_id: user.id,
-        gallery_id: gallery.id,
+        page_id: page.id,
         last_seen_at: new Date().toISOString(),
       },
-      { onConflict: "user_id,gallery_id" },
+      { onConflict: "user_id,page_id" },
     );
 
   // Posts aprovados (RLS deixa user ver os próprios pendentes também,
@@ -50,16 +50,16 @@ export default async function CommunityGalleryPage({
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, gallery_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, created_at",
     )
-    .eq("gallery_id", gallery.id)
+    .eq("page_id", page.id)
     .eq("status", "approved")
     .order("created_at", { ascending: false })
     .range(0, PAGE_SIZE - 1);
 
   const posts = (postsData ?? []) as Array<{
     id: string;
-    gallery_id: string;
+    page_id: string;
     user_id: string;
     title: string;
     content_html: string | null;
@@ -108,12 +108,12 @@ export default async function CommunityGalleryPage({
     }
   }
 
-  // Próprios posts pendentes (mostra no topo pra dar feedback ao autor)
+  // Próprios posts pendentes
   const { data: pendingMineData } = await supabase
     .schema("membros")
     .from("community_topics")
     .select("id, title, created_at, status")
-    .eq("gallery_id", gallery.id)
+    .eq("page_id", page.id)
     .eq("user_id", user.id)
     .neq("status", "approved")
     .order("created_at", { ascending: false })
@@ -139,7 +139,7 @@ export default async function CommunityGalleryPage({
       authorName: author?.full_name ?? "Aluno",
       authorAvatarUrl: author?.avatar_url ?? null,
       liked: likedSet.has(p.id),
-      gallerySlug: gallery.slug ?? params.slug,
+      pageSlug: page.slug ?? params.slug,
     };
   });
 
@@ -148,18 +148,18 @@ export default async function CommunityGalleryPage({
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-2xl leading-none">{gallery.icon ?? "💬"}</span>
+            <span className="text-2xl leading-none">{page.icon ?? "💬"}</span>
             <h1 className="text-xl font-bold text-npb-text md:text-2xl">
-              {gallery.title}
+              {page.title}
             </h1>
           </div>
-          {gallery.description && (
+          {page.description && (
             <p className="mt-1 text-sm text-npb-text-muted">
-              {gallery.description}
+              {page.description}
             </p>
           )}
         </div>
-        <CreatePostButton galleryId={gallery.id} galleryTitle={gallery.title} />
+        <CreatePostButton pageId={page.id} pageTitle={page.title} />
       </header>
 
       {pendingMine.length > 0 && (

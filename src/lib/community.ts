@@ -11,11 +11,20 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isElevatedRole } from "@/lib/access";
 
-export interface CommunityGalleryRow {
+export interface CommunitySpaceRow {
   id: string;
+  title: string;
+  position: number;
+  is_active: boolean;
+}
+
+export interface CommunityPageRow {
+  id: string;
+  space_id: string | null;
   title: string;
   slug: string | null;
   icon: string | null;
+  description: string | null;
   position: number;
   is_active: boolean;
 }

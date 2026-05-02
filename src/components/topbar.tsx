@@ -1,5 +1,8 @@
 import { Search } from "lucide-react";
-import { NotificationsDropdown } from "@/components/notifications-dropdown";
+import {
+  NotificationsDropdown,
+  type NotificationItem,
+} from "@/components/notifications-dropdown";
 import { UserDropdown, type UserDropdownProps } from "@/components/user-dropdown";
 import { XpPill } from "@/components/xp-pill";
 
@@ -16,6 +19,7 @@ interface TopbarProps {
   showSearch?: boolean;
   searchPlaceholder?: string;
   notificationsCount?: number;
+  notificationsItems?: NotificationItem[];
   /** Slot opcional para botão de menu mobile (renderizado à esquerda). */
   mobileNav?: React.ReactNode;
   /** Quando passado, renderiza o pill de XP entre o conteúdo central e o sino. */
@@ -27,6 +31,7 @@ export function Topbar({
   showSearch = false,
   searchPlaceholder = "Pesquisar",
   notificationsCount = 0,
+  notificationsItems = [],
   mobileNav,
   xp,
 }: TopbarProps) {
@@ -46,7 +51,10 @@ export function Topbar({
           </label>
         )}
 
-        <NotificationsDropdown count={notificationsCount} />
+        <NotificationsDropdown
+          count={notificationsCount}
+          items={notificationsItems}
+        />
         <UserDropdown {...user} />
       </div>
     </header>

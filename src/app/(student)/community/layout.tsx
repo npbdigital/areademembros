@@ -4,8 +4,9 @@ import { Lock } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/access";
 import {
-  type CommunityGalleryRow,
+  type CommunityPageRow,
   type CommunitySidebarLinkRow,
+  type CommunitySpaceRow,
   userHasCommunityAccess,
 } from "@/lib/community";
 import { CommunitySidebar } from "@/components/community/community-sidebar";
@@ -49,12 +50,24 @@ export default async function CommunityLayout({
     );
   }
 
-  // Carrega galerias visíveis e links da sidebar
-  const [{ data: galleriesData }, { data: linksData }] = await Promise.all([
+  // Carrega espaços, páginas, links da sidebar
+  const [
+    { data: spacesData },
+    { data: pagesData },
+    { data: linksData },
+  ] = await Promise.all([
     supabase
       .schema("membros")
-      .from("community_galleries")
-      .select("id, title, slug, icon, position, is_active")
+      .from("community_spaces")
+      .select("id, title, position, is_active")
+      .eq("is_active", true)
+      .order("position", { ascending: true }),
+    supabase
+      .schema("membros")
+      .from("community_pages")
+      .select(
+        "id, space_id, title, slug, icon, description, position, is_active",
+      )
       .eq("is_active", true)
       .order("position", { ascending: true }),
     supabase
@@ -65,47 +78,44 @@ export default async function CommunityLayout({
       .order("position", { ascending: true }),
   ]);
 
-  const galleries = (galleriesData ?? []) as CommunityGalleryRow[];
+  const spaces = (spacesData ?? []) as CommunitySpaceRow[];
+  const pages = (pagesData ?? []) as CommunityPageRow[];
   const links = (linksData ?? []) as CommunitySidebarLinkRow[];
 
-  // Badges de não-lidos por espaço: pra cada galeria, conta posts approved
-  // com created_at > last_seen_at (ou TODOS se nunca visitou).
-  const unreadByGallery = new Map<string, number>();
-  if (galleries.length > 0) {
+  // Badges de não-lidos por página
+  const unreadByPage = new Map<string, number>();
+  if (pages.length > 0) {
     const adminSb = createAdminClient();
-    const galleryIds = galleries.map((g) => g.id);
+    const pageIds = pages.map((p) => p.id);
 
     const { data: viewsData } = await supabase
       .schema("membros")
-      .from("community_space_views")
-      .select("gallery_id, last_seen_at")
+      .from("community_page_views")
+      .select("page_id, last_seen_at")
       .eq("user_id", user.id)
-      .in("gallery_id", galleryIds);
+      .in("page_id", pageIds);
 
     const seenMap = new Map<string, string>();
     for (const v of (viewsData ?? []) as Array<{
-      gallery_id: string;
+      page_id: string;
       last_seen_at: string;
     }>) {
-      seenMap.set(v.gallery_id, v.last_seen_at);
+      seenMap.set(v.page_id, v.last_seen_at);
     }
 
-    // Conta de cada galeria. Limita a 1 query por galeria, mas como N é
-    // pequeno (umas dezenas no máximo), tá OK.
     await Promise.all(
-      galleries.map(async (g) => {
-        const seen = seenMap.get(g.id);
+      pages.map(async (p) => {
+        const seen = seenMap.get(p.id);
         let q = adminSb
           .schema("membros")
           .from("community_topics")
           .select("id", { count: "exact", head: true })
-          .eq("gallery_id", g.id)
+          .eq("page_id", p.id)
           .eq("status", "approved");
         if (seen) q = q.gt("created_at", seen);
-        // Não conta os próprios posts do user
         q = q.neq("user_id", user.id);
         const { count } = await q;
-        if ((count ?? 0) > 0) unreadByGallery.set(g.id, count ?? 0);
+        if ((count ?? 0) > 0) unreadByPage.set(p.id, count ?? 0);
       }),
     );
   }
@@ -113,9 +123,11 @@ export default async function CommunityLayout({
   return (
     <div className="-mx-4 -my-4 flex min-h-[calc(100vh-3.5rem)] md:-mx-8 md:-my-8">
       <CommunitySidebar
-        galleries={galleries}
+        spaces={spaces}
+        pages={pages}
         links={links}
-        unreadByGallery={Object.fromEntries(unreadByGallery)}
+        unreadByPage={Object.fromEntries(unreadByPage)}
+        canManage={role === "admin" || role === "moderator"}
       />
       <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
         {children}

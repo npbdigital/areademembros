@@ -5,6 +5,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/community";
 import { getPlatformSettings } from "@/lib/settings";
 import { tryAwardXp } from "@/lib/gamification";
+import { tryNotify } from "@/lib/notifications";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -45,14 +46,15 @@ export async function approvePostAction(
     const userId = await assertAdmin();
     const sb = admin();
 
-    // Pega autor do post pra dar XP
     const { data: topic } = await sb
       .schema("membros")
       .from("community_topics")
-      .select("user_id, status")
+      .select("user_id, status, title, page_id")
       .eq("id", topicId)
       .maybeSingle();
-    const t = topic as { user_id: string; status: string } | null;
+    const t = topic as
+      | { user_id: string; status: string; title: string; page_id: string }
+      | null;
 
     const { error } = await sb
       .schema("membros")
@@ -65,9 +67,9 @@ export async function approvePostAction(
       .eq("id", topicId);
     if (error) return { ok: false, error: error.message };
 
-    // XP só se mudou de não-aprovado pra aprovado
     if (t && t.status !== "approved") {
       const settings = await getPlatformSettings(sb);
+
       if (settings.gamificationEnabled) {
         await tryAwardXp({
           userId: t.user_id,
@@ -76,6 +78,21 @@ export async function approvePostAction(
           referenceId: topicId,
         });
       }
+
+      // Notifica autor
+      const { data: page } = await sb
+        .schema("membros")
+        .from("community_pages")
+        .select("slug")
+        .eq("id", t.page_id)
+        .maybeSingle();
+      const slug = (page as { slug: string | null } | null)?.slug;
+      await tryNotify({
+        userId: t.user_id,
+        title: "Sua publicação foi aprovada",
+        body: `"${t.title}" já está visível na comunidade.`,
+        link: slug ? `/community/${slug}/post/${topicId}` : `/community`,
+      });
     }
 
     revalidatePath("/admin/community");
@@ -91,7 +108,19 @@ export async function rejectPostAction(
 ): Promise<ActionResult> {
   try {
     const userId = await assertAdmin();
-    const { error } = await admin()
+    const sb = admin();
+
+    const { data: topic } = await sb
+      .schema("membros")
+      .from("community_topics")
+      .select("user_id, status, title")
+      .eq("id", topicId)
+      .maybeSingle();
+    const t = topic as
+      | { user_id: string; status: string; title: string }
+      | null;
+
+    const { error } = await sb
       .schema("membros")
       .from("community_topics")
       .update({
@@ -101,6 +130,16 @@ export async function rejectPostAction(
       })
       .eq("id", topicId);
     if (error) return { ok: false, error: error.message };
+
+    if (t && t.status !== "rejected") {
+      await tryNotify({
+        userId: t.user_id,
+        title: "Sua publicação foi recusada",
+        body: `"${t.title}" não foi aprovada pela moderação.`,
+        link: `/community`,
+      });
+    }
+
     revalidatePath("/admin/community");
     return { ok: true };
   } catch (e) {
@@ -109,27 +148,21 @@ export async function rejectPostAction(
 }
 
 // ============================================================
-// CRUD GALERIAS (espaços)
+// CRUD ESPAÇOS (grupos não-clicáveis)
 // ============================================================
-export async function createGalleryAction(
+export async function createSpaceAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
   try {
     await assertAdmin();
     const title = String(formData.get("title") ?? "").trim();
-    const description = String(formData.get("description") ?? "").trim() || null;
-    const icon = String(formData.get("icon") ?? "").trim() || "💬";
-    const slug = slugify(String(formData.get("slug") ?? "").trim() || title);
-
     if (!title) return { ok: false, error: "Nome é obrigatório." };
-    if (!slug) return { ok: false, error: "Slug inválido." };
 
     const supabase = admin();
-    // próximo position
     const { data: maxRow } = await supabase
       .schema("membros")
-      .from("community_galleries")
+      .from("community_spaces")
       .select("position")
       .order("position", { ascending: false })
       .limit(1)
@@ -138,17 +171,10 @@ export async function createGalleryAction(
 
     const { error } = await supabase
       .schema("membros")
-      .from("community_galleries")
-      .insert({
-        title,
-        description,
-        icon,
-        slug,
-        position: next,
-        is_active: true,
-      });
+      .from("community_spaces")
+      .insert({ title, position: next, is_active: true });
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/community/spaces");
+
     revalidatePath("/community", "layout");
     return { ok: true };
   } catch (e) {
@@ -156,7 +182,7 @@ export async function createGalleryAction(
   }
 }
 
-export async function updateGalleryAction(
+export async function updateSpaceAction(
   id: string,
   _prev: ActionResult | null,
   formData: FormData,
@@ -164,27 +190,15 @@ export async function updateGalleryAction(
   try {
     await assertAdmin();
     const title = String(formData.get("title") ?? "").trim();
-    const description = String(formData.get("description") ?? "").trim() || null;
-    const icon = String(formData.get("icon") ?? "").trim() || "💬";
-    const slug = slugify(String(formData.get("slug") ?? "").trim() || title);
-    const isActive = formData.get("is_active") === "on";
-
     if (!title) return { ok: false, error: "Nome é obrigatório." };
-    if (!slug) return { ok: false, error: "Slug inválido." };
 
     const { error } = await admin()
       .schema("membros")
-      .from("community_galleries")
-      .update({
-        title,
-        description,
-        icon,
-        slug,
-        is_active: isActive,
-      })
+      .from("community_spaces")
+      .update({ title, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/community/spaces");
+
     revalidatePath("/community", "layout");
     return { ok: true };
   } catch (e) {
@@ -192,16 +206,128 @@ export async function updateGalleryAction(
   }
 }
 
-export async function deleteGalleryAction(id: string): Promise<ActionResult> {
+export async function deleteSpaceAction(id: string): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    // Soft check: se houver páginas, libera elas pra órfãs (set space_id = null)
+    await admin()
+      .schema("membros")
+      .from("community_pages")
+      .update({ space_id: null })
+      .eq("space_id", id);
+
+    const { error } = await admin()
+      .schema("membros")
+      .from("community_spaces")
+      .delete()
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+// ============================================================
+// CRUD PÁGINAS (são as que abrem feed, dentro de um espaço)
+// ============================================================
+export async function createPageAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const spaceId = String(formData.get("space_id") ?? "").trim() || null;
+    const title = String(formData.get("title") ?? "").trim();
+    const icon = String(formData.get("icon") ?? "").trim() || "💬";
+    const slug = slugify(String(formData.get("slug") ?? "").trim() || title);
+
+    if (!title) return { ok: false, error: "Nome é obrigatório." };
+    if (!slug) return { ok: false, error: "Slug inválido." };
+
+    const supabase = admin();
+    const { data: maxRow } = await supabase
+      .schema("membros")
+      .from("community_pages")
+      .select("position")
+      .eq("space_id", spaceId as string)
+      .order("position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const next = ((maxRow?.position as number | undefined) ?? 0) + 1;
+
+    const { error } = await supabase
+      .schema("membros")
+      .from("community_pages")
+      .insert({
+        space_id: spaceId,
+        title,
+        icon,
+        slug,
+        position: next,
+        is_active: true,
+      });
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+export async function updatePageAction(
+  id: string,
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const spaceId = String(formData.get("space_id") ?? "").trim() || null;
+    const title = String(formData.get("title") ?? "").trim();
+    const icon = String(formData.get("icon") ?? "").trim() || "💬";
+    const slug = slugify(String(formData.get("slug") ?? "").trim() || title);
+    const description =
+      String(formData.get("description") ?? "").trim() || null;
+    const isActive = formData.get("is_active") !== "off";
+
+    if (!title) return { ok: false, error: "Nome é obrigatório." };
+    if (!slug) return { ok: false, error: "Slug inválido." };
+
+    const { error } = await admin()
+      .schema("membros")
+      .from("community_pages")
+      .update({
+        space_id: spaceId,
+        title,
+        icon,
+        slug,
+        description,
+        is_active: isActive,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+export async function deletePageAction(id: string): Promise<ActionResult> {
   try {
     await assertAdmin();
     const { error } = await admin()
       .schema("membros")
-      .from("community_galleries")
+      .from("community_pages")
       .delete()
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/community/spaces");
+
     revalidatePath("/community", "layout");
     return { ok: true };
   } catch (e) {
@@ -248,7 +374,6 @@ export async function createSidebarLinkAction(
         is_active: true,
       });
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/community/links");
     revalidatePath("/community", "layout");
     return { ok: true };
   } catch (e) {
@@ -267,7 +392,6 @@ export async function deleteSidebarLinkAction(
       .delete()
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-    revalidatePath("/admin/community/links");
     revalidatePath("/community", "layout");
     return { ok: true };
   } catch (e) {

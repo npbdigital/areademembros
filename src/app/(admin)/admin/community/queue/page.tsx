@@ -13,14 +13,14 @@ export default async function CommunityQueuePage() {
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, gallery_id, user_id, title, content_html, video_url, image_url, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, created_at",
     )
     .eq("status", "pending")
     .order("created_at", { ascending: true });
 
   const items = (pending ?? []) as Array<{
     id: string;
-    gallery_id: string;
+    page_id: string;
     user_id: string;
     title: string;
     content_html: string | null;
@@ -30,9 +30,9 @@ export default async function CommunityQueuePage() {
   }>;
 
   const userIds = Array.from(new Set(items.map((i) => i.user_id)));
-  const galleryIds = Array.from(new Set(items.map((i) => i.gallery_id)));
+  const pageIds = Array.from(new Set(items.map((i) => i.page_id)));
 
-  const [{ data: users }, { data: galleries }] = await Promise.all([
+  const [{ data: users }, { data: pages }] = await Promise.all([
     userIds.length > 0
       ? supabase
           .schema("membros")
@@ -40,12 +40,12 @@ export default async function CommunityQueuePage() {
           .select("id, full_name, email")
           .in("id", userIds)
       : Promise.resolve({ data: [] as Array<unknown> }),
-    galleryIds.length > 0
+    pageIds.length > 0
       ? supabase
           .schema("membros")
-          .from("community_galleries")
+          .from("community_pages")
           .select("id, title, slug")
-          .in("id", galleryIds)
+          .in("id", pageIds)
       : Promise.resolve({ data: [] as Array<unknown> }),
   ]);
 
@@ -56,12 +56,12 @@ export default async function CommunityQueuePage() {
       email: string;
     }>).map((u) => [u.id, u]),
   );
-  const galleryMap = new Map(
-    ((galleries ?? []) as Array<{
+  const pageMap = new Map(
+    ((pages ?? []) as Array<{
       id: string;
       title: string;
       slug: string | null;
-    }>).map((g) => [g.id, g]),
+    }>).map((p) => [p.id, p]),
   );
 
   return (
@@ -92,7 +92,7 @@ export default async function CommunityQueuePage() {
         <ul className="space-y-3">
           {items.map((it) => {
             const author = userMap.get(it.user_id);
-            const gallery = galleryMap.get(it.gallery_id);
+            const page = pageMap.get(it.page_id);
             const previewBody = stripHtml(it.content_html ?? "").slice(0, 280);
             return (
               <li
@@ -104,7 +104,7 @@ export default async function CommunityQueuePage() {
                     <strong className="text-npb-text">
                       {author?.full_name || author?.email || "Aluno"}
                     </strong>{" "}
-                    em <strong className="text-npb-gold">{gallery?.title ?? "—"}</strong>
+                    em <strong className="text-npb-gold">{page?.title ?? "—"}</strong>
                   </span>
                   <span>{timeAgoPtBr(it.created_at)}</span>
                 </div>
@@ -137,9 +137,9 @@ export default async function CommunityQueuePage() {
                       <ExternalLink className="h-3 w-3" /> Ver imagem
                     </a>
                   )}
-                  {gallery?.slug && (
+                  {page?.slug && (
                     <Link
-                      href={`/community/${gallery.slug}/post/${it.id}`}
+                      href={`/community/${page.slug}/post/${it.id}`}
                       className="inline-flex items-center gap-1 hover:text-npb-gold"
                     >
                       <ExternalLink className="h-3 w-3" /> Ver completo
