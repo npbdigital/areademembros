@@ -517,63 +517,90 @@ Implementação completa estilo Circle.so adaptado pra nossa stack. **Comunidade
 
 ## 🚧 Pendente (próximos passos)
 
-### 🎯 Spec — Sistema de afiliado Kiwify (a validar com Felipe)
+### ✅ Sistema de afiliado Kiwify — Fase A + B implementadas
 
 Tracking de vendas de afiliado (cada aluno é afiliado de produtos Kiwify do
-Felipe). O aluno vê os próprios resultados; o admin vê tudo de todos.
+Felipe). O aluno vê só os próprios resultados; o admin vê tudo de todos.
 
-**Privacidade decidida:**
-- Vendas/valores **não são públicos** (sem leaderboard exposto entre alunos)
-- Só o **admin** vê tudo (pode editar manual também)
-- Moderador NÃO vê dados financeiros
+**Schema `afiliados`** (separado de `membros` e `public`):
+- `sales_raw` — log bruto de TODOS os webhooks (auditoria + reprocessamento)
+- `affiliate_links` — vinculação aluno↔kiwify (UNIQUE em external_affiliate_id)
+- `sales` — vendas processadas (1 linha por order × affiliate, idempotente)
 
-**Vinculação aluno↔Kiwify (dupla verificação):**
-- Aluno preenche no perfil: **CPF/CNPJ** + **affiliate_id Kiwify** (UUID interno)
-- Status fica `pendente` até a **primeira venda chegar** com aquele
-  `affiliate_id` AND aquele CPF/CNPJ — só então marca `verified` e libera
-  contagem
-- Vendas são **contabilizadas a partir do cadastro** (não retroativo —
-  evita inflar números de quem cadastra tarde)
-- `affiliate_id` em `user_kiwify_link` é UNIQUE (impede 2 alunos pegarem
-  o mesmo)
+**Conquistas adicionadas em `membros.achievements` (15 novas):**
+- `sales_count` (1, 5, 10, 25, 50, 100, 500, 1000 vendas)
+- `sales_value` (R$1k, R$5k, R$10k, R$50k, R$100k, R$500k, R$1M de comissão)
 
-**Tabelas planejadas (`membros.*`):**
-```sql
-user_kiwify_link (
-  id, user_id FK, kiwify_affiliate_id UNIQUE, cpf_cnpj,
-  verified BOOL, verified_at, registered_at
-)
-affiliate_sales (
-  id, user_id FK (nullable até reconciliar), kiwify_order_id UNIQUE,
-  kiwify_affiliate_id, product_name, status, gross_amount_cents,
-  commission_amount_cents, approved_at, refunded_at, raw_payload JSONB
-)
-```
+**Webhook** `POST /api/webhooks/kiwify`:
+- URL prod: `https://npb-area-de-membros.vercel.app/api/webhooks/kiwify?token=<KIWIFY_WEBHOOK_TOKEN>`
+- Auth: `?token=` (env var) + HMAC-SHA1 opcional via `?signature=` (a Kiwify manda)
+- Salva raw → chama `processSalesRaw` → 200 OK
+- Sempre 200 mesmo com erro (Kiwify não reenvia; raw fica `processed=false`
+  pra reprocessar manual via SQL)
 
-**Endpoint:** `POST /api/webhooks/kiwify` (validar HMAC) → insere em
-`affiliate_sales` + atribui `user_id` se vinculação `verified` existe pro
-`affiliate_id`.
+**Lib `src/lib/affiliates/process.ts`:**
+- `processSalesRaw(rawId)`: identifica evento, processa
+- `processApproved`: itera `commissioned_stores` filtrando `type='affiliate'`,
+  upsert em `sales` (idempotente via UNIQUE), atribui XP e avalia conquistas
+  se vinculação verified e venda >= registered_at
+- `processReversal`: refund/chargeback → status atualizado + XP revertido
+  (xp_log usa amount negativo com mesma `reference_id`)
+- `evaluateKiwifyAchievements`: greedy check + dispara `tryNotify`
+- `backfillOrphanSales`: quando aluno cadastra, atribui vendas órfãs com
+  aquele affiliate_id que aconteceram após `registered_at`
 
-**Conquistas a adicionar (sugestão de tiers):**
-- Vendas: 1ª · 5 · 10 · 25 · 50 · 100 · 500 · 1000
-- Comissão: R$1k · R$5k · R$10k · R$50k · R$100k · R$500k · R$1M
+**Vinculação:**
+- Aluno cadastra **affiliate_id Kiwify** (slug curto privado, ex: `BrzPdTT`)
+- + opcionalmente **CPF/CNPJ** (criptografado AES-256-GCM, último 4 dígitos
+  visíveis na UI). NÃO é validado contra Kiwify (não vem no webhook), serve
+  só pra auditoria do admin
+- Status `verified=false` até 1ª venda chegar (auto-confirma + dispara
+  notif "Sua vinculação Kiwify foi confirmada")
+- Admin pode forçar `verified=true` em `/admin/affiliates`
+- Vendas só contam a partir do `registered_at` (não retroativo — evita
+  inflar números de quem cadastra tarde)
 
-**XP por venda (decidido):** soma das duas regras —
-- `+1 XP por R$1 de comissão` (proporcional ao tamanho da venda)
-- `+10 XP por venda aprovada` (fixo — recompensa o ato de vender)
-Ex: venda com R$ 47 de comissão → 47 + 10 = **57 XP**.
+**XP (decidido):**
+- `+1 XP por R$1 de comissão + 10 XP fixo` por venda paga
+- Ex: comissão R$47 → 57 XP
+- Refund/chargeback reverte o XP via `reason: 'kiwify_sale_reversal'` +
+  amount negativo (mesma reference_id)
+- XP de bônus das conquistas vai separado (`reason: 'achievement_unlock'`)
 
-Refunds/chargebacks descontam pelo `reference_id = order_id` (xp_log
-permite reverter).
+**UI:**
+- `/profile#afiliado` (aluno) — 3 estados (não vinculado/pendente/verificado),
+  card com comissão acumulada e qtd vendas, lista das últimas 5 vendas,
+  ações de cadastrar/remover
+- `/admin/affiliates` (admin) — stats globais (vinculações, vendas, comissão,
+  órfãs), tabela de vinculações com aluno + stats agregadas + ações,
+  tabela das últimas 100 vendas
+- Ações admin (`AffiliateRowActions`): forçar verificar/desverificar, ver
+  CPF/CNPJ decifrado sob demanda (toggle), desvincular
+- Link no admin sidebar: Análises → Afiliados Kiwify (ícone `Wallet`)
 
-**Pendências bloqueantes:**
-1. Felipe precisa enviar **payload bruto** de uma venda Kiwify (Kiwify →
-   Webhooks → Histórico) pra confirmar campo de `affiliate_id` e
-   `commission_value`
-2. UI: tela "Afiliado" no `/profile` — design
+**Privacidade:**
+- RLS estrita em `afiliados.*` — aluno SELECT só os próprios links/sales
+- service_role bypassa pra processar webhook + admin
+- CPF/CNPJ criptografado no banco (AES-256-GCM, chave derivada do
+  service_role); admin decifra sob demanda via `revealCpfCnpjAction`
+- Sem leaderboard público de afiliados (decisão de produto)
 
-**Refunds/chargebacks:** decremental — quando vem `refunded`/`chargeback`,
-zera/inverte XP da venda original (`reference_id` do `xp_log` permite isso).
+**Variáveis de ambiente:**
+- `KIWIFY_WEBHOOK_TOKEN` — token forte, mesmo valor que vai na URL `?token=`
+  - Local: já no `.env.local`
+  - **Produção**: precisa adicionar no Vercel (Settings → Environment
+    Variables) e fazer Redeploy
+
+**Migrations Supabase aplicadas:**
+- `create_afiliados_schema_and_sales_raw`
+- `afiliados_phase_b_links_sales_achievements`
+
+**Pendências futuras (não bloqueia uso):**
+- Filtro/busca em `/admin/affiliates` (hoje só lista 100 mais recentes)
+- Export CSV de vendas
+- Dashboard com gráfico de vendas/mês
+- Manual override pra fictícios (admin insere venda manual)
+- Suporte a Hotmart/Eduzz (schema já é genérico via `source` column)
 
 ---
 
