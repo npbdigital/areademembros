@@ -112,6 +112,11 @@ export function YouTubePlayer({
       mountRef.current.appendChild(inner);
 
       playerRef.current = new window.YT.Player(inner, {
+        // 100% no width/height — o iframe que a API cria respeita esses valores
+        // e o container externo (.aspect-video) garante a proporção 16:9.
+        // Sem isso a API setava 640×360 fixo, "cortando" o vídeo no mobile.
+        width: "100%",
+        height: "100%",
         videoId,
         playerVars: {
           rel: 0,
@@ -241,7 +246,7 @@ export function YouTubePlayer({
   }, [lessonId]);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-npb-border bg-black">
+    <div className="relative aspect-video w-full overflow-hidden rounded-md border border-npb-border bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full">
       <div ref={mountRef} className="absolute inset-0 h-full w-full" />
     </div>
   );
