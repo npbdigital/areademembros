@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-02 — Etapa 20: pendências batidas (CSV, gráfico, pinning, realtime, cron, manual sale)
-**Último commit no main:** atualiza neste push
+**Último commit no main:** `7385a31` — feat: Etapa 20 - sweep de pendências
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
