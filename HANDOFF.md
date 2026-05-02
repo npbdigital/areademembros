@@ -517,17 +517,38 @@ Implementação completa estilo Circle.so adaptado pra nossa stack. **Comunidade
 
 ## 🚧 Pendente (próximos passos)
 
-### ✅ Sistema de afiliado Kiwify — Fase A + B implementadas
+### ✅ Sistema de afiliado Kiwify — Fase A + B + refator email/nome
 
 Tracking de vendas de afiliado (cada aluno é afiliado de produtos Kiwify do
-Felipe). O aluno vê só os próprios resultados; o admin vê tudo de todos.
+Felipe). Aluno vê só os próprios; admin vê tudo de todos.
+
+**Identificação por EMAIL + NOME (dupla verificação):**
+- `affiliate_id` da Kiwify é POR PRODUTO, não estável por afiliado — descartamos
+- Aluno cadastra **e-mail Kiwify** (chave única, case-insensitive) + **nome
+  cadastrado na Kiwify** (segundo fator)
+- Match feito após normalização: `normalizeEmail` (lowercase + trim) e
+  `normalizeName` (lowercase + sem acento + colapsa espaços) — em
+  `src/lib/affiliates/normalize.ts`
+- 4 cenários de matching (em `process.ts > processApproved`):
+  - email ✅ + nome ✅ → atribui sale, dá XP, avalia conquistas, marca verified
+  - email ✅ + nome ❌ → sale fica órfã + notifica aluno (anti-spam 24h)
+  - email ❌ → sale órfã (espera alguém vincular esse email no futuro)
+  - sem affiliate no payload → ignora
 
 **Schema `afiliados`** (separado de `membros` e `public`):
 - `sales_raw` — log bruto de TODOS os webhooks (auditoria + reprocessamento)
-- `affiliate_links` — vinculação aluno↔kiwify (UNIQUE em external_affiliate_id)
-- `sales` — vendas processadas (1 linha por order × affiliate, idempotente)
+- `affiliate_links` — vinculação aluno↔kiwify
+  - UNIQUE case-insensitive em `(source, lower(kiwify_email))`
+  - colunas: kiwify_email, kiwify_name, cpf_cnpj_encrypted, cpf_cnpj_last4,
+    verified, verified_at, registered_at
+- `sales` — vendas processadas
+  - UNIQUE em `(source, external_order_id, kiwify_email)` (1 linha por
+    order × email, idempotente)
+  - colunas: kiwify_email, kiwify_name, kiwify_affiliate_id (info auxiliar),
+    member_user_id (nullable até reconciliar), status, commission_value_cents,
+    gross_value_cents, approved_at, xp_awarded
 
-**Conquistas adicionadas em `membros.achievements` (15 novas):**
+**Conquistas em `membros.achievements` (15 novas):**
 - `sales_count` (1, 5, 10, 25, 50, 100, 500, 1000 vendas)
 - `sales_value` (R$1k, R$5k, R$10k, R$50k, R$100k, R$500k, R$1M de comissão)
 
@@ -536,44 +557,45 @@ Felipe). O aluno vê só os próprios resultados; o admin vê tudo de todos.
 - Auth: `?token=` (env var) + HMAC-SHA1 opcional via `?signature=` (a Kiwify manda)
 - Salva raw → chama `processSalesRaw` → 200 OK
 - Sempre 200 mesmo com erro (Kiwify não reenvia; raw fica `processed=false`
-  pra reprocessar manual via SQL)
+  pra reprocessar via UI admin)
 
 **Lib `src/lib/affiliates/process.ts`:**
 - `processSalesRaw(rawId)`: identifica evento, processa
 - `processApproved`: itera `commissioned_stores` filtrando `type='affiliate'`,
-  upsert em `sales` (idempotente via UNIQUE), atribui XP e avalia conquistas
-  se vinculação verified e venda >= registered_at
+  match por email + nome, upsert em `sales` (idempotente via UNIQUE), atribui
+  XP e avalia conquistas se vinculação verified e venda >= registered_at
 - `processReversal`: refund/chargeback → status atualizado + XP revertido
   (xp_log usa amount negativo com mesma `reference_id`)
 - `evaluateKiwifyAchievements`: greedy check + dispara `tryNotify`
-- `backfillOrphanSales`: quando aluno cadastra, atribui vendas órfãs com
-  aquele affiliate_id que aconteceram após `registered_at`
+- `backfillOrphanSales(email, name, userId, registeredAt)`: quando aluno
+  cadastra, atribui vendas órfãs com email + nome batendo (após registered_at)
 
 **Vinculação:**
-- Aluno cadastra **affiliate_id Kiwify** (slug curto privado, ex: `BrzPdTT`)
-- + opcionalmente **CPF/CNPJ** (criptografado AES-256-GCM, último 4 dígitos
-  visíveis na UI). NÃO é validado contra Kiwify (não vem no webhook), serve
-  só pra auditoria do admin
-- Status `verified=false` até 1ª venda chegar (auto-confirma + dispara
-  notif "Sua vinculação Kiwify foi confirmada")
+- Aluno cadastra **e-mail Kiwify** + **nome cadastrado na Kiwify** (idêntico)
+- + opcionalmente **CPF/CNPJ** (criptografado AES-256-GCM, últimos 4
+  dígitos visíveis). NÃO é validado contra Kiwify, só audit
+- Status `verified=false` até 1ª venda chegar com email+nome batendo
+  (auto-confirma + dispara notifyAndEmail "Vinculação confirmada")
 - Admin pode forçar `verified=true` em `/admin/affiliates`
-- Vendas só contam a partir do `registered_at` (não retroativo — evita
-  inflar números de quem cadastra tarde)
+- Vendas só contam a partir do `registered_at` (não retroativo)
 
 **XP (decidido):**
 - `+1 XP por R$1 de comissão + 10 XP fixo` por venda paga
 - Ex: comissão R$47 → 57 XP
 - Refund/chargeback reverte o XP via `reason: 'kiwify_sale_reversal'` +
-  amount negativo (mesma reference_id)
+  amount negativo (mesma reference_id = sale.id)
 - XP de bônus das conquistas vai separado (`reason: 'achievement_unlock'`)
 
 **UI:**
 - `/profile#afiliado` (aluno) — 3 estados (não vinculado/pendente/verificado),
+  form pede e-mail + nome (com aviso "tem que ser IDÊNTICO ao da Kiwify"),
   card com comissão acumulada e qtd vendas, lista das últimas 5 vendas,
-  ações de cadastrar/remover
+  alerta se há `nameMismatchCount > 0` (vendas órfãs com email batendo mas
+  nome não)
 - `/admin/affiliates` (admin) — stats globais (vinculações, vendas, comissão,
-  órfãs), tabela de vinculações com aluno + stats agregadas + ações,
-  tabela das últimas 100 vendas
+  órfãs), tabela de vinculações com aluno+email+nome+stats agregadas,
+  tabela das últimas 100 vendas, botão **"Reprocessar N pendentes"** no
+  header pra rodar `processSalesRaw` em raws com `processed=false`
 - Ações admin (`AffiliateRowActions`): forçar verificar/desverificar, ver
   CPF/CNPJ decifrado sob demanda (toggle), desvincular
 - Link no admin sidebar: Análises → Afiliados Kiwify (ícone `Wallet`)
@@ -592,8 +614,17 @@ Felipe). O aluno vê só os próprios resultados; o admin vê tudo de todos.
     Variables) e fazer Redeploy
 
 **Migrations Supabase aplicadas:**
-- `create_afiliados_schema_and_sales_raw`
-- `afiliados_phase_b_links_sales_achievements`
+- `create_afiliados_schema_and_sales_raw` (Fase A — schema + log raw)
+- `afiliados_phase_b_links_sales_achievements` (Fase B inicial — affiliate_id)
+- `afiliados_switch_to_email_name_dual_check` (refator — drop affiliate_id,
+  add email+name, novo UNIQUE constraint)
+
+**Como rodar pra trás (Felipe):**
+1. Cadastrar webhook na Kiwify com URL acima
+2. Vincular conta no `/profile#afiliado` com email+nome IDÊNTICOS aos da Kiwify
+3. Fazer 1 venda real → confirmar que `afiliados.sales_raw` recebe e processa
+4. Se ficar órfã (sales_raw.processed=true mas sale sem member_user_id):
+   verificar se nome/email batem com o cadastrado e ajustar pelo `/profile`
 
 **Pendências futuras (não bloqueia uso):**
 - Filtro/busca em `/admin/affiliates` (hoje só lista 100 mais recentes)
