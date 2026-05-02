@@ -15,6 +15,12 @@ export const SETTINGS_KEYS = {
   PRIMARY_COLOR: "primary_color",
   SUPPORT_EMAIL: "support_email",
   SUPPORT_WHATSAPP: "support_whatsapp",
+  WELCOME_ENABLED: "welcome_enabled",
+  WELCOME_TITLE: "welcome_title",
+  WELCOME_DESCRIPTION: "welcome_description",
+  WELCOME_VIDEO_ID: "welcome_video_id",
+  WELCOME_TERMS: "welcome_terms",
+  WELCOME_BUTTON_LABEL: "welcome_button_label",
 } as const;
 
 export type SettingKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -27,6 +33,12 @@ export interface PlatformSettings {
   primaryColor: string | null;
   supportEmail: string | null;
   supportWhatsapp: string | null;
+  welcomeEnabled: boolean;
+  welcomeTitle: string;
+  welcomeDescription: string;
+  welcomeVideoId: string | null;
+  welcomeTerms: string;
+  welcomeButtonLabel: string;
 }
 
 /** Defaults aplicados quando a chave não está no banco. */
@@ -38,6 +50,12 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   primaryColor: null,
   supportEmail: null,
   supportWhatsapp: null,
+  welcomeEnabled: false,
+  welcomeTitle: "Bem-vindo!",
+  welcomeDescription: "Antes de começar, leia e aceite os termos abaixo.",
+  welcomeVideoId: null,
+  welcomeTerms: "",
+  welcomeButtonLabel: "Eu concordo com os termos",
 };
 
 /** Lê todas as configs num único hit. */
@@ -67,6 +85,19 @@ export async function getPlatformSettings(
     primaryColor: map.get(SETTINGS_KEYS.PRIMARY_COLOR)?.trim() || null,
     supportEmail: map.get(SETTINGS_KEYS.SUPPORT_EMAIL)?.trim() || null,
     supportWhatsapp: map.get(SETTINGS_KEYS.SUPPORT_WHATSAPP)?.trim() || null,
+    welcomeEnabled:
+      (map.get(SETTINGS_KEYS.WELCOME_ENABLED) ?? "").toLowerCase() === "true",
+    welcomeTitle:
+      map.get(SETTINGS_KEYS.WELCOME_TITLE)?.trim() ||
+      SETTINGS_DEFAULTS.welcomeTitle,
+    welcomeDescription:
+      map.get(SETTINGS_KEYS.WELCOME_DESCRIPTION)?.trim() ||
+      SETTINGS_DEFAULTS.welcomeDescription,
+    welcomeVideoId: map.get(SETTINGS_KEYS.WELCOME_VIDEO_ID)?.trim() || null,
+    welcomeTerms: map.get(SETTINGS_KEYS.WELCOME_TERMS) ?? "",
+    welcomeButtonLabel:
+      map.get(SETTINGS_KEYS.WELCOME_BUTTON_LABEL)?.trim() ||
+      SETTINGS_DEFAULTS.welcomeButtonLabel,
   };
 }
 

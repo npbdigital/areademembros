@@ -56,8 +56,10 @@ const groups = [
 
 export function AdminSidebar({
   platformName = "Academia NPB",
+  platformLogoUrl = null,
 }: {
   platformName?: string;
+  platformLogoUrl?: string | null;
 }) {
   const pathname = usePathname();
 
@@ -65,7 +67,7 @@ export function AdminSidebar({
     <aside className="fixed left-0 top-0 bottom-0 z-40 flex w-60 min-w-60 flex-col bg-npb-sidebar border-r border-[#2a2000]">
       <div className="flex h-14 items-center px-4 border-b border-[#2a2000]">
         <Link href="/admin/dashboard" className="flex items-center gap-2.5">
-          <NpbLogo size="sm" />
+          <NpbLogo size="sm" name={platformName} logoUrl={platformLogoUrl} />
           <div className="flex flex-col leading-tight">
             <span className="text-sm font-bold text-npb-text">{platformName}</span>
             <span className="text-[10px] uppercase tracking-widest text-npb-gold">

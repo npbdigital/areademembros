@@ -11,7 +11,7 @@ interface TopbarProps {
 
 export function Topbar({
   user,
-  showSearch = true,
+  showSearch = false,
   searchPlaceholder = "Pesquisar",
   notificationsCount = 0,
 }: TopbarProps) {

@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
 import { StudentSidebar } from "@/components/student-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
+import { WelcomeModal } from "@/components/student/welcome-modal";
 
 export default async function StudentLayout({
   children,
@@ -19,7 +21,7 @@ export default async function StudentLayout({
   const { data: profile } = await supabase
     .schema("membros")
     .from("users")
-    .select("full_name, avatar_url, role")
+    .select("full_name, avatar_url, role, welcome_accepted_at")
     .eq("id", user.id)
     .single();
 
@@ -30,9 +32,18 @@ export default async function StudentLayout({
     .eq("user_id", user.id)
     .eq("is_read", false);
 
+  const settings = await getPlatformSettings(supabase);
+  const showWelcome =
+    settings.welcomeEnabled &&
+    !profile?.welcome_accepted_at &&
+    profile?.role === "student";
+
   return (
     <div className="flex min-h-screen bg-npb-bg">
-      <StudentSidebar />
+      <StudentSidebar
+        platformName={settings.platformName}
+        platformLogoUrl={settings.platformLogoUrl}
+      />
       <div className="flex flex-1 flex-col pl-16">
         <Topbar
           user={{
@@ -48,6 +59,15 @@ export default async function StudentLayout({
           {children}
         </main>
       </div>
+      {showWelcome && (
+        <WelcomeModal
+          title={settings.welcomeTitle}
+          description={settings.welcomeDescription}
+          videoId={settings.welcomeVideoId}
+          terms={settings.welcomeTerms}
+          buttonLabel={settings.welcomeButtonLabel}
+        />
+      )}
       <Toaster
         theme="dark"
         position="top-right"

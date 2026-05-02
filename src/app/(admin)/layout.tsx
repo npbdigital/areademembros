@@ -30,7 +30,10 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-npb-bg">
-      <AdminSidebar platformName={settings.platformName} />
+      <AdminSidebar
+        platformName={settings.platformName}
+        platformLogoUrl={settings.platformLogoUrl}
+      />
       <div className="flex flex-1 flex-col pl-60">
         <Topbar
           user={{
@@ -39,7 +42,7 @@ export default async function AdminLayout({
             avatarUrl: profile.avatar_url ?? null,
             isAdmin: true,
           }}
-          searchPlaceholder="Buscar curso, aluno..."
+          /* showSearch desabilitado por padrão — voltar quando definir o que ela busca */
         />
         <main className="flex-1 overflow-y-auto npb-scrollbar p-6 md:p-8">
           {children}

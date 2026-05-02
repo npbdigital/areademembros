@@ -19,6 +19,12 @@ export interface PlatformSettingsFormValues {
   primaryColor: string | null;
   supportEmail: string | null;
   supportWhatsapp: string | null;
+  welcomeEnabled: boolean;
+  welcomeTitle: string;
+  welcomeDescription: string;
+  welcomeVideoId: string | null;
+  welcomeTerms: string;
+  welcomeButtonLabel: string;
 }
 
 export function PlatformSettingsForm({
@@ -174,6 +180,103 @@ export function PlatformSettingsForm({
               Só dígitos com DDI (será usado em https://wa.me/...).
             </p>
           </div>
+        </div>
+      </fieldset>
+
+      {/* BOAS-VINDAS (PRIMEIRO ACESSO) */}
+      <fieldset className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+        <legend className="-ml-2 px-2 text-xs font-semibold uppercase tracking-wide text-npb-gold">
+          Pop-up de boas-vindas (primeiro acesso)
+        </legend>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-npb-border bg-npb-bg3 p-3 transition-colors hover:border-npb-gold-dim">
+          <input
+            type="checkbox"
+            name="welcome_enabled"
+            defaultChecked={init.welcomeEnabled}
+            className="mt-0.5 h-4 w-4 accent-npb-gold"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-npb-text">Ativo</div>
+            <div className="text-xs text-npb-text-muted">
+              Quando ligado, o aluno vê esse popup na primeira vez que acessar
+              a plataforma. Após ele clicar em concordar, nunca mais aparece.
+            </div>
+          </div>
+        </label>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_title" className="text-npb-text">
+            Título do popup
+          </Label>
+          <Input
+            id="welcome_title"
+            name="welcome_title"
+            defaultValue={init.welcomeTitle}
+            placeholder="Bem-vindo!"
+            className="bg-npb-bg3 border-npb-border text-npb-text"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_description" className="text-npb-text">
+            Descrição (mensagem curta)
+          </Label>
+          <textarea
+            id="welcome_description"
+            name="welcome_description"
+            defaultValue={init.welcomeDescription}
+            rows={3}
+            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim focus:ring-1 focus:ring-npb-gold-dim"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_video_id" className="text-npb-text">
+            ID do vídeo do YouTube (opcional)
+          </Label>
+          <Input
+            id="welcome_video_id"
+            name="welcome_video_id"
+            defaultValue={init.welcomeVideoId ?? ""}
+            placeholder="Ex: dQw4w9WgXcQ"
+            className="bg-npb-bg3 border-npb-border text-npb-text font-mono"
+          />
+          <p className="text-[11px] text-npb-text-muted">
+            Apenas o ID (parte depois de <code>v=</code> na URL). Quando
+            preenchido, o player aparece no topo do popup.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_terms" className="text-npb-text">
+            Termos de uso / aceite
+          </Label>
+          <textarea
+            id="welcome_terms"
+            name="welcome_terms"
+            defaultValue={init.welcomeTerms}
+            rows={8}
+            placeholder="Cole aqui o texto dos termos. Pode ser longo — vai ter scroll."
+            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim focus:ring-1 focus:ring-npb-gold-dim"
+          />
+          <p className="text-[11px] text-npb-text-muted">
+            Texto exibido em uma área scrollável dentro do popup, acima do
+            botão de aceite.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_button_label" className="text-npb-text">
+            Texto do botão de aceite
+          </Label>
+          <Input
+            id="welcome_button_label"
+            name="welcome_button_label"
+            defaultValue={init.welcomeButtonLabel}
+            placeholder="Eu concordo com os termos"
+            className="bg-npb-bg3 border-npb-border text-npb-text"
+          />
         </div>
       </fieldset>
 

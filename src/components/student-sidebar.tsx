@@ -15,13 +15,19 @@ const items = [
   { href: "/support", label: "Suporte", icon: AtSign },
 ];
 
-export function StudentSidebar() {
+export function StudentSidebar({
+  platformName = "Academia NPB",
+  platformLogoUrl = null,
+}: {
+  platformName?: string;
+  platformLogoUrl?: string | null;
+}) {
   const pathname = usePathname();
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 z-40 flex w-16 min-w-16 flex-col items-center bg-npb-sidebar border-r border-[#2a2000] py-4">
-      <Link href="/dashboard" className="mb-7" aria-label="Academia NPB - Início">
-        <NpbLogo size="sm" />
+      <Link href="/dashboard" className="mb-7" aria-label={`${platformName} - Início`}>
+        <NpbLogo size="sm" name={platformName} logoUrl={platformLogoUrl} />
       </Link>
 
       <nav className="flex flex-1 flex-col items-center gap-1.5">

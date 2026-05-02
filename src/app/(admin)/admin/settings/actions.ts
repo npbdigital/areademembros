@@ -39,6 +39,8 @@ export async function updatePlatformSettingsAction(
   try {
     await assertAdmin();
 
+    const welcomeEnabled = formData.get("welcome_enabled") === "on";
+
     const updates: Array<{ key: SettingKey; value: string | null }> = [
       { key: SETTINGS_KEYS.PLATFORM_NAME, value: str(formData, "platform_name") || null },
       {
@@ -64,6 +66,30 @@ export async function updatePlatformSettingsAction(
       {
         key: SETTINGS_KEYS.SUPPORT_WHATSAPP,
         value: str(formData, "support_whatsapp") || null,
+      },
+      {
+        key: SETTINGS_KEYS.WELCOME_ENABLED,
+        value: welcomeEnabled ? "true" : "false",
+      },
+      {
+        key: SETTINGS_KEYS.WELCOME_TITLE,
+        value: str(formData, "welcome_title") || null,
+      },
+      {
+        key: SETTINGS_KEYS.WELCOME_DESCRIPTION,
+        value: str(formData, "welcome_description") || null,
+      },
+      {
+        key: SETTINGS_KEYS.WELCOME_VIDEO_ID,
+        value: str(formData, "welcome_video_id") || null,
+      },
+      {
+        key: SETTINGS_KEYS.WELCOME_TERMS,
+        value: str(formData, "welcome_terms") || null,
+      },
+      {
+        key: SETTINGS_KEYS.WELCOME_BUTTON_LABEL,
+        value: str(formData, "welcome_button_label") || null,
       },
     ];
 
