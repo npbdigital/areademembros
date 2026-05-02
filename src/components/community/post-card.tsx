@@ -10,7 +10,7 @@ import {
   deleteTopicAction,
   toggleTopicLikeAction,
 } from "@/app/(student)/community/actions";
-import { CreatePostButton } from "@/components/community/create-post-button";
+import { PostModal } from "@/components/community/create-post-button";
 
 export interface PostCardData {
   id: string;
@@ -43,6 +43,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
   const [pendingDelete, startDeleteTransition] = useTransition();
   const [hidden, setHidden] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [editingOpen, setEditingOpen] = useState(false);
 
   const isAuthor = post.authorId === currentUserId;
   const canEdit = isAuthor || isElevatedRole(currentRole);
@@ -119,26 +120,17 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
             {menuOpen && (
               <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-npb-border bg-npb-bg3 py-1 shadow-lg">
                 {canEdit && (
-                  <CreatePostButton
-                    pageId={post.pageId}
-                    pageTitle={post.pageTitle}
-                    editing={{
-                      topicId: post.id,
-                      title: post.title,
-                      bodyHtml: post.contentHtml ?? "",
-                      videoUrl: post.videoUrl,
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setEditingOpen(true);
                     }}
-                    trigger={
-                      <button
-                        type="button"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Editar
-                      </button>
-                    }
-                  />
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Editar
+                  </button>
                 )}
                 {canDelete && (
                   <button
@@ -152,6 +144,20 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
                   </button>
                 )}
               </div>
+            )}
+
+            {editingOpen && (
+              <PostModal
+                pageId={post.pageId}
+                pageTitle={post.pageTitle}
+                editing={{
+                  topicId: post.id,
+                  title: post.title,
+                  bodyHtml: post.contentHtml ?? "",
+                  videoUrl: post.videoUrl,
+                }}
+                onClose={() => setEditingOpen(false)}
+              />
             )}
           </div>
         )}

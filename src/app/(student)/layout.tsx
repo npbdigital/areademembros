@@ -7,6 +7,7 @@ import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { WelcomeModal } from "@/components/student/welcome-modal";
 import { StudentMobileNav } from "@/components/student-mobile-nav";
+import { StudentChromeWrapper } from "@/components/student-chrome-wrapper";
 
 export default async function StudentLayout({
   children,
@@ -99,39 +100,44 @@ export default async function StudentLayout({
 
   return (
     <div className="flex min-h-screen bg-npb-bg">
-      {/* Sidebar fixa em desktop; em mobile fica oculta — abre via drawer no topbar */}
-      <div className="hidden md:flex">
-        <StudentSidebar
-          platformName={settings.platformName}
-          platformLogoUrl={settings.platformLogoUrl}
-        />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col md:pl-60">
-        <Topbar
-          user={{
-            fullName: profile?.full_name ?? "",
-            email: user.email ?? "",
-            avatarUrl: profile?.avatar_url ?? null,
-            isAdmin: profile?.role === "admin",
-            isModerator: profile?.role === "moderator",
-          }}
-          currentUserId={user.id}
-          notificationsCount={notificationsCount ?? 0}
-          notificationsItems={notificationsItems}
-          xp={xpInfo}
-          mobileNav={
-            <StudentMobileNav>
-              <StudentSidebar
-                platformName={settings.platformName}
-                platformLogoUrl={settings.platformLogoUrl}
-              />
-            </StudentMobileNav>
-          }
-        />
-        <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
-          {children}
-        </main>
-      </div>
+      {/* Em /community/* o desktop esconde a StudentSidebar e tira o padding
+          equivalente — a CommunitySidebar fica como sidebar única. */}
+      <StudentChromeWrapper
+        sidebar={
+          <StudentSidebar
+            platformName={settings.platformName}
+            platformLogoUrl={settings.platformLogoUrl}
+          />
+        }
+        mainArea={
+          <>
+            <Topbar
+              user={{
+                fullName: profile?.full_name ?? "",
+                email: user.email ?? "",
+                avatarUrl: profile?.avatar_url ?? null,
+                isAdmin: profile?.role === "admin",
+                isModerator: profile?.role === "moderator",
+              }}
+              currentUserId={user.id}
+              notificationsCount={notificationsCount ?? 0}
+              notificationsItems={notificationsItems}
+              xp={xpInfo}
+              mobileNav={
+                <StudentMobileNav>
+                  <StudentSidebar
+                    platformName={settings.platformName}
+                    platformLogoUrl={settings.platformLogoUrl}
+                  />
+                </StudentMobileNav>
+              }
+            />
+            <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
+              {children}
+            </main>
+          </>
+        }
+      />
       {showWelcome && (
         <WelcomeModal
           title={settings.welcomeTitle}

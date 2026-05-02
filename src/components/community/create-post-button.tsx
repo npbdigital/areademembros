@@ -62,7 +62,7 @@ export function CreatePostButton({
   );
 }
 
-function PostModal({
+export function PostModal({
   pageId,
   pageTitle,
   editing,

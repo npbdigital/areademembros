@@ -67,10 +67,11 @@ export function CommunitySidebar({
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-npb-border bg-npb-bg2 md:w-64 md:min-w-64">
-      {/* Voltar ao menu principal — só visível no mobile, dentro do drawer */}
+      {/* Voltar ao menu principal — visível em mobile (no drawer) e desktop
+          (a StudentSidebar é escondida em /community) */}
       <Link
         href="/dashboard"
-        className="flex items-center gap-2 border-b border-npb-border bg-npb-bg3 px-4 py-2.5 text-xs text-npb-text-muted transition-colors hover:bg-npb-bg4 hover:text-npb-text md:hidden"
+        className="flex items-center gap-2 border-b border-npb-border bg-npb-bg3 px-4 py-2.5 text-xs text-npb-text-muted transition-colors hover:bg-npb-bg4 hover:text-npb-text"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         Voltar ao menu principal
