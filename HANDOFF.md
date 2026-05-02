@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-01 — Etapa 18 (correções UX comunidade) entregue
-**Último commit no main:** `07b9e78` — mobile drawer, EmojiPicker, imagens inline, editar post, espaçamento
+**Última atualização:** 2026-05-01 — Etapa 18 + fix do player YT no mobile
+**Último commit no main:** `2b0d875` — fix(player): video YT ocupa container inteiro no mobile + borda menos arredondada
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -829,6 +829,8 @@ Cole essa mensagem inicial:
 | `ea786ad` | **Etapa 17 — Comunidade Circle.so style + Notificações** (spaces > pages, sidebar inline admin, /feed agregado, sino real conectado à tabela notifications, /notifications, triggers em approve/reject/reply/achievement) |
 | `0e76bd6` | docs: HANDOFF marca Etapa 17 |
 | `07b9e78` | **Etapa 18 — Correções UX comunidade** (sidebar aluno com nomes + drawer mobile, sidebar comunidade no mobile, EmojiPicker com busca, fonte do espaço maior, espaçamento parágrafos, imagens inline no editor TipTap, editar/excluir próprio post) |
+| `08b890f` | docs: HANDOFF marca Etapa 18 |
+| `2b0d875` | fix(player): video YT ocupa container inteiro no mobile + borda menos arredondada (rounded-md) |
 
 ---
 
