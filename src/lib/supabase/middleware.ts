@@ -52,13 +52,23 @@ export async function updateSession(request: NextRequest) {
     isAuthRoute || pathname.startsWith("/reset-password");
 
   const isPublicApi = pathname.startsWith("/api/webhooks");
+  const isPwaAsset =
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/sw.js" ||
+    pathname === "/pwa-icon.svg";
   const isStaticOrNext =
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon") ||
     pathname === "/";
 
   // Sem sessão → manda pra /login (exceto em rotas públicas)
-  if (!user && !isPublicAuthRoute && !isPublicApi && !isStaticOrNext) {
+  if (
+    !user &&
+    !isPublicAuthRoute &&
+    !isPublicApi &&
+    !isStaticOrNext &&
+    !isPwaAsset
+  ) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);

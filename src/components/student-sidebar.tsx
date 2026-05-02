@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AtSign, Bell, Bookmark, Home, NotebookPen, Smile, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NpbLogo } from "@/components/npb-logo";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 const items = [
   { href: "/dashboard", label: "Início", icon: Home },
@@ -13,7 +14,6 @@ const items = [
   { href: "/community", label: "Comunidade", icon: Smile },
   { href: "/notifications", label: "Notificações", icon: Bell },
   { href: "/profile", label: "Perfil", icon: User },
-  { href: "/support", label: "Suporte", icon: AtSign },
 ];
 
 export function StudentSidebar({
@@ -73,6 +73,25 @@ export function StudentSidebar({
               </Link>
             );
           })}
+          <PwaInstallButton />
+          <Link
+            href="/support"
+            className={cn(
+              "relative flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
+              pathname === "/support" || pathname.startsWith("/support/")
+                ? "bg-npb-gold/15 text-npb-gold"
+                : "text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text",
+            )}
+          >
+            <AtSign className="h-[18px] w-[18px] shrink-0" />
+            <span className="truncate">Suporte</span>
+            {(pathname === "/support" || pathname.startsWith("/support/")) && (
+              <span
+                aria-hidden
+                className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-[3px] bg-npb-gold"
+              />
+            )}
+          </Link>
         </div>
       </nav>
     </aside>

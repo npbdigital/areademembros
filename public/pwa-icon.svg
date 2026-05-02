@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1a1a"/>
+      <stop offset="100%" stop-color="#0d0d0d"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c9922a"/>
+      <stop offset="100%" stop-color="#7a5618"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="100" fill="url(#bg)"/>
+  <rect x="106" y="86" width="300" height="340" rx="40" fill="url(#badge)"/>
+  <text
+    x="256"
+    y="320"
+    font-family="'Segoe UI', system-ui, sans-serif"
+    font-size="240"
+    font-weight="700"
+    fill="#0d0d0d"
+    text-anchor="middle"
+  >A</text>
+</svg>
