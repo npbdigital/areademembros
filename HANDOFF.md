@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-02 — Etapa 20.1: bugs UX mobile (lesson nav + community bar)
-**Último commit no main:** atualiza neste push
+**Último commit no main:** `24ccaa3` — fix(mobile): NavButtons em linha separada + CommunityMobileBar dinâmica
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
