@@ -21,7 +21,6 @@ interface Props {
   nextMin: number | null;
   currentStreak: number;
   longestStreak: number;
-  periodEnd: string;
   achievements: AchievementView[];
 }
 
@@ -34,7 +33,6 @@ export function GamificationSection({
   nextMin,
   currentStreak,
   longestStreak,
-  periodEnd,
   achievements,
 }: Props) {
   const unlocked = achievements.filter((a) => a.unlocked);
@@ -48,7 +46,7 @@ export function GamificationSection({
           Sua jornada
         </h2>
         <span className="text-[10px] uppercase tracking-wider text-npb-text-muted">
-          Trimestre zera em {formatPtDate(periodEnd)}
+          XP cumulativo · não zera
         </span>
       </div>
 
@@ -116,7 +114,7 @@ export function GamificationSection({
             </span>
           </p>
           <p className="mt-1 text-[10px] text-npb-text-muted">
-            Recorde histórico (não zera no trimestre)
+            Recorde histórico de dias seguidos
           </p>
         </div>
       </div>

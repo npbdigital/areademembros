@@ -10,6 +10,7 @@ import {
   type CommentNode,
 } from "@/components/community/comment-thread";
 import { TopicLikeButton } from "@/components/community/topic-like-button";
+import { PostActionsBar } from "@/components/community/post-actions-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -229,6 +230,19 @@ export default async function PostDetailPage({
               </span>
             )}
           </div>
+          <PostActionsBar
+            topicId={t.id}
+            authorId={t.user_id}
+            currentUserId={user.id}
+            currentRole={role}
+            status={t.status}
+            pageId={t.page_id}
+            pageSlug={page?.slug ?? params.slug}
+            pageTitle={page?.title ?? "espaço"}
+            title={t.title}
+            contentHtml={t.content_html}
+            videoUrl={t.video_url}
+          />
         </header>
 
         {safeBody && (

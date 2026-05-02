@@ -1,22 +1,39 @@
 import Link from "next/link";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { ModerationActions } from "@/components/admin/community/moderation-actions";
 import { timeAgoPtBr } from "@/lib/community";
 
 export const dynamic = "force-dynamic";
 
-export default async function CommunityQueuePage() {
-  const supabase = createAdminClient();
+const PAGE_SIZE = 5;
 
-  const { data: pending } = await supabase
+export default async function CommunityQueuePage({
+  searchParams,
+}: {
+  searchParams?: { page?: string };
+}) {
+  const supabase = createAdminClient();
+  const pageNum = Math.max(1, Number(searchParams?.page ?? "1") || 1);
+  const from = (pageNum - 1) * PAGE_SIZE;
+  const to = from + PAGE_SIZE - 1;
+
+  const { data: pending, count } = await supabase
     .schema("membros")
     .from("community_topics")
     .select(
       "id, page_id, user_id, title, content_html, video_url, image_url, created_at",
+      { count: "exact" },
     )
     .eq("status", "pending")
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: true })
+    .range(from, to);
+
+  const totalCount = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const safePage = Math.min(pageNum, totalPages);
+  const hasPrev = safePage > 1;
+  const hasNext = safePage < totalPages;
 
   const items = (pending ?? []) as Array<{
     id: string;
@@ -78,13 +95,13 @@ export default async function CommunityQueuePage() {
           Fila de moderação
         </h1>
         <p className="text-sm text-npb-text-muted">
-          {items.length === 0
+          {totalCount === 0
             ? "Nada aguardando aprovação. 🎉"
-            : `${items.length} publicação${items.length > 1 ? "ões" : ""} pendente${items.length > 1 ? "s" : ""}.`}
+            : `${totalCount} publicação${totalCount > 1 ? "ões" : ""} pendente${totalCount > 1 ? "s" : ""} · página ${safePage} de ${totalPages}`}
         </p>
       </div>
 
-      {items.length === 0 ? (
+      {totalCount === 0 ? (
         <div className="rounded-2xl border border-dashed border-npb-border bg-npb-bg2/50 p-10 text-center text-sm text-npb-text-muted">
           Quando os alunos publicarem, as postagens aparecerão aqui.
         </div>
@@ -153,6 +170,46 @@ export default async function CommunityQueuePage() {
             );
           })}
         </ul>
+      )}
+
+      {totalCount > PAGE_SIZE && (
+        <div className="flex items-center justify-between gap-3 pt-2">
+          <Link
+            href={
+              hasPrev
+                ? `/admin/community/queue?page=${safePage - 1}`
+                : "/admin/community/queue"
+            }
+            aria-disabled={!hasPrev}
+            className={`inline-flex items-center gap-1 rounded-md border border-npb-border px-3 py-1.5 text-xs font-semibold ${
+              hasPrev
+                ? "text-npb-text hover:border-npb-gold hover:text-npb-gold"
+                : "pointer-events-none text-npb-text-muted opacity-40"
+            }`}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Anterior
+          </Link>
+          <span className="text-xs text-npb-text-muted">
+            {safePage} / {totalPages}
+          </span>
+          <Link
+            href={
+              hasNext
+                ? `/admin/community/queue?page=${safePage + 1}`
+                : `/admin/community/queue?page=${safePage}`
+            }
+            aria-disabled={!hasNext}
+            className={`inline-flex items-center gap-1 rounded-md border border-npb-border px-3 py-1.5 text-xs font-semibold ${
+              hasNext
+                ? "text-npb-text hover:border-npb-gold hover:text-npb-gold"
+                : "pointer-events-none text-npb-text-muted opacity-40"
+            }`}
+          >
+            Próxima
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       )}
     </div>
   );

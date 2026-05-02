@@ -9,6 +9,7 @@ import {
   CircleDot,
   LayoutDashboard,
   Users,
+  Wallet,
 } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 
@@ -44,6 +45,7 @@ export default async function AdminDashboardPage() {
     { data: todayRows },
     { data: last7dRows },
     { data: last30dRows },
+    { data: salesRows },
   ] = await Promise.all([
     supabase
       .schema("membros")
@@ -82,6 +84,13 @@ export default async function AdminDashboardPage() {
       .from("lesson_progress")
       .select("user_id")
       .gte("last_watched_at", since30d),
+    // Vendas afiliados — só pagas pra contar como "venda concretizada"
+    adminSupabase
+      .schema("afiliados")
+      .from("sales")
+      .select("approved_at, commission_value_cents, status, member_user_id")
+      .eq("status", "paid")
+      .gte("approved_at", since30d),
   ]);
 
   const distinctCount = (
@@ -94,6 +103,24 @@ export default async function AdminDashboardPage() {
   const last30d = distinctCount(
     last30dRows as Array<{ user_id: string }> | null,
   );
+
+  // Stats de vendas afiliados — total inclui órfãs (sem differenciar). Aqui
+  // queremos volume bruto.
+  const sales = (salesRows ?? []) as Array<{
+    approved_at: string | null;
+    commission_value_cents: number;
+    status: string;
+    member_user_id: string | null;
+  }>;
+  const inWindow = (iso: string | null, fromIso: string) =>
+    iso !== null && iso >= fromIso;
+  const salesToday = sales.filter((s) => inWindow(s.approved_at, startOfDay));
+  const sales7d = sales.filter((s) => inWindow(s.approved_at, since7d));
+  const sales30d = sales; // já vem filtrado >= since30d
+  const sumCents = (arr: typeof sales) =>
+    arr.reduce((acc, s) => acc + (s.commission_value_cents ?? 0), 0);
+  const formatBRL = (cents: number) =>
+    `R$ ${(cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -169,6 +196,43 @@ export default async function AdminDashboardPage() {
             icon={Activity}
             label="Aulas"
             value={lessonsCount ?? 0}
+          />
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-npb-text-muted">
+            Vendas afiliados
+          </h2>
+          <Link
+            href="/admin/affiliates"
+            className="text-[10px] text-npb-text-muted hover:text-npb-gold"
+          >
+            ver detalhes →
+          </Link>
+        </div>
+        <p className="mb-3 text-[10px] text-npb-text-muted">
+          Conta TODAS as vendas pagas (atribuídas + órfãs).
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard
+            icon={Wallet}
+            label="Hoje"
+            value={salesToday.length}
+            hint={formatBRL(sumCents(salesToday))}
+          />
+          <StatCard
+            icon={CalendarDays}
+            label="7 dias"
+            value={sales7d.length}
+            hint={formatBRL(sumCents(sales7d))}
+          />
+          <StatCard
+            icon={CalendarRange}
+            label="30 dias"
+            value={sales30d.length}
+            hint={formatBRL(sumCents(sales30d))}
           />
         </div>
       </section>

@@ -46,11 +46,11 @@ export default async function LeaderboardPage() {
     );
   }
 
-  // Top 30 do trimestre atual (admin client pra ler tudo)
+  // Top 30 alunos por XP cumulativo (admin client pra ler tudo)
   const { data: top } = await adminSb
     .schema("membros")
     .from("user_xp")
-    .select("user_id, total_xp, current_streak, longest_streak, current_level")
+    .select("user_id, total_xp, current_streak, longest_streak, current_level, min_level")
     .order("total_xp", { ascending: false })
     .limit(30);
 
@@ -60,6 +60,7 @@ export default async function LeaderboardPage() {
     current_streak: number;
     longest_streak: number;
     current_level: number;
+    min_level: number;
   }>;
 
   const userIds = rows.map((r) => r.user_id);
@@ -100,23 +101,22 @@ export default async function LeaderboardPage() {
         </Link>
         <h1 className="mt-3 inline-flex items-center gap-2 text-xl font-bold text-npb-text">
           <Crown className="h-5 w-5 text-npb-gold" />
-          Leaderboard do trimestre
+          Leaderboard
         </h1>
         <p className="text-sm text-npb-text-muted">
-          Top 30 alunos por XP no trimestre atual. Admin/moderador não entram no
-          ranking.
+          Top 30 alunos por XP acumulado. Admin/moderador não entram no ranking.
         </p>
       </div>
 
       {studentsOnly.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-npb-border bg-npb-bg2/50 p-8 text-center text-sm text-npb-text-muted">
-          Ainda não há atividade pontuada neste trimestre.
+          Ainda não há atividade pontuada.
         </div>
       ) : (
         <ol className="space-y-2">
           {studentsOnly.map((r, i) => {
             const p = profiles.get(r.user_id);
-            const lvl = levelFromXp(r.total_xp);
+            const lvl = levelFromXp(r.total_xp, r.min_level ?? 1);
             const rank = i + 1;
             const isPodium = rank <= 3;
             return (

@@ -65,17 +65,13 @@ export default async function ProfilePage() {
     nextMin: number | null;
     currentStreak: number;
     longestStreak: number;
-    periodEnd: string;
     achievements: AchievementView[];
   } | null = null;
 
   if (settings.gamificationEnabled) {
     try {
       const xp = await ensureUserXp(adminSb, user.id);
-      const lvl = levelFromXp(xp.total_xp);
-      const periodStart = new Date(xp.current_period_start);
-      const periodEnd = new Date(periodStart);
-      periodEnd.setMonth(periodEnd.getMonth() + 3);
+      const lvl = levelFromXp(xp.total_xp, xp.min_level ?? 1);
 
       const [{ data: catalogData }, { data: unlockedData }] =
         await Promise.all([
@@ -132,7 +128,6 @@ export default async function ProfilePage() {
         nextMin: lvl.nextMin,
         currentStreak: xp.current_streak,
         longestStreak: xp.longest_streak,
-        periodEnd: periodEnd.toISOString(),
         achievements,
       };
     } catch {

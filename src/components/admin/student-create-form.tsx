@@ -85,9 +85,12 @@ export function StudentCreateForm({
             >
               <option value="student">Aluno</option>
               <option value="moderator">Moderador</option>
+              <option value="ficticio">Fictício (teste)</option>
             </select>
             <p className="text-[10px] text-npb-text-muted">
-              Moderador acessa todos os cursos + comunidade.
+              Moderador acessa todos os cursos + comunidade. Fictício se
+              comporta como aluno; serve só pra você testar/popular sem sujar
+              relatórios reais.
             </p>
           </div>
         </div>

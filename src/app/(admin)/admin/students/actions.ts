@@ -87,7 +87,7 @@ export async function createStudentAction(
   if (!fullName) return { ok: false, error: "Nome é obrigatório." };
   if (!email) return { ok: false, error: "E-mail é obrigatório." };
   if (!email.includes("@")) return { ok: false, error: "E-mail inválido." };
-  if (role !== "student" && role !== "moderator") {
+  if (role !== "student" && role !== "moderator" && role !== "ficticio") {
     return { ok: false, error: "Função inválida." };
   }
 
@@ -258,10 +258,15 @@ export async function updateStudentAction(
   const role = roleRaw || null;
 
   if (!fullName) return { ok: false, error: "Nome é obrigatório." };
-  if (role && role !== "student" && role !== "moderator") {
+  if (
+    role &&
+    role !== "student" &&
+    role !== "moderator" &&
+    role !== "ficticio"
+  ) {
     return {
       ok: false,
-      error: "Apenas student ou moderator podem ser definidos por aqui.",
+      error: "Apenas student, moderator ou ficticio podem ser definidos por aqui.",
     };
   }
 

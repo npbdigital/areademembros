@@ -19,7 +19,7 @@
 
 import { createAdminClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { awardXp } from "@/lib/gamification";
+import { awardXp, bumpMinLevel } from "@/lib/gamification";
 import { notifyAndEmail, tryNotify } from "@/lib/notifications";
 import { normalizeEmail, normalizeName } from "@/lib/affiliates/normalize";
 
@@ -244,10 +244,7 @@ async function processApproved(
       continue;
     }
 
-    // Venda anterior ao cadastro → não conta
-    if (new Date(approvedAt) < new Date(link.registered_at)) continue;
-
-    // Marca verified
+    // Marca verified (qualquer venda paga atribuída conta)
     if (!link.verified) {
       await supabase
         .schema("afiliados")
@@ -267,7 +264,9 @@ async function processApproved(
       });
     }
 
-    // XP da venda
+    // XP da venda — vale pra qualquer venda paga atribuída ao aluno,
+    // independente da data (vendas anteriores ao cadastro também contam,
+    // o aluno fez o trabalho).
     if (sale.xp_awarded === 0 && sale.status === "paid") {
       const xpAmount = Math.floor(commissionCents / 100) + 10;
       try {
@@ -282,6 +281,8 @@ async function processApproved(
           .from("sales")
           .update({ xp_awarded: xpAmount })
           .eq("id", sale.id);
+        // 1ª venda paga garante Nível II (piso). Idempotente.
+        await bumpMinLevel(supabase, link.member_user_id, 2);
       } catch (e) {
         console.error("[kiwify process] erro awardXp:", e);
       }
@@ -446,14 +447,19 @@ async function evaluateKiwifyAchievements(
 }
 
 /**
- * Backfill após cadastro: atribui vendas órfãs com email + nome batendo
- * (após registered_at).
+ * Backfill após cadastro / atribuição manual: atribui vendas órfãs com email
+ * + nome batendo, independente da data.
+ *
+ * @param _registeredAt arg legado mantido por compat — não usado mais. Antes
+ * filtrávamos vendas anteriores ao cadastro, mas ficou rígido demais (admin
+ * atribui manual e quer pegar tudo).
  */
 export async function backfillOrphanSales(
   kiwifyEmail: string,
   kiwifyName: string,
   memberUserId: string,
-  registeredAt: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _registeredAt: string,
 ): Promise<number> {
   const supabase = createAdminClient();
   const emailNorm = normalizeEmail(kiwifyEmail);
@@ -469,6 +475,7 @@ export async function backfillOrphanSales(
     .is("member_user_id", null);
 
   let attached = 0;
+  let firstPaidAttached = false;
   for (const s of (orphans ?? []) as Array<{
     id: string;
     status: string;
@@ -483,10 +490,9 @@ export async function backfillOrphanSales(
     ) {
       continue;
     }
-
-    if (s.approved_at && new Date(s.approved_at) < new Date(registeredAt)) {
-      continue;
-    }
+    // Removido: check de "approved_at < registeredAt". Quando o aluno cadastra
+    // depois (ou admin atribui manual), faz parte do fluxo as vendas
+    // pré-existentes contarem. Caso contrário o backfill seria inútil.
 
     await supabase
       .schema("afiliados")
@@ -509,9 +515,18 @@ export async function backfillOrphanSales(
           .from("sales")
           .update({ xp_awarded: xpAmount })
           .eq("id", s.id);
+        firstPaidAttached = true;
       } catch {
         // ignora
       }
+    }
+  }
+
+  if (firstPaidAttached) {
+    try {
+      await bumpMinLevel(supabase, memberUserId, 2);
+    } catch {
+      // best-effort
     }
   }
 

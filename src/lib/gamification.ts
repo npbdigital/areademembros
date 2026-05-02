@@ -2,10 +2,11 @@
  * Sistema de XP/Streak/Conquistas.
  *
  * Modelo:
- *   - Trimestre fixo (jan-mar/abr-jun/jul-set/out-dez). XP zera no início de cada.
+ *   - XP é cumulativo — nunca reseta. (Antes resetava a cada trimestre, mas
+ *     a regra mudou: aluno mantém o que conquistou.)
  *   - `user_xp` agrega total atual; `xp_log` é a auditoria.
- *   - `xp_log` tem UNIQUE em (user_id, reason, reference_id, period_start) — garante
- *     idempotência: a mesma ação numa mesma referência nunca dá XP 2x no trimestre.
+ *   - `xp_log` tem UNIQUE em (user_id, reason, reference_id) — garante
+ *     idempotência: a mesma ação numa mesma referência nunca dá XP 2x.
  *   - Streak conta dias consecutivos com qualquer acesso. Reseta após pular 1 dia.
  *   - Conquistas são desbloqueadas após cada awardXp (greedy check).
  *
@@ -39,6 +40,20 @@ export interface UserXpRow {
   last_activity_date: string | null;
   current_period_start: string;
   updated_at: string;
+  /** Piso de nível (nunca diminui). Bumpa em marcos como "1ª venda Kiwify". */
+  min_level: number;
+}
+
+/**
+ * @deprecated Mantido só por compat com chamadores antigos. XP não reseta
+ * mais por trimestre. Retorna o início do trimestre atual em UTC.
+ */
+export function currentQuarterStartIso(): string {
+  const now = new Date();
+  const quarter = Math.floor(now.getUTCMonth() / 3);
+  return new Date(
+    Date.UTC(now.getUTCFullYear(), quarter * 3, 1, 0, 0, 0, 0),
+  ).toISOString();
 }
 
 /**
@@ -54,7 +69,10 @@ const LEVEL_THRESHOLDS = [
   { level: 5, min: 1500, label: "Elite",        iconUrl: "/imagens/levels/nivel-5.svg" },
 ];
 
-export function levelFromXp(xp: number): {
+export function levelFromXp(
+  xp: number,
+  minLevel: number = 1,
+): {
   level: number;
   label: string;
   iconUrl: string;
@@ -66,11 +84,16 @@ export function levelFromXp(xp: number): {
   for (const t of LEVEL_THRESHOLDS) {
     if (xp >= t.min) current = t;
   }
+  // Aplica piso (ex: 1ª venda Kiwify garante Nível 2 mesmo com pouco XP)
+  if (current.level < minLevel) {
+    const floor = LEVEL_THRESHOLDS.find((t) => t.level === minLevel);
+    if (floor) current = floor;
+  }
   const next = LEVEL_THRESHOLDS.find((t) => t.level === current.level + 1);
   const range = next ? next.min - current.min : 1;
   const inLevel = xp - current.min;
   const progressPct = next
-    ? Math.min(100, Math.round((inLevel / range) * 100))
+    ? Math.min(100, Math.max(0, Math.round((inLevel / range) * 100)))
     : 100;
   return {
     level: current.level,
@@ -88,6 +111,9 @@ export function levelFromXp(xp: number): {
  *
  * Usa admin client (necessário pra escrever).
  */
+const USER_XP_COLUMNS =
+  "user_id, total_xp, current_level, current_streak, longest_streak, last_activity_date, current_period_start, updated_at, min_level";
+
 export async function ensureUserXp(
   admin: SupabaseClient,
   userId: string,
@@ -95,52 +121,50 @@ export async function ensureUserXp(
   const { data: existing } = await admin
     .schema("membros")
     .from("user_xp")
-    .select(
-      "user_id, total_xp, current_level, current_streak, longest_streak, last_activity_date, current_period_start, updated_at",
-    )
+    .select(USER_XP_COLUMNS)
     .eq("user_id", userId)
     .maybeSingle();
 
-  // Pega o início do trimestre atual via SQL pra garantir consistência
-  const { data: periodRow } = await admin.rpc("current_xp_period_start");
-  const periodStart = (periodRow as string | null) ?? new Date().toISOString();
+  if (existing) return existing as UserXpRow;
 
-  if (!existing) {
-    const { data: created } = await admin
-      .schema("membros")
-      .from("user_xp")
-      .insert({
-        user_id: userId,
-        current_period_start: periodStart,
-      })
-      .select(
-        "user_id, total_xp, current_level, current_streak, longest_streak, last_activity_date, current_period_start, updated_at",
-      )
-      .single();
-    return created as UserXpRow;
-  }
+  const { data: created } = await admin
+    .schema("membros")
+    .from("user_xp")
+    .insert({
+      user_id: userId,
+      current_period_start: new Date().toISOString(),
+    })
+    .select(USER_XP_COLUMNS)
+    .single();
+  return created as UserXpRow;
+}
 
-  const e = existing as UserXpRow;
-  // Se o period_start é antigo → reset (preserva longest_streak e last_activity_date)
-  if (new Date(e.current_period_start) < new Date(periodStart)) {
-    const { data: updated } = await admin
-      .schema("membros")
-      .from("user_xp")
-      .update({
-        total_xp: 0,
-        current_level: 1,
-        current_period_start: periodStart,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId)
-      .select(
-        "user_id, total_xp, current_level, current_streak, longest_streak, last_activity_date, current_period_start, updated_at",
-      )
-      .single();
-    return updated as UserXpRow;
-  }
+/**
+ * Bumpa o piso de nível (`min_level`) de um usuário se for maior que o atual.
+ * Usado em marcos como "primeira venda Kiwify confirmada → Nível II garantido".
+ * Idempotente — chamar 2x não faz nada.
+ */
+export async function bumpMinLevel(
+  admin: SupabaseClient,
+  userId: string,
+  newFloor: number,
+): Promise<void> {
+  const xp = await ensureUserXp(admin, userId);
+  if ((xp.min_level ?? 1) >= newFloor) return;
 
-  return e;
+  const newLevel = Math.max(
+    levelFromXp(xp.total_xp, newFloor).level,
+    xp.current_level ?? 1,
+  );
+  await admin
+    .schema("membros")
+    .from("user_xp")
+    .update({
+      min_level: newFloor,
+      current_level: newLevel,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("user_id", userId);
 }
 
 /**
@@ -190,7 +214,7 @@ export async function awardXp(
   }
 
   const newTotal = xp.total_xp + params.amount;
-  const newLevel = levelFromXp(newTotal).level;
+  const newLevel = levelFromXp(newTotal, xp.min_level ?? 1).level;
   await admin
     .schema("membros")
     .from("user_xp")

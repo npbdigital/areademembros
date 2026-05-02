@@ -21,6 +21,7 @@ import {
   linkKiwifyAffiliateAction,
   unlinkKiwifyAffiliateAction,
 } from "@/app/(student)/profile/affiliate-actions";
+import { formatDateBrt } from "@/lib/format-date";
 
 export interface AffiliateLinkView {
   kiwifyEmail: string;
@@ -179,10 +180,11 @@ function NotLinked() {
         <div className="rounded-md border border-npb-border bg-npb-bg3 p-3 text-xs text-npb-text-muted">
           <p>
             <strong className="text-npb-text">Dupla verificação:</strong> a
-            vinculação é confirmada quando a 1ª venda chega no nosso sistema
-            com seu <strong>e-mail</strong> E <strong>nome</strong> batendo.
-            A partir daí, vendas viram XP automaticamente (1 XP por R$1 de
-            comissão + 10 XP por venda).
+            vinculação é confirmada quando uma venda chega com seu{" "}
+            <strong>e-mail</strong> E <strong>nome</strong> batendo. Vendas
+            anteriores ao cadastro também contam — fazemos o backfill
+            automático (1 XP por R$1 de comissão + 10 XP por venda, e a 1ª
+            venda paga já te leva pro Nível II).
           </p>
         </div>
 
@@ -248,18 +250,21 @@ function Pending({
       )}
 
       {stats.totalSales > 0 && stats.nameMismatchCount === 0 && (
-        <p className="mt-4 rounded-md border border-npb-border bg-npb-bg3 p-3 text-xs text-npb-text-muted">
-          ⓘ Vimos <strong className="text-npb-text">{stats.totalSales}</strong>{" "}
-          venda{stats.totalSales > 1 ? "s" : ""} antes do cadastro. Como
-          vendas só contam a partir do registro, essas não geraram XP. Vendas
-          a partir de agora contam.
+        <p className="mt-4 rounded-md border border-green-500/30 bg-green-500/10 p-3 text-xs text-green-400">
+          ✓ Você já tem <strong>{stats.totalSales}</strong> venda
+          {stats.totalSales > 1 ? "s" : ""} atribuída
+          {stats.totalSales > 1 ? "s" : ""} (R${" "}
+          {(stats.totalCommissionCents / 100).toLocaleString("pt-BR", {
+            minimumFractionDigits: 2,
+          })}{" "}
+          em comissão). Atualize a página em alguns segundos — a verificação
+          já foi liberada.
         </p>
       )}
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-xs text-npb-text-muted">
-          Cadastrado em{" "}
-          {new Date(link.registeredAt).toLocaleDateString("pt-BR")}
+          Cadastrado em {formatDateBrt(link.registeredAt)}
         </p>
         {showUnlink ? (
           <div className="flex items-center gap-2">
@@ -338,10 +343,7 @@ function Verified({
                 )}
               </p>
               <p className="mt-0.5 text-[10px] text-npb-text-muted">
-                Verificada em{" "}
-                {link.verifiedAt
-                  ? new Date(link.verifiedAt).toLocaleDateString("pt-BR")
-                  : "—"}
+                Verificada em {formatDateBrt(link.verifiedAt)}
               </p>
             </div>
           </div>
@@ -404,14 +406,8 @@ function Verified({
                     {s.productName ?? "(sem nome)"}
                   </p>
                   <p className="text-xs text-npb-text-muted">
-                    {s.approvedAt
-                      ? new Date(s.approvedAt).toLocaleDateString("pt-BR", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })
-                      : "—"}{" "}
-                    · <StatusBadge status={s.status} />
+                    {formatDateBrt(s.approvedAt)} ·{" "}
+                    <StatusBadge status={s.status} />
                   </p>
                 </div>
                 <p

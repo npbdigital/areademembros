@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-01 — Etapa 18 + fix do player YT no mobile
-**Último commit no main:** `2b0d875` — fix(player): video YT ocupa container inteiro no mobile + borda menos arredondada
+**Última atualização:** 2026-05-02 — Etapa 19: bugfixes XP + UX afiliados + comunidade + dashboard
+**Último commit no main:** será atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,65 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 19 — Bugfixes críticos + UX afiliados/comunidade/dashboard (2026-05-02)
+
+Sessão grande de correções e novos features. Tudo testado e build verde.
+
+**Bugs críticos corrigidos:**
+
+1. **XP sempre zerava** — `admin.rpc("current_xp_period_start")` estava chamando no schema `public` (default) em vez de `membros` → retornava null → fallback `now()` → cada `awardXp` resetava `total_xp=0`. Substituído por helper JS [`currentQuarterStartIso()`](src/lib/gamification.ts) e o reset trimestral foi REMOVIDO inteiro (XP agora é cumulativo, não zera nunca).
+
+2. **RLS notifications faltando UPDATE/DELETE** — botão "Marcar todas como lidas" dava `permission denied`. Adicionadas policies `notifications_update_own` e `notifications_delete_own`.
+
+3. **Venda Kiwify não dava XP** — check "venda anterior ao cadastro" pulava `awardXp` quando aluno cadastrava o link DEPOIS da venda chegar (cenário comum). Removido tanto em `processApproved` quanto em `backfillOrphanSales`. Vendas pré-cadastro agora contam.
+
+4. **Webhook Kiwify falhando** — endpoint usava `KIWIFY_WEBHOOK_TOKEN` pra DUAS coisas (URL `?token=` E secret HMAC). A Kiwify tem 2 valores distintos no painel:
+   - URL com `?token=...` (autenticação) → `KIWIFY_WEBHOOK_TOKEN` no Vercel
+   - Campo "Token" (HMAC secret) → `KIWIFY_WEBHOOK_SECRET` no Vercel (novo, fallback pro TOKEN se ausente)
+
+**Features novos:**
+
+5. **Role `ficticio` ativada** (spec já estava no HANDOFF). Migration expande CHECK constraint, options nos forms create/edit, badge azul "Fictício" na listagem `/admin/students`, toggle "Mostrar/Esconder fictícios" via `?showFicticio=0`. Fictício se comporta como `student` em tudo (XP, conquistas, vendas Kiwify) — só serve pra admin filtrar relatórios.
+
+6. **Regra Nível II garantido na 1ª venda Kiwify**. Nova coluna `user_xp.min_level` (piso, nunca diminui). Função `bumpMinLevel(userId, n)` em [`gamification.ts`](src/lib/gamification.ts) chamada após qualquer venda paga atribuída. `levelFromXp(xp, minLevel)` aplica piso. Backfill já bumpou todos os afiliados que tinham vendas pagas.
+
+7. **3 pontinhos + Aprovar no post aberto** — novo componente [`PostActionsBar`](src/components/community/post-actions-bar.tsx) no header do `/community/[slug]/post/[postId]`. Mostra editar/excluir (autor/elevated) + Rejeitar/Aprovar (elevated, quando status≠approved). Reusa `PostModal` pra edição.
+
+8. **Embed de YouTube/Vimeo INLINE no editor** — campo separado de "Vídeo URL" REMOVIDO do form. Nova extensão Tiptap [`VideoEmbed`](src/lib/tiptap-video-embed.ts) (Node atom, draggable). Botão "Vídeo" na toolbar prompta URL → converte via `videoEmbedUrl()` → insere `<iframe>` no fluxo do texto. `sanitizePostHtml` agora tem allowlist pra iframes do `youtube.com/embed/` e `player.vimeo.com/video/`. Posts antigos com `video_url` separado preservam comportamento legado.
+
+9. **Fila de moderação paginada** (5 por página) em `/admin/community/queue` com botões Anterior/Próxima via `?page=N`.
+
+10. **Vendas órfãs com nome+email + atribuir manual** — coluna "Aluno" em `/admin/affiliates` mostra email+nome Kiwify das órfãs + botão "Atribuir" ([`AttachOrphanButton`](src/components/admin/attach-orphan-button.tsx)). Admin digita email do aluno → action [`attachOrphanByStudentEmailAction`](src/app/(admin)/admin/affiliates/actions.ts) cria affiliate_link verified + roda `backfillOrphanSales` (que pega TODAS as outras órfãs do mesmo email automaticamente).
+
+11. **Bloco "Vendas afiliados" no /admin/dashboard** — Hoje / 7d / 30d com volume de vendas e comissão acumulada (R$). Conta TODAS as vendas pagas (atribuídas + órfãs).
+
+12. **Helper de timezone BRT** [`src/lib/format-date.ts`](src/lib/format-date.ts) — `formatDateBrt`, `formatDateTimeBrt`, `formatShortBrt`. Aplicado em `/admin/affiliates` e `/profile#afiliado` (datas de cadastro, verificação e venda). Outros lugares ainda usam `toLocaleDateString` do server (UTC) — pendente aplicar (ver lista abaixo).
+
+13. **UNIQUE de `xp_log` trocado** — antes era `(user_id, reason, reference_id, period_start)` (idempotência por trimestre). Agora é `(user_id, reason, reference_id)` (idempotência pra sempre — uma aula concluída rende XP UMA VEZ na vida).
+
+**Migrations aplicadas (em ordem):**
+- `add_ficticio_role`
+- `add_user_xp_min_level` + backfill
+- `notifications_allow_update_own`
+- `backfill_xp_period_and_total` — recalcula total_xp = SUM(xp_log)
+- `backfill_kiwify_sale_xp_matheus` — concede XP perdido
+- `verify_matheus_kiwify_link` — auto-verifica links com vendas pagas
+- `drop_quarterly_reset_recompute_xp` — remove conceito de reset trimestral
+- `xp_log_unique_drop_period` — UNIQUE sem period_start
+
+**Arquivos novos:**
+- `src/components/community/post-actions-bar.tsx`
+- `src/components/admin/attach-orphan-button.tsx`
+- `src/lib/tiptap-video-embed.ts`
+- `src/lib/format-date.ts`
+
+**Modelo XP/Nível depois desta etapa:**
+- XP é **cumulativo** (não zera por trimestre)
+- Cada `(user, reason, reference_id)` rende XP no máximo 1x na vida
+- `min_level` é piso por marco (1ª venda Kiwify → 2)
+- `current_level = MAX(min_level, levelFromXp(total_xp))`
+- Conquistas e streak preservadas (já eram)
 
 ### Etapa 18 — Correções UX comunidade (sessão Maio 2026)
 
@@ -635,42 +694,23 @@ Felipe). Aluno vê só os próprios; admin vê tudo de todos.
 
 ---
 
-### 👤 Spec — Role `FICTICIO` (a implementar)
+### 👤 Role `FICTICIO` ✅ (Etapa 19 — implementação parcial)
 
-Terceira role pra **usuários de teste/seeds da comunidade**. Pra popular
-visualmente a comunidade antes de ter alunos reais bombando, e pra testar
-fluxos sem comprometer dados reais.
+Implementado:
+- ✅ Migration `add_ficticio_role` expandiu CHECK constraint
+- ✅ Option "Fictício (teste)" nos forms create/edit de aluno
+- ✅ Badge azul "Fictício" na listagem `/admin/students` e detalhe
+- ✅ Toggle "Mostrar/Esconder fictícios" via `?showFicticio=0` em `/admin/students` (default = mostrar)
+- ✅ `isElevatedRole` continua só admin/moderator (fictício é tratado como student)
+- ✅ Fictício recebe XP, sobe nível, desbloqueia conquistas igual aluno (mesma engine)
 
-**Comportamento (resumo: pode fazer TUDO que aluno faz):**
-- Roles: `student` · `moderator` · `admin` · **`ficticio`** (nova)
-- Visível como aluno normal pra todos (incluindo moderador)
-- **APENAS o admin** vê o badge "fictício" / sabe diferenciar
-- Pode postar/comentar/curtir/interagir igual aluno
-- **Recebe XP, sobe nível, desbloqueia conquistas** normalmente pelos
-  acessos/aulas/comunidade (mesma engine de gamification do aluno)
-- **Diferença única**: vendas/valores de afiliado são **inseridos
-  manualmente** pelo admin OU pelo próprio fictício (não vêm do webhook
-  Kiwify). Idem pra XP/conquistas — admin pode setar manual pra simular.
-- NÃO conta em métricas reais (`/admin/reports`, `/admin/dashboard`
-  excluem por padrão; admin pode toggle "Mostrar fictícios")
-
-**Migration necessária:**
-```sql
-ALTER TABLE membros.users
-  ADD CONSTRAINT users_role_check CHECK (
-    role IN ('student','moderator','admin','ficticio')
-  );
--- (precisa DROP do constraint atual antes — verificar nome com pg_constraint)
-```
-
-**Mudanças no código:**
-- `getUserRole()` retorna `ficticio` quando aplicável
-- `isElevatedRole()` mantém só admin/moderator
-- Em `/admin/students` aparecer toggle "Mostrar fictícios" (default off)
-- Filtros de `/admin/reports`, `/admin/dashboard` excluem `ficticio` por padrão
-- Admin pode mudar role student↔ficticio direto na edição do aluno
-- Quando role = `ficticio`, o card de afiliado no `/profile` permite
-  editar manual (admin OU o próprio user logado como fictício)
+**Pendente (não bloqueia uso atual):**
+- Filtro/toggle "Mostrar fictícios" também em `/admin/reports` e `/admin/dashboard`
+  (hoje contam todo mundo)
+- Página/UI pra admin **inserir vendas manuais** pra fictícios (e assim acumular
+  XP de afiliado sem precisar de webhook Kiwify real)
+- Quando role = `ficticio`, permitir editar afiliado manual no próprio `/profile`
+  (hoje só admin pelo `/admin/affiliates` poderia)
 
 ---
 
@@ -709,14 +749,15 @@ Configurado em `LEVEL_THRESHOLDS` em `src/lib/gamification.ts`.
 - Histórico de XP por trimestre no `/profile` (timeline com `xp_log`)
 - Conquistas com slogans no avatar (ex: "Aluno destaque" pra quem desbloqueou X conquistas) — ainda não implementado
 
-### Etapa 13 — Notificações in-app (parcial)
+### Etapa 13 — Notificações in-app ✅ (Etapas 17 + 19)
 - ✅ Página `/admin/students/[id]/atividade` (timeline + stats)
 - ✅ `/admin/reports` (engajamento + ratings)
-- ✅ `/admin/dashboard` (alunos cadastrados/ao vivo/hoje/7d/30d)
-- ❌ Sino com badge no topbar — hoje é só placeholder. Conectar à tabela `notifications` (já existe)
-- ❌ Página `/notifications` com histórico
-- ❌ Triggers automáticos: nova aula publicada, conteúdo desbloqueado por drip, resposta na comunidade
-- ❌ E-mail transacional via Resend pros eventos importantes
+- ✅ `/admin/dashboard` (alunos + conteúdo + **vendas afiliados** hoje/7d/30d — Etapa 19)
+- ✅ Sino com badge no topbar — conectado, dropdown com 8 mais recentes
+- ✅ Página `/notifications` com histórico + "Marcar todas como lidas" (RLS UPDATE adicionado na Etapa 19)
+- ✅ Triggers: nova aula publicada (drip), resposta na comunidade, conquista desbloqueada
+- ✅ E-mail transacional via Resend (`notifyAndEmail`) com toggle por user (`email_notifications_enabled`)
+- ❌ **Pendente**: cron diário pra notificar drip que liberou (precisa Vercel Cron)
 
 ### 🔌 Integração `transactions_data` → matrícula automática (PENDENTE — bloqueado em input do Felipe)
 - ✅ Webhook HTTP `POST /api/webhooks/enrollment` pronto pra fontes externas (Kiwify/Hubla)

@@ -3,13 +3,12 @@
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Video, X } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   createPostAction,
   uploadPostImageAction,
 } from "@/app/(student)/community/actions";
-import { videoEmbedUrl } from "@/lib/community";
 import { RichTextEditor } from "@/components/admin/rich-text-editor";
 
 interface Props {
@@ -76,7 +75,6 @@ export function PostModal({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [title, setTitle] = useState(editing?.title ?? "");
-  const [videoUrl, setVideoUrl] = useState(editing?.videoUrl ?? "");
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -112,7 +110,6 @@ export function PostModal({
     const fd = new FormData(form);
     fd.set("page_id", pageId);
     fd.set("title", title.trim());
-    if (videoUrl.trim()) fd.set("video_url", videoUrl.trim());
     if (editing?.topicId) fd.set("topic_id", editing.topicId);
     startTransition(async () => {
       // Importação dinâmica pra evitar circular dep no editPostAction
@@ -137,8 +134,6 @@ export function PostModal({
   }
 
   if (!mounted) return null;
-
-  const embed = videoEmbedUrl(videoUrl);
 
   return createPortal(
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -192,28 +187,10 @@ export function PostModal({
               uploadImage={uploadImage}
             />
             <p className="mt-1 text-[10px] text-npb-text-muted">
-              Use o ícone de imagem na barra de ferramentas pra adicionar fotos
-              dentro do texto.
+              Use os ícones de imagem e vídeo na barra de ferramentas pra
+              inserir mídia no meio do texto. Vídeo aceita link do YouTube ou
+              Vimeo.
             </p>
-          </div>
-
-          <div>
-            <label className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-npb-text-muted">
-              <Video className="h-3.5 w-3.5" />
-              Vídeo (YouTube/Vimeo) — opcional, fica no fim do post
-            </label>
-            <input
-              type="url"
-              value={videoUrl}
-              onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="https://youtube.com/watch?v=..."
-              className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-            />
-            {videoUrl && !embed && (
-              <p className="mt-1 text-[10px] text-yellow-400">
-                URL não reconhecida.
-              </p>
-            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-npb-border pt-4">

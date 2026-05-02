@@ -88,10 +88,13 @@ export function StudentEditForm({
             >
               <option value="student">Aluno</option>
               <option value="moderator">Moderador</option>
+              <option value="ficticio">Fictício (teste)</option>
             </select>
           )}
           <p className="text-[10px] text-npb-text-muted">
             Moderador acessa todos os cursos e pode moderar a comunidade.
+            Fictício é tratado como aluno; só serve pra você diferenciar
+            usuários de teste em relatórios.
           </p>
         </div>
       </div>

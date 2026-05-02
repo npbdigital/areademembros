@@ -19,9 +19,12 @@ import {
   Pilcrow,
   Strikethrough,
   Undo2,
+  Video,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { videoEmbedUrl } from "@/lib/community";
+import { VideoEmbed } from "@/lib/tiptap-video-embed";
 
 interface RichTextEditorProps {
   name: string;
@@ -58,6 +61,7 @@ export function RichTextEditor({
           class: "rounded-md border border-npb-border my-3 max-w-full h-auto",
         },
       }),
+      VideoEmbed,
     ],
     content: defaultValue,
     editorProps: {
@@ -233,6 +237,24 @@ function Toolbar({
           />
         </label>
       )}
+      <ToolbarButton
+        onClick={() => {
+          const url = window.prompt(
+            "Cole a URL do YouTube ou Vimeo:",
+            "https://",
+          );
+          if (!url) return;
+          const embed = videoEmbedUrl(url);
+          if (!embed) {
+            toast.error("URL não reconhecida (use YouTube ou Vimeo).");
+            return;
+          }
+          editor.chain().focus().setVideoEmbed({ src: embed }).run();
+        }}
+        label="Inserir vídeo (YouTube/Vimeo)"
+      >
+        <Video className="h-3.5 w-3.5" />
+      </ToolbarButton>
       <Separator />
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}

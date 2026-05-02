@@ -4,14 +4,27 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminStudentsPage() {
+// Aluno + fictício são listados juntos. Fictício é só uma flag visual
+// (mesma permissão de aluno), mas admin precisa diferenciar pra triagem.
+const STUDENT_LIKE_ROLES = ["student", "ficticio"] as const;
+
+export default async function AdminStudentsPage({
+  searchParams,
+}: {
+  searchParams?: { showFicticio?: string };
+}) {
   const supabase = createClient();
+  const showFicticio = searchParams?.showFicticio !== "0";
+
+  const rolesFilter = showFicticio
+    ? (STUDENT_LIKE_ROLES as readonly string[])
+    : ["student"];
 
   const { data: students } = await supabase
     .schema("membros")
     .from("users")
     .select("id, full_name, email, phone, avatar_url, is_active, created_at, role")
-    .eq("role", "student")
+    .in("role", rolesFilter as string[])
     .order("created_at", { ascending: false });
 
   const list = students ?? [];
@@ -42,13 +55,25 @@ export default async function AdminStudentsPage() {
               : `${list.length} aluno${list.length > 1 ? "s" : ""}.`}
           </p>
         </div>
-        <Link
-          href="/admin/students/new"
-          className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-3.5 py-2 text-sm font-semibold text-black transition-colors hover:bg-npb-gold-light"
-        >
-          <UserPlus className="h-4 w-4" />
-          Novo aluno
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href={
+              showFicticio
+                ? "/admin/students?showFicticio=0"
+                : "/admin/students"
+            }
+            className="text-xs text-npb-text-muted hover:text-npb-gold"
+          >
+            {showFicticio ? "Esconder fictícios" : "Mostrar fictícios"}
+          </Link>
+          <Link
+            href="/admin/students/new"
+            className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-3.5 py-2 text-sm font-semibold text-black transition-colors hover:bg-npb-gold-light"
+          >
+            <UserPlus className="h-4 w-4" />
+            Novo aluno
+          </Link>
+        </div>
       </div>
 
       {list.length === 0 ? (
@@ -110,8 +135,13 @@ export default async function AdminStudentsPage() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <div className="truncate font-medium text-npb-text">
+                        <div className="flex items-center gap-1.5 truncate font-medium text-npb-text">
                           {s.full_name || "(sem nome)"}
+                          {s.role === "ficticio" && (
+                            <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-blue-300">
+                              Fictício
+                            </span>
+                          )}
                         </div>
                         <div className="truncate text-xs text-npb-text-muted">
                           {s.email}

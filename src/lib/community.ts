@@ -100,13 +100,26 @@ export function videoEmbedUrl(url: string | null | undefined): string | null {
 
 /**
  * Sanitiza HTML do TipTap removendo tags perigosas (XSS guard).
- * Implementação minimal — para casos sensíveis, considerar isomorphic-dompurify.
+ *
+ * Iframes só passam quando o `src` é YouTube embed ou Vimeo player — esses
+ * são reescritos com atributos seguros conhecidos. Qualquer outro iframe é
+ * removido. Implementação minimal — para casos sensíveis, considerar
+ * isomorphic-dompurify.
  */
 export function sanitizePostHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
+    .replace(/<iframe[^>]*>(?:[\s\S]*?<\/iframe>)?/gi, (match) => {
+      const srcMatch = match.match(/src\s*=\s*"([^"]+)"/i);
+      if (!srcMatch) return "";
+      const src = srcMatch[1];
+      const isYouTube =
+        /^https:\/\/(?:www\.)?youtube(?:-nocookie)?\.com\/embed\//.test(src);
+      const isVimeo = /^https:\/\/player\.vimeo\.com\/video\//.test(src);
+      if (!isYouTube && !isVimeo) return "";
+      return `<iframe src="${src}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen class="aspect-video w-full rounded-md border border-npb-border my-3"></iframe>`;
+    })
     .replace(/\son\w+="[^"]*"/gi, "")
     .replace(/\son\w+='[^']*'/gi, "")
     .replace(/javascript:/gi, "");

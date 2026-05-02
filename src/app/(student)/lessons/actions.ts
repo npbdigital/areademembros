@@ -51,7 +51,7 @@ export async function toggleCompleteAction(
         action: "lesson_complete",
       });
 
-      // XP por concluir aula (idempotente por lessonId no trimestre)
+      // XP por concluir aula (idempotente por lessonId — só rende 1x na vida)
       const adminSb = createAdminClient();
       const settings = await getPlatformSettings(adminSb);
       if (settings.gamificationEnabled && settings.xpLessonComplete > 0) {
@@ -187,7 +187,7 @@ export async function rateLessonAction(
 
     if (error) return { ok: false, error: error.message };
 
-    // XP por avaliar (1x por aula no trimestre)
+    // XP por avaliar (1x por aula — só rende uma vez)
     const adminSb = createAdminClient();
     const settings = await getPlatformSettings(adminSb);
     if (settings.gamificationEnabled) {

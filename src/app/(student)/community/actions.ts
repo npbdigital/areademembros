@@ -122,7 +122,13 @@ export async function editPostAction(
 
     const title = String(formData.get("title") ?? "").trim();
     const bodyHtml = String(formData.get("body") ?? "").trim();
-    const videoUrl = String(formData.get("video_url") ?? "").trim() || null;
+    // video_url só é tocado se a chave estiver presente — formulário novo não
+    // manda mais (vídeo agora vem inline no content_html). Posts legados com
+    // video_url separado preservam o valor.
+    const hasVideoKey = formData.has("video_url");
+    const videoUrl = hasVideoKey
+      ? String(formData.get("video_url") ?? "").trim() || null
+      : undefined;
 
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (title.length > 150)
@@ -147,15 +153,16 @@ export async function editPostAction(
     }
 
     const safeHtml = sanitizePostHtml(bodyHtml);
+    const update: Record<string, unknown> = {
+      title,
+      content_html: safeHtml,
+      updated_at: new Date().toISOString(),
+    };
+    if (videoUrl !== undefined) update.video_url = videoUrl;
     const { error } = await adminSb
       .schema("membros")
       .from("community_topics")
-      .update({
-        title,
-        content_html: safeHtml,
-        video_url: videoUrl,
-        updated_at: new Date().toISOString(),
-      })
+      .update(update)
       .eq("id", topicId);
     if (error) return { ok: false, error: error.message };
 

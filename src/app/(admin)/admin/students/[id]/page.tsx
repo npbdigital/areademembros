@@ -113,6 +113,11 @@ export default async function EditStudentPage({
                 <Shield className="h-3 w-3" /> Moderador
               </span>
             )}
+            {student.role === "ficticio" && (
+              <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-300">
+                Fictício
+              </span>
+            )}
           </div>
           <p className="text-sm text-npb-text-muted">{student.email}</p>
           <p className="mt-0.5 text-xs text-npb-text-muted">

@@ -520,11 +520,11 @@ export function PlatformSettingsForm({
 
         <div className="rounded-md border border-npb-border bg-npb-bg3 p-3">
           <p className="text-xs font-semibold text-npb-text">
-            Reset trimestral fixo
+            XP cumulativo
           </p>
           <p className="mt-1 text-xs text-npb-text-muted">
-            XP zera no 1º dia de cada trimestre civil (jan/abr/jul/out).
-            Conquistas e streak histórico são preservados.
+            XP soma sempre — não zera por trimestre. Cada ação rende XP no
+            máximo 1x na vida do aluno (idempotência por reference_id).
           </p>
         </div>
 

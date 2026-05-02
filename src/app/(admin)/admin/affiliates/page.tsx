@@ -7,6 +7,8 @@ import {
 import { createAdminClient } from "@/lib/supabase/server";
 import { AffiliateRowActions } from "@/components/admin/affiliate-row-actions";
 import { ReprocessPendingButton } from "@/components/admin/reprocess-pending-button";
+import { AttachOrphanButton } from "@/components/admin/attach-orphan-button";
+import { formatDateBrt, formatShortBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -266,7 +268,7 @@ export default async function AdminAffiliatesPage() {
                         R$ {formatBRL(stats.commission)}
                       </td>
                       <td className="px-4 py-3 text-xs text-npb-text-muted">
-                        {new Date(l.registered_at).toLocaleDateString("pt-BR")}
+                        {formatDateBrt(l.registered_at)}
                       </td>
                       <td className="px-4 py-3">
                         <AffiliateRowActions
@@ -326,12 +328,7 @@ export default async function AdminAffiliatesPage() {
                       className="transition-colors hover:bg-npb-bg3/50"
                     >
                       <td className="px-4 py-2 text-xs text-npb-text-muted whitespace-nowrap">
-                        {s.approved_at
-                          ? new Date(s.approved_at).toLocaleDateString(
-                              "pt-BR",
-                              { day: "2-digit", month: "short" },
-                            )
-                          : "—"}
+                        {formatShortBrt(s.approved_at)}
                       </td>
                       <td className="px-4 py-2 text-xs">
                         {s.product_name ?? "(sem nome)"}
@@ -350,7 +347,22 @@ export default async function AdminAffiliatesPage() {
                             {u.full_name ?? u.email}
                           </span>
                         ) : (
-                          <span className="text-yellow-400">órfã</span>
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center gap-1 rounded bg-yellow-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-400">
+                              órfã
+                            </span>
+                            <div className="text-[10px] text-npb-text-muted">
+                              {s.kiwify_name ?? "(sem nome)"}
+                              <br />
+                              <span className="text-npb-gold">
+                                {s.kiwify_email}
+                              </span>
+                            </div>
+                            <AttachOrphanButton
+                              saleId={s.id}
+                              suggestedEmail={s.kiwify_email}
+                            />
+                          </div>
                         )}
                       </td>
                       <td className="px-4 py-2">

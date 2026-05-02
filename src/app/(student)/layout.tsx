@@ -86,7 +86,7 @@ export default async function StudentLayout({
     try {
       const adminSb = createAdminClient();
       const xp = await ensureUserXp(adminSb, user.id);
-      const lvl = levelFromXp(xp.total_xp);
+      const lvl = levelFromXp(xp.total_xp, xp.min_level ?? 1);
       xpInfo = {
         totalXp: xp.total_xp,
         level: lvl.level,

@@ -8,14 +8,19 @@ import { verifyKiwifySignature } from "@/lib/affiliates/hmac";
  *
  * Pipeline:
  *  1. Valida ?token=... contra KIWIFY_WEBHOOK_TOKEN (autenticidade básica)
- *  2. Tenta validar HMAC-SHA1 via ?signature=... (defesa em camada — se a
- *     Kiwify mandou signature e bateu, marca como verificado; se não bateu,
- *     loga e rejeita)
+ *  2. Tenta validar HMAC-SHA1 via ?signature=... usando KIWIFY_WEBHOOK_SECRET
+ *     (campo "Token" da Kiwify). Sem secret configurado → pula HMAC.
+ *     Sem signature na query → segue (Kiwify pode mudar). Inválido → rejeita.
  *  3. Salva tudo em afiliados.sales_raw (raw_payload + raw_headers + query)
  *  4. Chama processSalesRaw em background (cria afiliados.sales, atribui
  *     XP, dispara conquistas)
  *  5. Retorna 200 sempre (mesmo com erro de processamento — Kiwify não
  *     deve reenviar, a gente vê pelos logs e marca processed=false)
+ *
+ * 2 env vars distintos:
+ *  - KIWIFY_WEBHOOK_TOKEN: o segredo no `?token=` da URL configurada na Kiwify
+ *  - KIWIFY_WEBHOOK_SECRET: o "Token" mostrado no painel da Kiwify (HMAC).
+ *    Se ausente, fallback pra KIWIFY_WEBHOOK_TOKEN por compat.
  */
 
 export const dynamic = "force-dynamic";
@@ -55,12 +60,14 @@ export async function POST(req: NextRequest) {
     parsed = { _raw_text: rawText };
   }
 
-  // Validação HMAC (defesa em camada)
+  // Validação HMAC (defesa em camada). Secret separado do token de URL —
+  // a Kiwify mostra esses valores em campos diferentes do painel.
   const signature = url.searchParams.get("signature");
+  const hmacSecret = process.env.KIWIFY_WEBHOOK_SECRET ?? expectedToken;
   const sigCheck = verifyKiwifySignature({
     rawBody: rawText,
     signature,
-    secret: expectedToken,
+    secret: hmacSecret,
   });
   if (sigCheck === false) {
     // Assinatura PRESENTE mas INVÁLIDA — rejeita (não é Kiwify ou foi adulterado)
