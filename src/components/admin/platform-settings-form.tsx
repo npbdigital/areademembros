@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useFormState } from "react-dom";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Film, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 import { CoverUpload } from "@/components/admin/cover-upload";
+import { VideoPicker, type VideoPick } from "@/components/admin/video-picker";
 import {
   type ActionResult,
   updatePlatformSettingsAction,
@@ -36,6 +38,56 @@ export function PlatformSettingsForm({
     updatePlatformSettingsAction,
     null,
   );
+
+  const [welcomeVideo, setWelcomeVideo] = useState<{
+    videoId: string;
+    title?: string;
+    thumbnail?: string;
+  } | null>(
+    init.welcomeVideoId
+      ? {
+          videoId: init.welcomeVideoId,
+          thumbnail: `https://i.ytimg.com/vi/${init.welcomeVideoId}/mqdefault.jpg`,
+        }
+      : null,
+  );
+
+  // Quando o form carrega só com videoId (sem title), busca o título no
+  // YouTube pra mostrar pro admin saber qual vídeo está vinculado.
+  useEffect(() => {
+    if (!welcomeVideo?.videoId || welcomeVideo.title) return;
+    let cancelled = false;
+    fetch(
+      `/api/youtube/video-details?videoId=${encodeURIComponent(welcomeVideo.videoId)}`,
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.ok && data.video?.title) {
+          setWelcomeVideo((prev) =>
+            prev && prev.videoId === data.video.videoId
+              ? {
+                  ...prev,
+                  title: data.video.title,
+                  thumbnail: data.video.thumbnail ?? prev.thumbnail,
+                }
+              : prev,
+          );
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [welcomeVideo?.videoId, welcomeVideo?.title]);
+
+  function handlePickWelcomeVideo(v: VideoPick) {
+    setWelcomeVideo({
+      videoId: v.videoId,
+      title: v.title,
+      thumbnail: v.thumbnail,
+    });
+  }
 
   return (
     <form action={formAction} className="flex flex-col gap-6">
@@ -231,20 +283,65 @@ export function PlatformSettingsForm({
           />
         </div>
 
-        <div className="space-y-1.5">
-          <Label htmlFor="welcome_video_id" className="text-npb-text">
-            ID do vídeo do YouTube (opcional)
-          </Label>
-          <Input
-            id="welcome_video_id"
+        <div className="space-y-2">
+          <Label className="text-npb-text">Vídeo de boas-vindas (opcional)</Label>
+          <input
+            type="hidden"
             name="welcome_video_id"
-            defaultValue={init.welcomeVideoId ?? ""}
-            placeholder="Ex: dQw4w9WgXcQ"
-            className="bg-npb-bg3 border-npb-border text-npb-text font-mono"
+            value={welcomeVideo?.videoId ?? ""}
           />
+
+          {welcomeVideo ? (
+            <div className="flex gap-3 rounded-md border border-npb-gold-dim/50 bg-npb-bg3 p-3">
+              <div className="h-16 w-28 flex-shrink-0 overflow-hidden rounded bg-black">
+                {welcomeVideo.thumbnail && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={welcomeVideo.thumbnail}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                )}
+              </div>
+              <div className="flex flex-1 flex-col justify-center min-w-0">
+                {welcomeVideo.title && (
+                  <span className="line-clamp-2 text-sm font-medium text-npb-text">
+                    {welcomeVideo.title}
+                  </span>
+                )}
+                <span className="font-mono text-xs text-npb-text-muted">
+                  {welcomeVideo.videoId}
+                </span>
+              </div>
+              <div className="flex flex-shrink-0 flex-col gap-1.5">
+                <VideoPicker
+                  currentVideoId={welcomeVideo.videoId}
+                  onPick={handlePickWelcomeVideo}
+                />
+                <button
+                  type="button"
+                  onClick={() => setWelcomeVideo(null)}
+                  className="inline-flex items-center justify-center gap-1 rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-xs text-npb-text-muted transition-colors hover:bg-red-500/10 hover:text-red-400"
+                >
+                  <X className="h-3 w-3" /> Remover
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-md border border-dashed border-npb-border bg-npb-bg3 p-3">
+              <div className="flex h-16 w-28 flex-shrink-0 items-center justify-center rounded bg-npb-bg4 text-npb-text-muted">
+                <Film className="h-5 w-5 opacity-50" />
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <span className="text-xs text-npb-text-muted">
+                  Nenhum vídeo selecionado.
+                </span>
+                <VideoPicker onPick={handlePickWelcomeVideo} />
+              </div>
+            </div>
+          )}
           <p className="text-[11px] text-npb-text-muted">
-            Apenas o ID (parte depois de <code>v=</code> na URL). Quando
-            preenchido, o player aparece no topo do popup.
+            Quando selecionado, o player aparece no topo do popup de boas-vindas.
           </p>
         </div>
 

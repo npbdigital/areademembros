@@ -1,7 +1,7 @@
 "use client";
 
 import { useFormState } from "react-dom";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, KeyRound } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
@@ -21,6 +21,7 @@ export function StudentCreateForm({
   cohortOptions,
   defaultCohortId,
 }: StudentCreateFormProps) {
+  const defaultCheckedIds = defaultCohortId ? new Set([defaultCohortId]) : new Set<string>();
   const [state, formAction] = useFormState<
     ActionResult<CreateStudentResult> | null,
     FormData
@@ -93,31 +94,46 @@ export function StudentCreateForm({
 
         <fieldset className="space-y-3 rounded-md border border-npb-border bg-npb-bg3 p-4">
           <legend className="-ml-1 px-1 text-sm font-medium text-npb-text">
-            Matrícula (opcional)
+            Matrículas (opcional)
           </legend>
-          <div className="space-y-1.5">
-            <Label htmlFor="cohort_id" className="text-npb-text-muted text-xs">
-              Turma
-            </Label>
-            <select
-              id="cohort_id"
-              name="cohort_id"
-              defaultValue={defaultCohortId ?? ""}
-              className="w-full rounded-md border border-npb-border bg-npb-bg2 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-            >
-              <option value="">— Sem matrícula —</option>
-              {cohortOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-npb-text-muted">
-              A duração do acesso é definida pela turma (configurada em{" "}
-              <code>/admin/cohorts</code>).
+          <p className="text-[11px] text-npb-text-muted">
+            Marque uma ou mais turmas. A duração do acesso de cada matrícula é
+            definida pela turma (configurada em <code>/admin/cohorts</code>).
+          </p>
+          {cohortOptions.length === 0 ? (
+            <p className="text-xs text-npb-text-muted italic">
+              Nenhuma turma cadastrada.
             </p>
-          </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 max-h-64 overflow-y-auto npb-scrollbar pr-1">
+              {cohortOptions.map((c) => (
+                <label
+                  key={c.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md border border-npb-border bg-npb-bg2 px-3 py-2 text-sm text-npb-text transition hover:border-npb-gold-dim"
+                >
+                  <input
+                    type="checkbox"
+                    name="cohort_ids"
+                    value={c.id}
+                    defaultChecked={defaultCheckedIds.has(c.id)}
+                    className="h-4 w-4 accent-npb-gold"
+                  />
+                  <span className="truncate">{c.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
         </fieldset>
+
+        <div className="flex items-start gap-2 rounded-md border border-npb-gold/40 bg-npb-gold/5 p-3 text-xs text-npb-text">
+          <KeyRound className="mt-0.5 h-4 w-4 flex-shrink-0 text-npb-gold" />
+          <div>
+            <strong className="text-npb-gold">Senha padrão:</strong> todo aluno
+            criado por aqui recebe a senha <code className="rounded bg-npb-bg3 px-1.5 py-0.5 font-mono">123456</code>. O e-mail de boas-vindas
+            mostra essa senha e o link de login. Recomende ao aluno trocar em
+            <em> Meu perfil → Trocar senha</em>.
+          </div>
+        </div>
 
         {state?.error && (
           <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">

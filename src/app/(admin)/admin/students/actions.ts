@@ -5,6 +5,10 @@ import { headers } from "next/headers";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
 import { expiresAtFromDuration } from "@/lib/enrollment";
+import { getPlatformSettings } from "@/lib/settings";
+
+/** Senha padrão atribuída a todo aluno criado via /admin/students/new. */
+const DEFAULT_STUDENT_PASSWORD = "123456";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -74,7 +78,10 @@ export async function createStudentAction(
   const fullName = str(formData, "full_name");
   const email = str(formData, "email").toLowerCase();
   const phone = nullableStr(formData, "phone");
-  const cohortId = nullableStr(formData, "cohort_id");
+  const cohortIds = formData
+    .getAll("cohort_ids")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
   const role = str(formData, "role") || "student";
 
   if (!fullName) return { ok: false, error: "Nome é obrigatório." };
@@ -96,13 +103,15 @@ export async function createStudentAction(
     (u) => u.email?.toLowerCase() === email,
   );
 
+  let isNewUser = false;
   if (existing) {
     userId = existing.id;
   } else {
     const { data: created, error: createErr } =
       await supabase.auth.admin.createUser({
         email,
-        email_confirm: true, // marca como confirmado pra ele só precisar setar senha
+        password: DEFAULT_STUDENT_PASSWORD,
+        email_confirm: true,
       });
     if (createErr || !created.user) {
       return {
@@ -111,6 +120,7 @@ export async function createStudentAction(
       };
     }
     userId = created.user.id;
+    isNewUser = true;
   }
 
   // 2. Upsert em membros.users
@@ -135,78 +145,94 @@ export async function createStudentAction(
     };
   }
 
-  // 3. Matricula (se cohort selecionada) — expires_at vem da duração da turma
-  if (cohortId) {
-    const { data: cohort } = await supabase
+  // 3. Matriculas — uma por turma selecionada (idempotente)
+  if (cohortIds.length > 0) {
+    const { data: cohorts } = await supabase
       .schema("membros")
       .from("cohorts")
-      .select("default_duration_days")
-      .eq("id", cohortId)
-      .single();
-    const expiresAt = expiresAtFromDuration(cohort?.default_duration_days);
+      .select("id, default_duration_days")
+      .in("id", cohortIds);
+    const durationByCohort = new Map(
+      ((cohorts ?? []) as Array<{
+        id: string;
+        default_duration_days: number | null;
+      }>).map((c) => [c.id, c.default_duration_days]),
+    );
 
-    const { data: existingEnroll } = await supabase
+    const { data: existingEnrolls } = await supabase
       .schema("membros")
       .from("enrollments")
-      .select("id")
+      .select("id, cohort_id")
       .eq("user_id", userId)
-      .eq("cohort_id", cohortId)
-      .maybeSingle();
+      .in("cohort_id", cohortIds);
+    const existingByCohort = new Map(
+      ((existingEnrolls ?? []) as Array<{ id: string; cohort_id: string }>).map(
+        (e) => [e.cohort_id, e.id],
+      ),
+    );
 
-    if (existingEnroll) {
-      await supabase
-        .schema("membros")
-        .from("enrollments")
-        .update({
-          is_active: true,
+    for (const cohortId of cohortIds) {
+      const expiresAt = expiresAtFromDuration(durationByCohort.get(cohortId));
+      const existingId = existingByCohort.get(cohortId);
+
+      if (existingId) {
+        await supabase
+          .schema("membros")
+          .from("enrollments")
+          .update({
+            is_active: true,
+            expires_at: expiresAt,
+            enrolled_at: new Date().toISOString(),
+          })
+          .eq("id", existingId);
+      } else {
+        await supabase.schema("membros").from("enrollments").insert({
+          user_id: userId,
+          cohort_id: cohortId,
           expires_at: expiresAt,
-          enrolled_at: new Date().toISOString(),
-        })
-        .eq("id", existingEnroll.id);
-    } else {
-      await supabase.schema("membros").from("enrollments").insert({
-        user_id: userId,
-        cohort_id: cohortId,
-        expires_at: expiresAt,
-        source: "manual",
-      });
+          source: "manual",
+        });
+      }
     }
   }
 
-  // 4. Gera magic link de recovery (define senha)
-  const { data: linkData, error: linkErr } =
-    await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email,
-      options: {
-        redirectTo: `${origin}/auth/callback?next=/reset-password`,
-      },
-    });
+  // 4. Gera link de recovery (fallback caso aluno queira definir senha agora)
+  const { data: linkData } = await supabase.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: {
+      redirectTo: `${origin}/auth/callback?next=/reset-password`,
+    },
+  });
+  const inviteUrl = linkData?.properties?.action_link ?? "";
 
-  if (linkErr || !linkData.properties?.action_link) {
-    return {
-      ok: false,
-      error: `Falha ao gerar convite: ${linkErr?.message ?? "desconhecido"}`,
-    };
-  }
+  // 5. Envia o e-mail com credenciais (login + senha padrão)
+  const settings = await getPlatformSettings(supabase);
+  const loginUrl = `${origin}/login?email=${encodeURIComponent(email)}`;
 
-  const inviteUrl = linkData.properties.action_link;
-
-  // 5. Tenta enviar via Resend (best effort — se falhar, admin copia link)
   const emailResult = await sendEmail({
     to: email,
-    subject: "Bem-vindo à Academia NPB — Crie sua senha",
-    html: inviteEmailHtml({ fullName, inviteUrl }),
+    subject: `Seu acesso à ${settings.platformName} está pronto`,
+    html: inviteEmailHtml({
+      fullName,
+      email,
+      // Só mostra a senha quando criamos o user agora — usuário existente já
+      // tem a sua, não vamos sobrescrever.
+      password: isNewUser ? DEFAULT_STUDENT_PASSWORD : null,
+      loginUrl,
+      inviteUrl,
+      platformName: settings.platformName,
+    }),
   });
 
   revalidatePath("/admin/students");
-  if (cohortId) revalidatePath(`/admin/cohorts/${cohortId}`);
+  for (const cId of cohortIds) revalidatePath(`/admin/cohorts/${cId}`);
 
   return {
     ok: true,
     data: {
       userId,
-      inviteUrl,
+      inviteUrl: loginUrl,
       emailSent: emailResult.ok,
       emailError: emailResult.error,
     },
@@ -354,13 +380,21 @@ export async function resendInviteAction(
   }
 
   const inviteUrl = linkData.properties.action_link;
+  const settings = await getPlatformSettings(supabase);
+  const loginUrl = `${origin}/login?email=${encodeURIComponent(profile.email)}`;
 
   const emailResult = await sendEmail({
     to: profile.email,
-    subject: "Academia NPB — Acesso à sua conta",
+    subject: `${settings.platformName} — Acesso à sua conta`,
     html: inviteEmailHtml({
       fullName: profile.full_name ?? "",
+      email: profile.email,
+      // Resend não sobrescreve a senha — admin pode usar /admin/students/[id]
+      // → "Definir senha manualmente" se quiser forçar uma nova.
+      password: null,
+      loginUrl,
       inviteUrl,
+      platformName: settings.platformName,
     }),
   });
 

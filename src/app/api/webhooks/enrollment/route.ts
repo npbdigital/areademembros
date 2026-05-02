@@ -281,12 +281,21 @@ async function sendInvite(
     });
 
     const inviteUrl = linkData?.properties?.action_link;
-    if (!inviteUrl) return false;
+    const loginUrl = `${origin}/login?email=${encodeURIComponent(email)}`;
 
     const result = await sendEmail({
       to: email,
-      subject: "Bem-vindo à Academia NPB — Crie sua senha",
-      html: inviteEmailHtml({ fullName: fullName || "novo aluno", inviteUrl }),
+      subject: "Bem-vindo à área de membros",
+      html: inviteEmailHtml({
+        fullName: fullName || "novo aluno",
+        email,
+        // Webhook não define senha — usuário usa o link de recovery
+        // (ou clica em "esqueci senha" depois). Se quiser senha padrão
+        // aqui também, daria pra adicionar como TODO.
+        password: null,
+        loginUrl,
+        inviteUrl,
+      }),
     });
     return result.ok;
   } catch {

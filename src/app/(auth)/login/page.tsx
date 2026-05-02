@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useFormState } from "react-dom";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { signInAction, type ActionResult } from "../actions";
@@ -12,6 +13,18 @@ import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
+  const params = useSearchParams();
+  const prefilledEmail = params.get("email") ?? "";
+  const queryError = params.get("error") ?? null;
+
   const [state, formAction] = useFormState<ActionResult | null, FormData>(
     signInAction,
     null,
@@ -20,6 +33,10 @@ export default function LoginPage() {
   useEffect(() => {
     if (state?.error) toast.error(state.error);
   }, [state]);
+
+  useEffect(() => {
+    if (queryError) toast.error(queryError);
+  }, [queryError]);
 
   return (
     <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-8 shadow-2xl">
@@ -44,6 +61,7 @@ export default function LoginPage() {
             type="email"
             autoComplete="email"
             required
+            defaultValue={prefilledEmail}
             placeholder="seu@email.com"
             className="h-11 border-npb-border bg-npb-bg3 text-npb-text placeholder:text-npb-text-muted/60 focus-visible:border-npb-gold focus-visible:ring-npb-gold/30"
           />
