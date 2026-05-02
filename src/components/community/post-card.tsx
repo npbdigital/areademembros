@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Heart, MessageCircle, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { timeAgoPtBr, videoEmbedUrl } from "@/lib/community";
 import { isElevatedRole, type AccessRole } from "@/lib/access";
@@ -10,6 +10,7 @@ import {
   deleteTopicAction,
   toggleTopicLikeAction,
 } from "@/app/(student)/community/actions";
+import { CreatePostButton } from "@/components/community/create-post-button";
 
 export interface PostCardData {
   id: string;
@@ -20,28 +21,36 @@ export interface PostCardData {
   likesCount: number;
   repliesCount: number;
   createdAt: string;
+  authorId: string;
   authorName: string;
   authorAvatarUrl: string | null;
   liked: boolean;
   pageSlug: string;
+  pageId: string;
+  pageTitle: string;
 }
 
 interface Props {
   post: PostCardData;
   currentRole: AccessRole;
+  currentUserId: string;
 }
 
-export function PostCard({ post, currentRole }: Props) {
+export function PostCard({ post, currentRole, currentUserId }: Props) {
   const [liked, setLiked] = useState(post.liked);
   const [likes, setLikes] = useState(post.likesCount);
   const [pendingLike, startLikeTransition] = useTransition();
   const [pendingDelete, startDeleteTransition] = useTransition();
   const [hidden, setHidden] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const isAuthor = post.authorId === currentUserId;
+  const canEdit = isAuthor || isElevatedRole(currentRole);
+  const canDelete = isAuthor || isElevatedRole(currentRole);
 
   const embed = videoEmbedUrl(post.videoUrl);
   const preview = stripHtml(post.contentHtml ?? "").slice(0, 240);
   const detailUrl = `/community/${post.pageSlug}/post/${post.id}`;
-
 
   function handleLike() {
     setLiked((p) => !p);
@@ -49,7 +58,6 @@ export function PostCard({ post, currentRole }: Props) {
     startLikeTransition(async () => {
       const res = await toggleTopicLikeAction(post.id);
       if (!res.ok) {
-        // rollback
         setLiked((p) => !p);
         setLikes((c) => (liked ? c + 1 : Math.max(c - 1, 0)));
         toast.error(res.error ?? "Falha ao curtir.");
@@ -58,6 +66,7 @@ export function PostCard({ post, currentRole }: Props) {
   }
 
   function handleDelete() {
+    setMenuOpen(false);
     if (!confirm(`Excluir "${post.title}"?`)) return;
     startDeleteTransition(async () => {
       const res = await deleteTopicAction(post.id, post.pageSlug);
@@ -96,16 +105,55 @@ export function PostCard({ post, currentRole }: Props) {
             {post.title}
           </Link>
         </div>
-        {isElevatedRole(currentRole) && (
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={pendingDelete}
-            title="Excluir publicação"
-            className="rounded-md p-1 text-npb-text-muted hover:bg-red-500/10 hover:text-red-400"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+
+        {(canEdit || canDelete) && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              title="Opções"
+              className="rounded-md p-1 text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-npb-border bg-npb-bg3 py-1 shadow-lg">
+                {canEdit && (
+                  <CreatePostButton
+                    pageId={post.pageId}
+                    pageTitle={post.pageTitle}
+                    editing={{
+                      topicId: post.id,
+                      title: post.title,
+                      bodyHtml: post.contentHtml ?? "",
+                      videoUrl: post.videoUrl,
+                    }}
+                    trigger={
+                      <button
+                        type="button"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Editar
+                      </button>
+                    }
+                  />
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={pendingDelete}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Excluir
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -119,6 +167,7 @@ export function PostCard({ post, currentRole }: Props) {
         </Link>
       )}
 
+      {/* Vídeo embaixo do texto, conforme decisão de produto */}
       {embed && (
         <div className="mt-3 aspect-video w-full overflow-hidden rounded-lg border border-npb-border bg-black">
           <iframe
@@ -129,17 +178,6 @@ export function PostCard({ post, currentRole }: Props) {
             className="h-full w-full"
           />
         </div>
-      )}
-
-      {post.imageUrl && !embed && (
-        <Link href={detailUrl} className="mt-3 block">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={post.imageUrl}
-            alt={post.title}
-            className="aspect-video w-full rounded-lg border border-npb-border object-cover"
-          />
-        </Link>
       )}
 
       <div className="mt-4 flex items-center gap-4 text-xs">
@@ -153,9 +191,7 @@ export function PostCard({ post, currentRole }: Props) {
               : "text-npb-text-muted hover:text-red-400"
           }`}
         >
-          <Heart
-            className={`h-4 w-4 ${liked ? "fill-current" : ""}`}
-          />
+          <Heart className={`h-4 w-4 ${liked ? "fill-current" : ""}`} />
           <span className="font-semibold">{likes}</span>
         </button>
         <Link

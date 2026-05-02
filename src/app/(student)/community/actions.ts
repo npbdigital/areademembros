@@ -109,6 +109,64 @@ export async function createPostAction(
 }
 
 // ============================================================
+// EDITAR POST (autor ou admin)
+// ============================================================
+export async function editPostAction(
+  topicId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    const userId = await requireUserId();
+    const supabase = createClient();
+    const role = await getUserRole(supabase, userId);
+
+    const title = String(formData.get("title") ?? "").trim();
+    const bodyHtml = String(formData.get("body") ?? "").trim();
+    const videoUrl = String(formData.get("video_url") ?? "").trim() || null;
+
+    if (!title) return { ok: false, error: "Título é obrigatório." };
+    if (title.length > 150)
+      return { ok: false, error: "Título muito longo (máx. 150)." };
+    if (bodyHtml.length > 50_000)
+      return { ok: false, error: "Conteúdo muito longo." };
+
+    // Verifica autoria via admin client (RLS bloquearia leitura cruzada)
+    const adminSb = createAdminClient();
+    const { data: existing } = await adminSb
+      .schema("membros")
+      .from("community_topics")
+      .select("user_id, page_id")
+      .eq("id", topicId)
+      .maybeSingle();
+    const t = existing as
+      | { user_id: string; page_id: string }
+      | null;
+    if (!t) return { ok: false, error: "Post não encontrado." };
+    if (t.user_id !== userId && !isElevatedRole(role)) {
+      return { ok: false, error: "Sem permissão pra editar." };
+    }
+
+    const safeHtml = sanitizePostHtml(bodyHtml);
+    const { error } = await adminSb
+      .schema("membros")
+      .from("community_topics")
+      .update({
+        title,
+        content_html: safeHtml,
+        video_url: videoUrl,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", topicId);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+// ============================================================
 // UPLOAD DE IMAGEM
 // ============================================================
 export async function uploadPostImageAction(

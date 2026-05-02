@@ -40,27 +40,28 @@ export default async function CommunityFeedPage() {
     created_at: string;
   }>;
 
-  // Mapa de page_id → slug pra montar URL
+  // Mapa de page_id → {slug, title} pra montar URL e label
   const pageIds = Array.from(new Set(posts.map((p) => p.page_id)));
-  const pageSlugMap = new Map<string, string>();
+  const pageMap = new Map<string, { slug: string; title: string }>();
   if (pageIds.length > 0) {
     const { data: pgs } = await supabase
       .schema("membros")
       .from("community_pages")
-      .select("id, slug, is_active")
+      .select("id, slug, title, is_active")
       .in("id", pageIds)
       .eq("is_active", true);
     for (const pg of (pgs ?? []) as Array<{
       id: string;
       slug: string | null;
+      title: string;
       is_active: boolean;
     }>) {
-      if (pg.slug) pageSlugMap.set(pg.id, pg.slug);
+      if (pg.slug) pageMap.set(pg.id, { slug: pg.slug, title: pg.title });
     }
   }
 
   // Filtra posts cuja página foi desativada / sem slug
-  const visiblePosts = posts.filter((p) => pageSlugMap.has(p.page_id));
+  const visiblePosts = posts.filter((p) => pageMap.has(p.page_id));
 
   // Hidrata autores
   const userIds = Array.from(new Set(visiblePosts.map((p) => p.user_id)));
@@ -102,6 +103,7 @@ export default async function CommunityFeedPage() {
 
   const cards: PostCardData[] = visiblePosts.map((p) => {
     const author = authors.get(p.user_id);
+    const pg = pageMap.get(p.page_id)!;
     return {
       id: p.id,
       title: p.title,
@@ -111,10 +113,13 @@ export default async function CommunityFeedPage() {
       likesCount: p.likes_count,
       repliesCount: p.replies_count,
       createdAt: p.created_at,
+      authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",
       authorAvatarUrl: author?.avatar_url ?? null,
       liked: likedSet.has(p.id),
-      pageSlug: pageSlugMap.get(p.page_id)!,
+      pageSlug: pg.slug,
+      pageId: p.page_id,
+      pageTitle: pg.title,
     };
   });
 
@@ -140,7 +145,12 @@ export default async function CommunityFeedPage() {
       ) : (
         <ul className="space-y-3">
           {cards.map((card) => (
-            <PostCard key={card.id} post={card} currentRole={role} />
+            <PostCard
+              key={card.id}
+              post={card}
+              currentRole={role}
+              currentUserId={user.id}
+            />
           ))}
         </ul>
       )}

@@ -222,7 +222,7 @@ export default async function PostDetailPage({
 
         {safeBody && (
           <div
-            className="prose prose-invert max-w-none text-sm leading-relaxed"
+            className="community-html text-[15px] text-npb-text"
             dangerouslySetInnerHTML={{ __html: safeBody }}
           />
         )}

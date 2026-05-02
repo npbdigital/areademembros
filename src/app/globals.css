@@ -42,6 +42,87 @@
   }
 }
 
+@layer components {
+  /* Conteúdo HTML de posts/comentários da comunidade.
+     Aplica spacing entre parágrafos, listas e títulos.
+     Imagens inline ficam responsivas. */
+  .community-html > *:first-child {
+    margin-top: 0;
+  }
+  .community-html > *:last-child {
+    margin-bottom: 0;
+  }
+  .community-html p {
+    margin-block: 0.85em;
+    line-height: 1.65;
+  }
+  .community-html h1 {
+    margin-block: 1.4em 0.7em;
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+  .community-html h2 {
+    margin-block: 1.3em 0.6em;
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+  .community-html h3 {
+    margin-block: 1.2em 0.5em;
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.3;
+  }
+  .community-html ul,
+  .community-html ol {
+    margin-block: 0.85em;
+    padding-left: 1.5em;
+  }
+  .community-html ul {
+    list-style: disc;
+  }
+  .community-html ol {
+    list-style: decimal;
+  }
+  .community-html li {
+    margin-block: 0.3em;
+    line-height: 1.55;
+  }
+  .community-html a {
+    color: #c9922a;
+    text-decoration: underline;
+  }
+  .community-html a:hover {
+    color: #d8a23a;
+  }
+  .community-html strong {
+    font-weight: 700;
+  }
+  .community-html img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin-block: 1em;
+    border-radius: 0.5rem;
+    border: 1px solid #2a2a2a;
+  }
+  .community-html blockquote {
+    margin-block: 1em;
+    padding-left: 1em;
+    border-left: 3px solid #c9922a;
+    color: #b8b8b8;
+    font-style: italic;
+  }
+  .community-html code {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    background: #1e1e1e;
+    padding: 0.15em 0.4em;
+    border-radius: 0.25em;
+    font-size: 0.9em;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

@@ -136,10 +136,13 @@ export default async function CommunityPagePage({
       likesCount: p.likes_count,
       repliesCount: p.replies_count,
       createdAt: p.created_at,
+      authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",
       authorAvatarUrl: author?.avatar_url ?? null,
       liked: likedSet.has(p.id),
       pageSlug: page.slug ?? params.slug,
+      pageId: page.id,
+      pageTitle: page.title,
     };
   });
 
@@ -192,7 +195,12 @@ export default async function CommunityPagePage({
       ) : (
         <ul className="space-y-3">
           {cards.map((card) => (
-            <PostCard key={card.id} post={card} currentRole={role} />
+            <PostCard
+              key={card.id}
+              post={card}
+              currentRole={role}
+              currentUserId={user.id}
+            />
           ))}
         </ul>
       )}

@@ -41,19 +41,21 @@ export default async function AdminCommunityIndex() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <header>
-        <h1 className="text-xl font-bold text-npb-text">Comunidade</h1>
-        <p className="text-sm text-npb-text-muted">
-          Modere publicações e veja o ranking. Espaços, páginas e atalhos da
-          sidebar são gerenciados direto da{" "}
-          <Link
-            href="/community"
-            className="text-npb-gold hover:text-npb-gold-light"
-          >
-            tela da comunidade
-          </Link>
-          .
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-npb-text">Comunidade</h1>
+          <p className="text-sm text-npb-text-muted">
+            Modere publicações e veja o ranking. Espaços, páginas e atalhos da
+            sidebar são gerenciados direto da tela da comunidade.
+          </p>
+        </div>
+        <Link
+          href="/community"
+          className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-3.5 py-2 text-sm font-semibold text-black transition-colors hover:bg-npb-gold-light"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Ver comunidade
+        </Link>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

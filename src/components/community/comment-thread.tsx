@@ -212,7 +212,7 @@ function CommentItem({
             </span>
           </div>
           <div
-            className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-npb-text"
+            className="community-html mt-1 text-sm text-npb-text"
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
         </div>

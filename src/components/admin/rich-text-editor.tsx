@@ -3,32 +3,42 @@
 import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import Image from "@tiptap/extension-image";
 import { useEffect, useState } from "react";
 import {
   Bold,
   Heading1,
   Heading2,
   Heading3,
+  ImagePlus,
   Italic,
   Link as LinkIcon,
   List,
   ListOrdered,
+  Loader2,
   Pilcrow,
   Strikethrough,
   Undo2,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface RichTextEditorProps {
   name: string;
   defaultValue?: string;
   placeholder?: string;
+  /**
+   * Quando passado, habilita botão de upload de imagem na toolbar.
+   * A função recebe o File e devolve a URL pública pra inserir no editor.
+   */
+  uploadImage?: (file: File) => Promise<string>;
 }
 
 export function RichTextEditor({
   name,
   defaultValue = "",
   placeholder = "Comece a escrever...",
+  uploadImage,
 }: RichTextEditorProps) {
   const [html, setHtml] = useState(defaultValue);
 
@@ -43,12 +53,17 @@ export function RichTextEditor({
           class: "text-npb-gold underline hover:text-npb-gold-light",
         },
       }),
+      Image.configure({
+        HTMLAttributes: {
+          class: "rounded-md border border-npb-border my-3 max-w-full h-auto",
+        },
+      }),
     ],
     content: defaultValue,
     editorProps: {
       attributes: {
         class:
-          "prose prose-invert max-w-none min-h-[200px] px-4 py-3 text-sm focus:outline-none",
+          "community-html max-w-none min-h-[200px] px-4 py-3 text-sm text-npb-text focus:outline-none",
       },
     },
     onUpdate: ({ editor }) => setHtml(editor.getHTML()),
@@ -65,7 +80,7 @@ export function RichTextEditor({
 
   return (
     <div className="rounded-md border border-npb-border bg-npb-bg3">
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} uploadImage={uploadImage} />
       <div className="border-t border-npb-border">
         {editor ? (
           <EditorContent editor={editor} placeholder={placeholder} />
@@ -80,9 +95,30 @@ export function RichTextEditor({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor | null }) {
+function Toolbar({
+  editor,
+  uploadImage,
+}: {
+  editor: Editor | null;
+  uploadImage?: (file: File) => Promise<string>;
+}) {
+  const [uploading, setUploading] = useState(false);
+
   if (!editor) {
     return <div className="h-10 bg-npb-bg2" />;
+  }
+
+  async function handleUpload(file: File) {
+    if (!uploadImage || !editor) return;
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      editor.chain().focus().setImage({ src: url }).run();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha no upload.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -169,6 +205,34 @@ function Toolbar({ editor }: { editor: Editor | null }) {
       >
         <LinkIcon className="h-3.5 w-3.5" />
       </ToolbarButton>
+      {uploadImage && (
+        <label
+          title={uploading ? "Enviando…" : "Inserir imagem"}
+          className={cn(
+            "flex h-7 w-7 cursor-pointer items-center justify-center rounded transition-colors",
+            uploading
+              ? "text-npb-gold"
+              : "text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text",
+          )}
+        >
+          {uploading ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ImagePlus className="h-3.5 w-3.5" />
+          )}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) handleUpload(f);
+              e.target.value = "";
+            }}
+            className="hidden"
+            disabled={uploading}
+          />
+        </label>
+      )}
       <Separator />
       <ToolbarButton
         onClick={() => editor.chain().focus().undo().run()}

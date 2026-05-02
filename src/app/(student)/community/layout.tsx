@@ -10,6 +10,7 @@ import {
   userHasCommunityAccess,
 } from "@/lib/community";
 import { CommunitySidebar } from "@/components/community/community-sidebar";
+import { CommunityMobileBar } from "@/components/community/community-mobile-bar";
 
 export const dynamic = "force-dynamic";
 
@@ -120,15 +121,22 @@ export default async function CommunityLayout({
     );
   }
 
+  const sidebarEl = (
+    <CommunitySidebar
+      spaces={spaces}
+      pages={pages}
+      links={links}
+      unreadByPage={Object.fromEntries(unreadByPage)}
+      canManage={role === "admin" || role === "moderator"}
+    />
+  );
+
   return (
-    <div className="-mx-4 -my-4 flex min-h-[calc(100vh-3.5rem)] md:-mx-8 md:-my-8">
-      <CommunitySidebar
-        spaces={spaces}
-        pages={pages}
-        links={links}
-        unreadByPage={Object.fromEntries(unreadByPage)}
-        canManage={role === "admin" || role === "moderator"}
-      />
+    <div className="-mx-4 -my-4 flex min-h-[calc(100vh-3.5rem)] flex-col md:-mx-8 md:-my-8 md:flex-row">
+      {/* Sidebar fixa em desktop */}
+      <div className="hidden md:flex">{sidebarEl}</div>
+      {/* Barra mobile com botão hamburger pra abrir sidebar */}
+      <CommunityMobileBar>{sidebarEl}</CommunityMobileBar>
       <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
         {children}
       </main>

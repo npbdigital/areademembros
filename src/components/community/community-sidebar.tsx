@@ -19,6 +19,7 @@ import {
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { EmojiPicker } from "@/components/emoji-picker";
 import type {
   CommunityPageRow,
   CommunitySidebarLinkRow,
@@ -64,7 +65,7 @@ export function CommunitySidebar({
   const orphanPages = pagesBySpace.get(null) ?? [];
 
   return (
-    <aside className="hidden md:flex w-64 min-w-64 flex-col border-r border-npb-border bg-npb-bg2">
+    <aside className="flex h-full w-full flex-col border-r border-npb-border bg-npb-bg2 md:w-64 md:min-w-64">
       <div className="border-b border-npb-border p-4">
         <div className="mb-3 flex items-center gap-2">
           <Smile className="h-5 w-5 text-npb-gold" />
@@ -171,17 +172,17 @@ function SpaceGroup({
 
   return (
     <div className="mb-3">
-      <div className="group flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-widest text-npb-text-muted">
+      <div className="group flex items-center gap-1 px-2 py-1.5 text-sm font-bold text-npb-text">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex items-center gap-1 hover:text-npb-text"
+          className="flex items-center gap-1.5 hover:text-npb-gold"
           disabled={!space}
         >
           {open ? (
-            <ChevronDown className="h-3 w-3" />
+            <ChevronDown className="h-4 w-4" />
           ) : (
-            <ChevronRight className="h-3 w-3" />
+            <ChevronRight className="h-4 w-4" />
           )}
           <span className="truncate">{space?.title ?? "Sem espaço"}</span>
         </button>
@@ -646,13 +647,7 @@ function CreatePageButton({ spaceId }: { spaceId: string | null }) {
 
   return (
     <form onSubmit={handleSubmit} className="mt-1 flex items-center gap-1.5 px-2">
-      <input
-        type="text"
-        value={icon}
-        onChange={(e) => setIcon(e.target.value)}
-        maxLength={2}
-        className="w-8 rounded-md border border-npb-border bg-npb-bg3 px-1 py-1.5 text-center text-base outline-none focus:border-npb-gold-dim"
-      />
+      <EmojiPicker value={icon} onChange={setIcon} size={32} />
       <input
         type="text"
         autoFocus
@@ -714,13 +709,7 @@ function EditPageForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-1.5 px-2 py-1">
-      <input
-        type="text"
-        value={icon}
-        onChange={(e) => setIcon(e.target.value)}
-        maxLength={2}
-        className="w-8 rounded-md border border-npb-border bg-npb-bg3 px-1 py-1.5 text-center text-base outline-none focus:border-npb-gold-dim"
-      />
+      <EmojiPicker value={icon} onChange={setIcon} size={32} />
       <input
         type="text"
         autoFocus
@@ -791,13 +780,7 @@ function CreateLinkButton() {
   return (
     <form onSubmit={handleSubmit} className="space-y-1.5 px-2">
       <div className="flex items-center gap-1.5">
-        <input
-          type="text"
-          value={icon}
-          onChange={(e) => setIcon(e.target.value)}
-          maxLength={2}
-          className="w-8 rounded-md border border-npb-border bg-npb-bg3 px-1 py-1.5 text-center text-base outline-none focus:border-npb-gold-dim"
-        />
+        <EmojiPicker value={icon} onChange={setIcon} size={32} />
         <input
           type="text"
           autoFocus

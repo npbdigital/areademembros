@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Loader2, Plus, Video, X } from "lucide-react";
+import { Loader2, Plus, Video, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   createPostAction,
@@ -15,24 +15,46 @@ import { RichTextEditor } from "@/components/admin/rich-text-editor";
 interface Props {
   pageId: string;
   pageTitle: string;
+  /**
+   * Quando passado, opera em modo de edição: pré-preenche título/body/vídeo
+   * e, no submit, chama editPostAction em vez de createPostAction.
+   */
+  editing?: {
+    topicId: string;
+    title: string;
+    bodyHtml: string;
+    videoUrl: string | null;
+  };
+  /** Trigger custom (substitui o botão "+ Nova publicação" padrão). */
+  trigger?: React.ReactNode;
 }
 
-export function CreatePostButton({ pageId, pageTitle }: Props) {
+export function CreatePostButton({
+  pageId,
+  pageTitle,
+  editing,
+  trigger,
+}: Props) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-3.5 py-2 text-sm font-semibold text-black transition hover:bg-npb-gold-light"
-      >
-        <Plus className="h-4 w-4" />
-        Nova publicação
-      </button>
+      {trigger ? (
+        <span onClick={() => setOpen(true)}>{trigger}</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-3.5 py-2 text-sm font-semibold text-black transition hover:bg-npb-gold-light"
+        >
+          <Plus className="h-4 w-4" />
+          Nova publicação
+        </button>
+      )}
       {open && (
-        <CreatePostModal
+        <PostModal
           pageId={pageId}
           pageTitle={pageTitle}
+          editing={editing}
           onClose={() => setOpen(false)}
         />
       )}
@@ -40,21 +62,21 @@ export function CreatePostButton({ pageId, pageTitle }: Props) {
   );
 }
 
-function CreatePostModal({
+function PostModal({
   pageId,
   pageTitle,
+  editing,
   onClose,
 }: {
   pageId: string;
   pageTitle: string;
+  editing?: Props["editing"];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [title, setTitle] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [title, setTitle] = useState(editing?.title ?? "");
+  const [videoUrl, setVideoUrl] = useState(editing?.videoUrl ?? "");
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -69,43 +91,47 @@ function CreatePostModal({
     };
   }, [onClose]);
 
-  async function handleImage(file: File) {
+  /** Upload pra Supabase Storage; retorna URL pública. */
+  async function uploadImage(file: File): Promise<string> {
     if (file.size > 10 * 1024 * 1024) {
-      toast.error("Imagem maior que 10MB.");
-      return;
+      throw new Error("Imagem maior que 10MB.");
     }
-    setUploading(true);
     const fd = new FormData();
     fd.append("file", file);
     const res = await uploadPostImageAction(fd);
-    setUploading(false);
-    if (res.ok && res.data) {
-      setImageUrl(res.data.url);
-    } else {
-      toast.error(res.error ?? "Falha no upload.");
+    if (!res.ok || !res.data) {
+      throw new Error(res.error ?? "Falha no upload.");
     }
+    return res.data.url;
   }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!title.trim()) return toast.error("Preencha o título.");
     const form = e.currentTarget;
-    // Pega `body` direto do hidden input do RichTextEditor
     const fd = new FormData(form);
     fd.set("page_id", pageId);
     fd.set("title", title.trim());
     if (videoUrl.trim()) fd.set("video_url", videoUrl.trim());
-    if (imageUrl) fd.set("image_url", imageUrl);
+    if (editing?.topicId) fd.set("topic_id", editing.topicId);
     startTransition(async () => {
-      const res = await createPostAction(null, fd);
+      // Importação dinâmica pra evitar circular dep no editPostAction
+      const { editPostAction } = await import(
+        "@/app/(student)/community/actions"
+      );
+      const res = editing
+        ? await editPostAction(editing.topicId, fd)
+        : await createPostAction(null, fd);
       if (res.ok) {
         toast.success(
-          "Publicação enviada! Aguardando aprovação dos moderadores.",
+          editing
+            ? "Publicação atualizada."
+            : "Publicação enviada! Aguardando aprovação dos moderadores.",
         );
         onClose();
         router.refresh();
       } else {
-        toast.error(res.error ?? "Falha ao publicar.");
+        toast.error(res.error ?? "Falha.");
       }
     });
   }
@@ -126,7 +152,7 @@ function CreatePostModal({
         <div className="flex items-center justify-between border-b border-npb-border px-5 py-3">
           <div>
             <h2 className="text-base font-bold text-npb-text">
-              Nova publicação
+              {editing ? "Editar publicação" : "Nova publicação"}
             </h2>
             <p className="text-xs text-npb-text-muted">em {pageTitle}</p>
           </div>
@@ -160,76 +186,34 @@ function CreatePostModal({
           </div>
 
           <div>
-            <RichTextEditor name="body" />
+            <RichTextEditor
+              name="body"
+              defaultValue={editing?.bodyHtml ?? ""}
+              uploadImage={uploadImage}
+            />
+            <p className="mt-1 text-[10px] text-npb-text-muted">
+              Use o ícone de imagem na barra de ferramentas pra adicionar fotos
+              dentro do texto.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-npb-text-muted">
-                <Video className="h-3.5 w-3.5" />
-                Vídeo (YouTube/Vimeo) — opcional
-              </label>
-              <input
-                type="url"
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="https://youtube.com/watch?v=..."
-                className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-              />
-              {videoUrl && !embed && (
-                <p className="mt-1 text-[10px] text-yellow-400">
-                  URL não reconhecida.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-npb-text-muted">
-                <ImagePlus className="h-3.5 w-3.5" />
-                Imagem — opcional
-              </label>
-              {imageUrl ? (
-                <div className="flex items-center gap-2">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageUrl}
-                    alt=""
-                    className="h-10 w-16 rounded border border-npb-border object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setImageUrl(null)}
-                    className="text-xs text-npb-text-muted hover:text-red-400"
-                  >
-                    Remover
-                  </button>
-                </div>
-              ) : (
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-npb-border bg-npb-bg3 px-3 py-2 text-xs text-npb-text-muted hover:border-npb-gold-dim">
-                  {uploading ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Enviando…
-                    </>
-                  ) : (
-                    <>
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      Escolher imagem (max 10MB)
-                    </>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) handleImage(f);
-                    }}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                </label>
-              )}
-            </div>
+          <div>
+            <label className="mb-1 inline-flex items-center gap-1.5 text-xs font-semibold text-npb-text-muted">
+              <Video className="h-3.5 w-3.5" />
+              Vídeo (YouTube/Vimeo) — opcional, fica no fim do post
+            </label>
+            <input
+              type="url"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://youtube.com/watch?v=..."
+              className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+            />
+            {videoUrl && !embed && (
+              <p className="mt-1 text-[10px] text-yellow-400">
+                URL não reconhecida.
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-npb-border pt-4">
@@ -242,14 +226,16 @@ function CreatePostModal({
             </button>
             <button
               type="submit"
-              disabled={pending || uploading}
+              disabled={pending}
               className="inline-flex items-center gap-2 rounded-md bg-npb-gold px-4 py-2 text-sm font-semibold text-black transition hover:bg-npb-gold-light disabled:opacity-50"
             >
               {pending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Publicando…
+                  {editing ? "Salvando…" : "Publicando…"}
                 </>
+              ) : editing ? (
+                "Salvar alterações"
               ) : (
                 "Publicar"
               )}

@@ -6,6 +6,7 @@ import { StudentSidebar } from "@/components/student-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
 import { WelcomeModal } from "@/components/student/welcome-modal";
+import { MobileNavToggle } from "@/components/mobile-nav-toggle";
 
 export default async function StudentLayout({
   children,
@@ -98,11 +99,14 @@ export default async function StudentLayout({
 
   return (
     <div className="flex min-h-screen bg-npb-bg">
-      <StudentSidebar
-        platformName={settings.platformName}
-        platformLogoUrl={settings.platformLogoUrl}
-      />
-      <div className="flex min-w-0 flex-1 flex-col pl-16">
+      {/* Sidebar fixa em desktop; em mobile fica oculta — abre via drawer no topbar */}
+      <div className="hidden md:flex">
+        <StudentSidebar
+          platformName={settings.platformName}
+          platformLogoUrl={settings.platformLogoUrl}
+        />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col md:pl-60">
         <Topbar
           user={{
             fullName: profile?.full_name ?? "",
@@ -114,6 +118,14 @@ export default async function StudentLayout({
           notificationsCount={notificationsCount ?? 0}
           notificationsItems={notificationsItems}
           xp={xpInfo}
+          mobileNav={
+            <MobileNavToggle ariaLabel="Abrir menu">
+              <StudentSidebar
+                platformName={settings.platformName}
+                platformLogoUrl={settings.platformLogoUrl}
+              />
+            </MobileNavToggle>
+          }
         />
         <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
           {children}
