@@ -5,7 +5,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/community";
 import { getPlatformSettings } from "@/lib/settings";
 import { tryAwardXp } from "@/lib/gamification";
-import { tryNotify } from "@/lib/notifications";
+import { notifyAndEmail } from "@/lib/notifications";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -87,11 +87,12 @@ export async function approvePostAction(
         .eq("id", t.page_id)
         .maybeSingle();
       const slug = (page as { slug: string | null } | null)?.slug;
-      await tryNotify({
+      await notifyAndEmail({
         userId: t.user_id,
         title: "Sua publicação foi aprovada",
         body: `"${t.title}" já está visível na comunidade.`,
         link: slug ? `/community/${slug}/post/${topicId}` : `/community`,
+        ctaLabel: "Ver post",
       });
     }
 
@@ -132,11 +133,12 @@ export async function rejectPostAction(
     if (error) return { ok: false, error: error.message };
 
     if (t && t.status !== "rejected") {
-      await tryNotify({
+      await notifyAndEmail({
         userId: t.user_id,
         title: "Sua publicação foi recusada",
         body: `"${t.title}" não foi aprovada pela moderação.`,
         link: `/community`,
+        ctaLabel: "Ir para a comunidade",
       });
     }
 

@@ -21,7 +21,9 @@ export default async function ProfilePage() {
   const { data: profile } = await supabase
     .schema("membros")
     .from("users")
-    .select("full_name, email, phone, avatar_url, created_at")
+    .select(
+      "full_name, email, phone, avatar_url, created_at, email_notifications_enabled",
+    )
     .eq("id", user.id)
     .single();
 
@@ -154,6 +156,9 @@ export default async function ProfilePage() {
             initialEmail={profile?.email ?? user.email ?? ""}
             initialPhone={profile?.phone ?? ""}
             initialAvatarUrl={profile?.avatar_url ?? null}
+            initialEmailNotificationsEnabled={
+              profile?.email_notifications_enabled !== false
+            }
           />
         </div>
       </section>

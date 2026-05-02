@@ -32,6 +32,9 @@ export async function updateProfileAction(
     const fullName = str(formData, "full_name");
     if (!fullName) return { ok: false, error: "Nome é obrigatório." };
 
+    const emailNotificationsEnabled =
+      formData.get("email_notifications_enabled") === "on";
+
     const supabase = createClient();
     const { error } = await supabase
       .schema("membros")
@@ -40,6 +43,7 @@ export async function updateProfileAction(
         full_name: fullName,
         phone: nullableStr(formData, "phone"),
         avatar_url: nullableStr(formData, "avatar_url"),
+        email_notifications_enabled: emailNotificationsEnabled,
       })
       .eq("id", userId);
 

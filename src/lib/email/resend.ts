@@ -165,6 +165,75 @@ export function inviteEmailHtml(params: {
 </html>`;
 }
 
+/**
+ * Template genérico de e-mail de notificação. Usado pelos eventos in-app
+ * que também devem disparar e-mail (resposta no post, novo curso publicado,
+ * conquista, etc.).
+ */
+export function notificationEmailHtml(params: {
+  recipientName?: string | null;
+  title: string;
+  body?: string | null;
+  ctaLabel?: string;
+  ctaUrl?: string | null;
+  platformName?: string;
+  platformLogoUrl?: string | null;
+  /** URL completa pra página de preferências (link de unsubscribe). */
+  preferencesUrl?: string | null;
+}): string {
+  const platformName = params.platformName ?? "Academia NPB";
+  const safePlatform = escapeHtml(platformName);
+  const safeTitle = escapeHtml(params.title);
+  const safeBody = params.body ? escapeHtml(params.body) : null;
+  const greeting = params.recipientName
+    ? `Olá, ${escapeHtml(params.recipientName.split(" ")[0])}!`
+    : "Olá!";
+
+  const logoBlock = params.platformLogoUrl
+    ? `<img src="${params.platformLogoUrl}" alt="${safePlatform}"
+           width="80" height="112"
+           style="display:inline-block;width:80px;height:112px;object-fit:contain;border-radius:8px;" />`
+    : `<div style="display:inline-block;width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#c9922a,#7a5618);text-align:center;line-height:40px;font-weight:700;color:#fff;">A</div>`;
+
+  const ctaBlock =
+    params.ctaUrl && params.ctaLabel
+      ? `<div style="text-align:center;margin:24px 0 8px;">
+          <a href="${params.ctaUrl}"
+             style="display:inline-block;background:#c9922a;color:#000;font-weight:700;padding:12px 28px;border-radius:10px;text-decoration:none;font-size:14px;">
+            ${escapeHtml(params.ctaLabel)}
+          </a>
+        </div>`
+      : "";
+
+  const prefsBlock = params.preferencesUrl
+    ? `<p style="text-align:center;margin-top:24px;font-size:11px;color:#666;line-height:1.5;">
+        Quer parar de receber e-mails de notificação?
+        <a href="${params.preferencesUrl}" style="color:#888;text-decoration:underline;">Ajustar preferências</a>.
+      </p>`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<body style="margin:0;padding:0;background:#0d0d0d;color:#f0f0f0;font-family:'Segoe UI',system-ui,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
+    <div style="text-align:center;margin-bottom:24px;">
+      ${logoBlock}
+      <div style="margin-top:10px;font-size:12px;letter-spacing:2px;color:#c9922a;">${safePlatform.toUpperCase()}</div>
+    </div>
+
+    <div style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:28px 24px;">
+      <p style="margin:0 0 8px;font-size:13px;color:#888;">${greeting}</p>
+      <h1 style="margin:0 0 12px;font-size:18px;font-weight:700;color:#f0f0f0;line-height:1.4;">${safeTitle}</h1>
+      ${safeBody ? `<p style="margin:0 0 4px;font-size:14px;line-height:1.6;color:#cfcfcf;">${safeBody}</p>` : ""}
+      ${ctaBlock}
+    </div>
+
+    ${prefsBlock}
+  </div>
+</body>
+</html>`;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

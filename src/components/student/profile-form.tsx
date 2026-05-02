@@ -19,6 +19,7 @@ interface Props {
   initialEmail: string;
   initialPhone: string;
   initialAvatarUrl: string | null;
+  initialEmailNotificationsEnabled?: boolean;
 }
 
 export function ProfileForm({
@@ -27,6 +28,7 @@ export function ProfileForm({
   initialEmail,
   initialPhone,
   initialAvatarUrl,
+  initialEmailNotificationsEnabled = true,
 }: Props) {
   const router = useRouter();
   const [state, formAction] = useFormState<ActionResult | null, FormData>(
@@ -92,6 +94,28 @@ export function ProfileForm({
           placeholder="+55 11 99999-9999"
           className="bg-npb-bg3 border-npb-border text-npb-text"
         />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-npb-text">Preferências de notificação</Label>
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-npb-border bg-npb-bg3 p-3 transition-colors hover:border-npb-gold-dim">
+          <input
+            type="checkbox"
+            name="email_notifications_enabled"
+            defaultChecked={initialEmailNotificationsEnabled}
+            className="mt-0.5 h-4 w-4 accent-npb-gold"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-npb-text">
+              Receber notificações por e-mail
+            </div>
+            <div className="text-xs text-npb-text-muted">
+              Eventos importantes (resposta no seu post, novo curso publicado,
+              conquista). Notificações in-app continuam funcionando
+              independente desse toggle.
+            </div>
+          </div>
+        </label>
       </div>
 
       {state?.error && (

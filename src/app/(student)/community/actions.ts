@@ -9,7 +9,7 @@ import {
 } from "@/lib/community";
 import { getPlatformSettings } from "@/lib/settings";
 import { tryAwardXp } from "@/lib/gamification";
-import { tryNotify } from "@/lib/notifications";
+import { notifyAndEmail, tryNotify } from "@/lib/notifications";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -517,19 +517,21 @@ export async function createReplyAction(
           })
         : Promise.resolve(),
       topic && topic.user_id !== userId
-        ? tryNotify({
+        ? notifyAndEmail({
             userId: topic.user_id,
             title: "Novo comentário no seu post",
             body: `Em "${topic.title}"`,
             link: link ?? "/community",
+            ctaLabel: "Ver comentário",
           })
         : Promise.resolve(),
       parent && parent.user_id !== userId && parent.user_id !== topic?.user_id
-        ? tryNotify({
+        ? notifyAndEmail({
             userId: parent.user_id,
             title: "Alguém respondeu seu comentário",
             body: topic?.title ? `Em "${topic.title}"` : undefined,
             link: link ?? "/community",
+            ctaLabel: "Ver resposta",
           })
         : Promise.resolve(),
     ]);

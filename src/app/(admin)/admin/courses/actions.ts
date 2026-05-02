@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { notifyEnrolledInCourse } from "@/lib/notifications";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -123,19 +124,44 @@ export async function updateCourseAction(
   const title = str(formData, "title");
   if (!title) return { ok: false, error: "Título é obrigatório." };
 
+  const newPublished = bool(formData, "is_published");
+
+  // Detecta transição false → true pra disparar notificação de "novo curso"
+  const { data: currentRow } = await admin()
+    .from("courses")
+    .select("is_published")
+    .eq("id", id)
+    .maybeSingle();
+  const wasPublished = (currentRow as { is_published: boolean | null } | null)
+    ?.is_published;
+  const justPublished = wasPublished === false && newPublished === true;
+
   const { error } = await admin()
     .from("courses")
     .update({
       title,
       description: nullableStr(formData, "description"),
       cover_url: nullableStr(formData, "cover_url"),
-      is_published: bool(formData, "is_published"),
+      is_published: newPublished,
       is_for_sale: bool(formData, "is_for_sale"),
       sale_url: nullableStr(formData, "sale_url"),
     })
     .eq("id", id);
 
   if (error) return { ok: false, error: error.message };
+
+  if (justPublished) {
+    // Fire-and-forget: notifica + e-mail (evento importante)
+    void notifyEnrolledInCourse({
+      courseId: id,
+      title: `Novo curso disponível: ${title}`,
+      body: "Acesse agora pra começar a estudar.",
+      link: `/courses/${id}`,
+      ctaLabel: "Acessar curso",
+      withEmail: true,
+    });
+  }
+
   revalidatePath("/admin/courses");
   revalidatePath(`/admin/courses/${id}`);
   return { ok: true };
@@ -302,13 +328,40 @@ export async function createLessonAction(
     column: "module_id",
     value: moduleId,
   });
-  const { error } = await admin().from("lessons").insert({
-    module_id: moduleId,
-    title,
-    position,
-  });
+  const { data: lessonRow, error } = await admin()
+    .from("lessons")
+    .insert({
+      module_id: moduleId,
+      title,
+      position,
+    })
+    .select("id")
+    .single();
 
   if (error) return { ok: false, error: error.message };
+
+  // Se o curso já está publicado, notifica matriculados (in-app só, sem
+  // e-mail — evento de volume alto)
+  const { data: courseRow } = await admin()
+    .from("courses")
+    .select("is_published, title")
+    .eq("id", courseId)
+    .maybeSingle();
+  const course = courseRow as
+    | { is_published: boolean | null; title: string }
+    | null;
+  if (course?.is_published) {
+    const lessonId = (lessonRow as { id: string } | null)?.id;
+    void notifyEnrolledInCourse({
+      courseId,
+      title: `Nova aula em ${course.title}`,
+      body: title,
+      link: lessonId ? `/lessons/${lessonId}` : `/courses/${courseId}`,
+      ctaLabel: "Assistir agora",
+      withEmail: false,
+    });
+  }
+
   revalidatePath(`/admin/courses/${courseId}/modules/${moduleId}`);
   return { ok: true };
 }
