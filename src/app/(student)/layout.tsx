@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getPlatformSettings } from "@/lib/settings";
+import { ensureUserXp, levelFromXp } from "@/lib/gamification";
 import { StudentSidebar } from "@/components/student-sidebar";
 import { Topbar } from "@/components/topbar";
 import { Toaster } from "@/components/ui/sonner";
@@ -38,6 +39,33 @@ export default async function StudentLayout({
     !profile?.welcome_accepted_at &&
     profile?.role === "student";
 
+  // Carrega XP/streak pra mostrar no topbar (silent-fail se não der)
+  let xpInfo:
+    | {
+        totalXp: number;
+        level: number;
+        levelLabel: string;
+        progressPct: number;
+        currentStreak: number;
+      }
+    | undefined;
+  if (settings.gamificationEnabled) {
+    try {
+      const adminSb = createAdminClient();
+      const xp = await ensureUserXp(adminSb, user.id);
+      const lvl = levelFromXp(xp.total_xp);
+      xpInfo = {
+        totalXp: xp.total_xp,
+        level: lvl.level,
+        levelLabel: lvl.label,
+        progressPct: lvl.progressPct,
+        currentStreak: xp.current_streak,
+      };
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <div className="flex min-h-screen bg-npb-bg">
       <StudentSidebar
@@ -54,6 +82,7 @@ export default async function StudentLayout({
             isModerator: profile?.role === "moderator",
           }}
           notificationsCount={notificationsCount ?? 0}
+          xp={xpInfo}
         />
         <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
           {children}

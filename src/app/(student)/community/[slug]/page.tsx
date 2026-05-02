@@ -31,6 +31,19 @@ export default async function CommunityGalleryPage({
 
   if (!gallery) notFound();
 
+  // Marca o espaço como visto agora — zera o badge da sidebar.
+  await supabase
+    .schema("membros")
+    .from("community_space_views")
+    .upsert(
+      {
+        user_id: user.id,
+        gallery_id: gallery.id,
+        last_seen_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,gallery_id" },
+    );
+
   // Posts aprovados (RLS deixa user ver os próprios pendentes também,
   // mas o feed mostra só aprovados).
   const { data: postsData } = await supabase

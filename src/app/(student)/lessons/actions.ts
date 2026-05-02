@@ -1,7 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
+import {
+  tryAwardXp,
+  tryBumpStreakAndDailyXp,
+} from "@/lib/gamification";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -45,6 +50,21 @@ export async function toggleCompleteAction(
         lesson_id: lessonId,
         action: "lesson_complete",
       });
+
+      // XP por concluir aula (idempotente por lessonId no trimestre)
+      const adminSb = createAdminClient();
+      const settings = await getPlatformSettings(adminSb);
+      if (settings.gamificationEnabled && settings.xpLessonComplete > 0) {
+        await tryAwardXp({
+          userId,
+          reason: "lesson_complete",
+          amount: settings.xpLessonComplete,
+          referenceId: lessonId,
+        });
+
+        // Verifica se concluiu o curso → XP extra
+        await checkCourseCompletion(adminSb, userId, lessonId, settings.xpCourseCompleted);
+      }
     }
 
     revalidatePath(`/lessons/${lessonId}`);
@@ -167,6 +187,18 @@ export async function rateLessonAction(
 
     if (error) return { ok: false, error: error.message };
 
+    // XP por avaliar (1x por aula no trimestre)
+    const adminSb = createAdminClient();
+    const settings = await getPlatformSettings(adminSb);
+    if (settings.gamificationEnabled) {
+      await tryAwardXp({
+        userId,
+        reason: "lesson_rated",
+        amount: settings.xpLessonRated,
+        referenceId: lessonId,
+      });
+    }
+
     revalidatePath(`/lessons/${lessonId}`);
     return { ok: true };
   } catch (e) {
@@ -254,6 +286,63 @@ export async function saveLessonPositionAction(
   }
 }
 
+/**
+ * Verifica se o aluno acabou de completar 100% de algum curso ao concluir
+ * essa aula. Se sim, dá XP bonus (idempotente por courseId).
+ */
+async function checkCourseCompletion(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string,
+  lessonId: string,
+  xpAmount: number,
+): Promise<void> {
+  if (xpAmount <= 0) return;
+  // Descobre o curso da aula
+  const { data: lesson } = await admin
+    .schema("membros")
+    .from("lessons")
+    .select("module_id, modules(course_id)")
+    .eq("id", lessonId)
+    .maybeSingle();
+  const mod = (lesson as { modules?: { course_id: string } | { course_id: string }[] | null } | null)?.modules;
+  const courseId = (Array.isArray(mod) ? mod[0]?.course_id : mod?.course_id) ?? null;
+  if (!courseId) return;
+
+  // Pega todas as aulas do curso
+  const { data: modules } = await admin
+    .schema("membros")
+    .from("modules")
+    .select("id")
+    .eq("course_id", courseId);
+  const moduleIds = ((modules ?? []) as Array<{ id: string }>).map((m) => m.id);
+  if (moduleIds.length === 0) return;
+
+  const { data: allLessons } = await admin
+    .schema("membros")
+    .from("lessons")
+    .select("id")
+    .in("module_id", moduleIds);
+  const lessonIds = ((allLessons ?? []) as Array<{ id: string }>).map((l) => l.id);
+  if (lessonIds.length === 0) return;
+
+  const { count: completed } = await admin
+    .schema("membros")
+    .from("lesson_progress")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("is_completed", true)
+    .in("lesson_id", lessonIds);
+
+  if ((completed ?? 0) >= lessonIds.length) {
+    await tryAwardXp({
+      userId,
+      reason: "course_completed",
+      amount: xpAmount,
+      referenceId: courseId,
+    });
+  }
+}
+
 export async function logLessonViewAction(
   lessonId: string,
 ): Promise<ActionResult> {
@@ -279,6 +368,9 @@ export async function logLessonViewAction(
         },
         { onConflict: "user_id,lesson_id", ignoreDuplicates: false },
       );
+
+    // Atualiza streak + XP de "primeiro acesso do dia"
+    await tryBumpStreakAndDailyXp(userId);
 
     return { ok: true };
   } catch (e) {

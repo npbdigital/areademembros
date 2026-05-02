@@ -7,6 +7,8 @@ import {
   sanitizePostHtml,
   userHasCommunityAccess,
 } from "@/lib/community";
+import { getPlatformSettings } from "@/lib/settings";
+import { tryAwardXp } from "@/lib/gamification";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -56,8 +58,13 @@ export async function createPostAction(
 
     const supabase = createClient();
     const role = await getUserRole(supabase, userId);
-    // Admin e moderador postam direto aprovado
-    const status = isElevatedRole(role) ? "approved" : "pending";
+    // Admin/moderator sempre aprovado. Aluno: respeita setting auto_approve.
+    const adminSb = createAdminClient();
+    const settings = await getPlatformSettings(adminSb);
+    const status =
+      isElevatedRole(role) || settings.communityAutoApprove
+        ? "approved"
+        : "pending";
 
     const safeHtml = sanitizePostHtml(bodyHtml);
 
@@ -80,6 +87,16 @@ export async function createPostAction(
 
     if (error || !data) {
       return { ok: false, error: error?.message ?? "Falha ao criar post." };
+    }
+
+    // XP só sai se já entrou aprovado. Pra pendente, o XP é dado quando admin aprova.
+    if (status === "approved" && settings.gamificationEnabled) {
+      await tryAwardXp({
+        userId,
+        reason: "post_approved",
+        amount: settings.xpPostApproved,
+        referenceId: data.id,
+      });
     }
 
     revalidatePath("/community", "layout");
@@ -242,6 +259,18 @@ export async function createReplyAction(
 
     if (error || !data)
       return { ok: false, error: error?.message ?? "Falha." };
+
+    // XP por comentário (idempotente por replyId)
+    const adminSb = createAdminClient();
+    const settings = await getPlatformSettings(adminSb);
+    if (settings.gamificationEnabled) {
+      await tryAwardXp({
+        userId,
+        reason: "comment_approved",
+        amount: settings.xpCommentApproved,
+        referenceId: data.id,
+      });
+    }
 
     revalidatePath(`/community/[slug]/post/${topicId}`, "page");
     return { ok: true, data: { replyId: data.id } };

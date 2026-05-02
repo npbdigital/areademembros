@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, GalleryHorizontal, Link2, MessageCircle } from "lucide-react";
+import { ArrowRight, Crown, GalleryHorizontal, Link2, MessageCircle } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export default async function AdminCommunityIndex() {
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <AdminCard
           icon={MessageCircle}
           label="Aguardando aprovação"
@@ -54,6 +54,12 @@ export default async function AdminCommunityIndex() {
           icon={MessageCircle}
           label="Posts aprovados"
           value={postsTotal ?? 0}
+        />
+        <AdminCard
+          icon={Crown}
+          label="Leaderboard"
+          value={0}
+          href="/admin/community/leaderboard"
         />
         <AdminCard
           icon={GalleryHorizontal}

@@ -27,6 +27,20 @@ export interface PlatformSettingsFormValues {
   welcomeVideoId: string | null;
   welcomeTerms: string;
   welcomeButtonLabel: string;
+  communityAutoApprove: boolean;
+  communityMaxImageMb: number;
+  communityMaxCommentChars: number;
+  gamificationEnabled: boolean;
+  xpLessonComplete: number;
+  xpStreak7d: number;
+  xpFirstAccessDay: number;
+  xpLessonRated: number;
+  xpCommentApproved: number;
+  xpPostApproved: number;
+  xpCourseCompleted: number;
+  leaderboardVisibleToAdmin: boolean;
+  leaderboardVisibleToModerator: boolean;
+  leaderboardVisibleToStudent: boolean;
 }
 
 export function PlatformSettingsForm({
@@ -377,6 +391,167 @@ export function PlatformSettingsForm({
         </div>
       </fieldset>
 
+      {/* COMUNIDADE */}
+      <fieldset className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+        <legend className="-ml-2 px-2 text-xs font-semibold uppercase tracking-wide text-npb-gold">
+          Comunidade
+        </legend>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-npb-border bg-npb-bg3 p-3 transition-colors hover:border-npb-gold-dim">
+          <input
+            type="checkbox"
+            name="community_auto_approve"
+            defaultChecked={init.communityAutoApprove}
+            className="mt-0.5 h-4 w-4 accent-npb-gold"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-npb-text">
+              Aprovar posts automaticamente
+            </div>
+            <div className="text-xs text-npb-text-muted">
+              Quando ligado, posts de aluno entram aprovados sem precisar passar
+              pela fila de moderação. Posts de admin/moderador sempre entram
+              aprovados.
+            </div>
+          </div>
+        </label>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="community_max_image_mb" className="text-npb-text">
+              Tamanho máximo de imagem (MB)
+            </Label>
+            <Input
+              id="community_max_image_mb"
+              name="community_max_image_mb"
+              type="number"
+              min={1}
+              max={50}
+              defaultValue={init.communityMaxImageMb}
+              className="bg-npb-bg3 border-npb-border text-npb-text"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="community_max_comment_chars"
+              className="text-npb-text"
+            >
+              Tamanho máximo de comentário (caracteres)
+            </Label>
+            <Input
+              id="community_max_comment_chars"
+              name="community_max_comment_chars"
+              type="number"
+              min={100}
+              max={50000}
+              defaultValue={init.communityMaxCommentChars}
+              className="bg-npb-bg3 border-npb-border text-npb-text"
+            />
+          </div>
+        </div>
+      </fieldset>
+
+      {/* GAMIFICATION */}
+      <fieldset className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+        <legend className="-ml-2 px-2 text-xs font-semibold uppercase tracking-wide text-npb-gold">
+          Gamification
+        </legend>
+
+        <label className="flex cursor-pointer items-start gap-3 rounded-md border border-npb-border bg-npb-bg3 p-3 transition-colors hover:border-npb-gold-dim">
+          <input
+            type="checkbox"
+            name="gamification_enabled"
+            defaultChecked={init.gamificationEnabled}
+            className="mt-0.5 h-4 w-4 accent-npb-gold"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-npb-text">
+              Sistema de XP / streak / conquistas ativo
+            </div>
+            <div className="text-xs text-npb-text-muted">
+              Quando desligado, ações dos alunos não pontuam e o pill do topbar
+              fica oculto. XP existente é preservado.
+            </div>
+          </div>
+        </label>
+
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-npb-text">
+            XP por ação
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <NumberField
+              name="xp_lesson_complete"
+              label="Concluir aula"
+              defaultValue={init.xpLessonComplete}
+            />
+            <NumberField
+              name="xp_streak_7d"
+              label="Streak de 7 dias"
+              defaultValue={init.xpStreak7d}
+            />
+            <NumberField
+              name="xp_first_access_day"
+              label="Primeiro acesso do dia"
+              defaultValue={init.xpFirstAccessDay}
+            />
+            <NumberField
+              name="xp_lesson_rated"
+              label="Avaliar aula"
+              defaultValue={init.xpLessonRated}
+            />
+            <NumberField
+              name="xp_comment_approved"
+              label="Comentário"
+              defaultValue={init.xpCommentApproved}
+            />
+            <NumberField
+              name="xp_post_approved"
+              label="Post aprovado"
+              defaultValue={init.xpPostApproved}
+            />
+            <NumberField
+              name="xp_course_completed"
+              label="Curso 100% concluído"
+              defaultValue={init.xpCourseCompleted}
+            />
+          </div>
+        </div>
+
+        <div className="rounded-md border border-npb-border bg-npb-bg3 p-3">
+          <p className="text-xs font-semibold text-npb-text">
+            Reset trimestral fixo
+          </p>
+          <p className="mt-1 text-xs text-npb-text-muted">
+            XP zera no 1º dia de cada trimestre civil (jan/abr/jul/out).
+            Conquistas e streak histórico são preservados.
+          </p>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-semibold text-npb-text">
+            Quem pode ver o leaderboard?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <CheckBox
+              name="leaderboard_visible_to_admin"
+              label="Admin"
+              defaultChecked={init.leaderboardVisibleToAdmin}
+            />
+            <CheckBox
+              name="leaderboard_visible_to_moderator"
+              label="Moderador"
+              defaultChecked={init.leaderboardVisibleToModerator}
+            />
+            <CheckBox
+              name="leaderboard_visible_to_student"
+              label="Alunos"
+              defaultChecked={init.leaderboardVisibleToStudent}
+            />
+          </div>
+        </div>
+      </fieldset>
+
       {state?.error && (
         <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
@@ -394,5 +569,54 @@ export function PlatformSettingsForm({
         <SubmitButton>Salvar configurações</SubmitButton>
       </div>
     </form>
+  );
+}
+
+function NumberField({
+  name,
+  label,
+  defaultValue,
+}: {
+  name: string;
+  label: string;
+  defaultValue: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={name} className="text-[11px] text-npb-text-muted">
+        {label}
+      </Label>
+      <Input
+        id={name}
+        name={name}
+        type="number"
+        min={0}
+        max={9999}
+        defaultValue={defaultValue}
+        className="bg-npb-bg3 border-npb-border text-npb-text"
+      />
+    </div>
+  );
+}
+
+function CheckBox({
+  name,
+  label,
+  defaultChecked,
+}: {
+  name: string;
+  label: string;
+  defaultChecked: boolean;
+}) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text transition hover:border-npb-gold-dim">
+      <input
+        type="checkbox"
+        name={name}
+        defaultChecked={defaultChecked}
+        className="h-4 w-4 accent-npb-gold"
+      />
+      {label}
+    </label>
   );
 }

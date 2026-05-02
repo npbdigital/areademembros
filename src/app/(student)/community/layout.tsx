@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Lock } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/access";
 import {
   type CommunityGalleryRow,
@@ -68,9 +68,55 @@ export default async function CommunityLayout({
   const galleries = (galleriesData ?? []) as CommunityGalleryRow[];
   const links = (linksData ?? []) as CommunitySidebarLinkRow[];
 
+  // Badges de não-lidos por espaço: pra cada galeria, conta posts approved
+  // com created_at > last_seen_at (ou TODOS se nunca visitou).
+  const unreadByGallery = new Map<string, number>();
+  if (galleries.length > 0) {
+    const adminSb = createAdminClient();
+    const galleryIds = galleries.map((g) => g.id);
+
+    const { data: viewsData } = await supabase
+      .schema("membros")
+      .from("community_space_views")
+      .select("gallery_id, last_seen_at")
+      .eq("user_id", user.id)
+      .in("gallery_id", galleryIds);
+
+    const seenMap = new Map<string, string>();
+    for (const v of (viewsData ?? []) as Array<{
+      gallery_id: string;
+      last_seen_at: string;
+    }>) {
+      seenMap.set(v.gallery_id, v.last_seen_at);
+    }
+
+    // Conta de cada galeria. Limita a 1 query por galeria, mas como N é
+    // pequeno (umas dezenas no máximo), tá OK.
+    await Promise.all(
+      galleries.map(async (g) => {
+        const seen = seenMap.get(g.id);
+        let q = adminSb
+          .schema("membros")
+          .from("community_topics")
+          .select("id", { count: "exact", head: true })
+          .eq("gallery_id", g.id)
+          .eq("status", "approved");
+        if (seen) q = q.gt("created_at", seen);
+        // Não conta os próprios posts do user
+        q = q.neq("user_id", user.id);
+        const { count } = await q;
+        if ((count ?? 0) > 0) unreadByGallery.set(g.id, count ?? 0);
+      }),
+    );
+  }
+
   return (
     <div className="-mx-4 -my-4 flex min-h-[calc(100vh-3.5rem)] md:-mx-8 md:-my-8">
-      <CommunitySidebar galleries={galleries} links={links} />
+      <CommunitySidebar
+        galleries={galleries}
+        links={links}
+        unreadByGallery={Object.fromEntries(unreadByGallery)}
+      />
       <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
         {children}
       </main>

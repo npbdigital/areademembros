@@ -21,6 +21,22 @@ export const SETTINGS_KEYS = {
   WELCOME_VIDEO_ID: "welcome_video_id",
   WELCOME_TERMS: "welcome_terms",
   WELCOME_BUTTON_LABEL: "welcome_button_label",
+  // Comunidade
+  COMMUNITY_AUTO_APPROVE: "community_auto_approve",
+  COMMUNITY_MAX_IMAGE_MB: "community_max_image_mb",
+  COMMUNITY_MAX_COMMENT_CHARS: "community_max_comment_chars",
+  // Gamification
+  GAMIFICATION_ENABLED: "gamification_enabled",
+  XP_LESSON_COMPLETE: "xp_lesson_complete",
+  XP_STREAK_7D: "xp_streak_7d",
+  XP_FIRST_ACCESS_DAY: "xp_first_access_day",
+  XP_LESSON_RATED: "xp_lesson_rated",
+  XP_COMMENT_APPROVED: "xp_comment_approved",
+  XP_POST_APPROVED: "xp_post_approved",
+  XP_COURSE_COMPLETED: "xp_course_completed",
+  LEADERBOARD_VISIBLE_TO_ADMIN: "leaderboard_visible_to_admin",
+  LEADERBOARD_VISIBLE_TO_MODERATOR: "leaderboard_visible_to_moderator",
+  LEADERBOARD_VISIBLE_TO_STUDENT: "leaderboard_visible_to_student",
 } as const;
 
 export type SettingKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -39,6 +55,22 @@ export interface PlatformSettings {
   welcomeVideoId: string | null;
   welcomeTerms: string;
   welcomeButtonLabel: string;
+  // Comunidade
+  communityAutoApprove: boolean;
+  communityMaxImageMb: number;
+  communityMaxCommentChars: number;
+  // Gamification
+  gamificationEnabled: boolean;
+  xpLessonComplete: number;
+  xpStreak7d: number;
+  xpFirstAccessDay: number;
+  xpLessonRated: number;
+  xpCommentApproved: number;
+  xpPostApproved: number;
+  xpCourseCompleted: number;
+  leaderboardVisibleToAdmin: boolean;
+  leaderboardVisibleToModerator: boolean;
+  leaderboardVisibleToStudent: boolean;
 }
 
 /** Defaults aplicados quando a chave não está no banco. */
@@ -56,6 +88,20 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   welcomeVideoId: null,
   welcomeTerms: "",
   welcomeButtonLabel: "Eu concordo com os termos",
+  communityAutoApprove: false,
+  communityMaxImageMb: 10,
+  communityMaxCommentChars: 10000,
+  gamificationEnabled: true,
+  xpLessonComplete: 10,
+  xpStreak7d: 50,
+  xpFirstAccessDay: 2,
+  xpLessonRated: 3,
+  xpCommentApproved: 5,
+  xpPostApproved: 20,
+  xpCourseCompleted: 100,
+  leaderboardVisibleToAdmin: true,
+  leaderboardVisibleToModerator: true,
+  leaderboardVisibleToStudent: false,
 };
 
 /** Lê todas as configs num único hit. */
@@ -98,7 +144,83 @@ export async function getPlatformSettings(
     welcomeButtonLabel:
       map.get(SETTINGS_KEYS.WELCOME_BUTTON_LABEL)?.trim() ||
       SETTINGS_DEFAULTS.welcomeButtonLabel,
+    communityAutoApprove: parseBool(
+      map.get(SETTINGS_KEYS.COMMUNITY_AUTO_APPROVE),
+      SETTINGS_DEFAULTS.communityAutoApprove,
+    ),
+    communityMaxImageMb: parseInt2(
+      map.get(SETTINGS_KEYS.COMMUNITY_MAX_IMAGE_MB),
+      SETTINGS_DEFAULTS.communityMaxImageMb,
+    ),
+    communityMaxCommentChars: parseInt2(
+      map.get(SETTINGS_KEYS.COMMUNITY_MAX_COMMENT_CHARS),
+      SETTINGS_DEFAULTS.communityMaxCommentChars,
+    ),
+    gamificationEnabled: parseBool(
+      map.get(SETTINGS_KEYS.GAMIFICATION_ENABLED),
+      SETTINGS_DEFAULTS.gamificationEnabled,
+    ),
+    xpLessonComplete: parseInt2(
+      map.get(SETTINGS_KEYS.XP_LESSON_COMPLETE),
+      SETTINGS_DEFAULTS.xpLessonComplete,
+    ),
+    xpStreak7d: parseInt2(
+      map.get(SETTINGS_KEYS.XP_STREAK_7D),
+      SETTINGS_DEFAULTS.xpStreak7d,
+    ),
+    xpFirstAccessDay: parseInt2(
+      map.get(SETTINGS_KEYS.XP_FIRST_ACCESS_DAY),
+      SETTINGS_DEFAULTS.xpFirstAccessDay,
+    ),
+    xpLessonRated: parseInt2(
+      map.get(SETTINGS_KEYS.XP_LESSON_RATED),
+      SETTINGS_DEFAULTS.xpLessonRated,
+    ),
+    xpCommentApproved: parseInt2(
+      map.get(SETTINGS_KEYS.XP_COMMENT_APPROVED),
+      SETTINGS_DEFAULTS.xpCommentApproved,
+    ),
+    xpPostApproved: parseInt2(
+      map.get(SETTINGS_KEYS.XP_POST_APPROVED),
+      SETTINGS_DEFAULTS.xpPostApproved,
+    ),
+    xpCourseCompleted: parseInt2(
+      map.get(SETTINGS_KEYS.XP_COURSE_COMPLETED),
+      SETTINGS_DEFAULTS.xpCourseCompleted,
+    ),
+    leaderboardVisibleToAdmin: parseBool(
+      map.get(SETTINGS_KEYS.LEADERBOARD_VISIBLE_TO_ADMIN),
+      SETTINGS_DEFAULTS.leaderboardVisibleToAdmin,
+    ),
+    leaderboardVisibleToModerator: parseBool(
+      map.get(SETTINGS_KEYS.LEADERBOARD_VISIBLE_TO_MODERATOR),
+      SETTINGS_DEFAULTS.leaderboardVisibleToModerator,
+    ),
+    leaderboardVisibleToStudent: parseBool(
+      map.get(SETTINGS_KEYS.LEADERBOARD_VISIBLE_TO_STUDENT),
+      SETTINGS_DEFAULTS.leaderboardVisibleToStudent,
+    ),
   };
+}
+
+function parseBool(v: string | undefined, fallback: boolean): boolean {
+  if (v === undefined) return fallback;
+  return v.trim().toLowerCase() === "true";
+}
+
+function parseInt2(v: string | undefined, fallback: number): number {
+  if (v === undefined) return fallback;
+  const n = parseInt(v.trim(), 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+export function canSeeLeaderboard(
+  settings: PlatformSettings,
+  role: string | null | undefined,
+): boolean {
+  if (role === "admin") return settings.leaderboardVisibleToAdmin;
+  if (role === "moderator") return settings.leaderboardVisibleToModerator;
+  return settings.leaderboardVisibleToStudent;
 }
 
 /** Monta o "From: Nome <email>" pro Resend respeitando settings/env/default. */

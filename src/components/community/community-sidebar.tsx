@@ -13,9 +13,15 @@ import type {
 interface Props {
   galleries: CommunityGalleryRow[];
   links: CommunitySidebarLinkRow[];
+  /** map: gallery_id → count de posts não-lidos */
+  unreadByGallery?: Record<string, number>;
 }
 
-export function CommunitySidebar({ galleries, links }: Props) {
+export function CommunitySidebar({
+  galleries,
+  links,
+  unreadByGallery = {},
+}: Props) {
   const pathname = usePathname();
   const [query, setQuery] = useState("");
 
@@ -55,6 +61,7 @@ export function CommunitySidebar({ galleries, links }: Props) {
               const active = g.slug
                 ? pathname === href || pathname.startsWith(`${href}/`)
                 : false;
+              const unread = unreadByGallery[g.id] ?? 0;
               return (
                 <Link
                   key={g.id}
@@ -67,7 +74,12 @@ export function CommunitySidebar({ galleries, links }: Props) {
                   )}
                 >
                   <span className="text-base leading-none">{g.icon ?? "💬"}</span>
-                  <span className="truncate">{g.title}</span>
+                  <span className="flex-1 truncate">{g.title}</span>
+                  {unread > 0 && (
+                    <span className="inline-flex min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                      {unread > 99 ? "99+" : unread}
+                    </span>
+                  )}
                 </Link>
               );
             })}

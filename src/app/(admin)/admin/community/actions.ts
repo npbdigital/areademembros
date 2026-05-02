@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { slugify } from "@/lib/community";
+import { getPlatformSettings } from "@/lib/settings";
+import { tryAwardXp } from "@/lib/gamification";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -41,7 +43,18 @@ export async function approvePostAction(
 ): Promise<ActionResult> {
   try {
     const userId = await assertAdmin();
-    const { error } = await admin()
+    const sb = admin();
+
+    // Pega autor do post pra dar XP
+    const { data: topic } = await sb
+      .schema("membros")
+      .from("community_topics")
+      .select("user_id, status")
+      .eq("id", topicId)
+      .maybeSingle();
+    const t = topic as { user_id: string; status: string } | null;
+
+    const { error } = await sb
       .schema("membros")
       .from("community_topics")
       .update({
@@ -51,6 +64,20 @@ export async function approvePostAction(
       })
       .eq("id", topicId);
     if (error) return { ok: false, error: error.message };
+
+    // XP só se mudou de não-aprovado pra aprovado
+    if (t && t.status !== "approved") {
+      const settings = await getPlatformSettings(sb);
+      if (settings.gamificationEnabled) {
+        await tryAwardXp({
+          userId: t.user_id,
+          reason: "post_approved",
+          amount: settings.xpPostApproved,
+          referenceId: topicId,
+        });
+      }
+    }
+
     revalidatePath("/admin/community");
     revalidatePath("/community", "layout");
     return { ok: true };

@@ -1,7 +1,13 @@
 import { Calendar, KeyRound, Layers, User as UserIcon } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
+import { ensureUserXp, levelFromXp } from "@/lib/gamification";
 import { ProfileForm } from "@/components/student/profile-form";
 import { ChangePasswordForm } from "@/components/student/change-password-form";
+import {
+  type AchievementView,
+  GamificationSection,
+} from "@/components/student/gamification-section";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +46,91 @@ export default async function ProfilePage() {
       | null;
   }>;
 
+  // GAMIFICATION
+  const adminSb = createAdminClient();
+  const settings = await getPlatformSettings(adminSb);
+  let gamification: {
+    totalXp: number;
+    level: number;
+    levelLabel: string;
+    progressPct: number;
+    nextMin: number | null;
+    currentStreak: number;
+    longestStreak: number;
+    periodEnd: string;
+    achievements: AchievementView[];
+  } | null = null;
+
+  if (settings.gamificationEnabled) {
+    try {
+      const xp = await ensureUserXp(adminSb, user.id);
+      const lvl = levelFromXp(xp.total_xp);
+      const periodStart = new Date(xp.current_period_start);
+      const periodEnd = new Date(periodStart);
+      periodEnd.setMonth(periodEnd.getMonth() + 3);
+
+      const [{ data: catalogData }, { data: unlockedData }] =
+        await Promise.all([
+          adminSb
+            .schema("membros")
+            .from("achievements")
+            .select(
+              "id, code, name, description, icon, category, required_value, sort_order",
+            )
+            .eq("is_active", true)
+            .order("sort_order", { ascending: true }),
+          adminSb
+            .schema("membros")
+            .from("user_achievements")
+            .select("achievement_id, unlocked_at")
+            .eq("user_id", user.id),
+        ]);
+
+      const unlockedMap = new Map(
+        ((unlockedData ?? []) as Array<{
+          achievement_id: string;
+          unlocked_at: string;
+        }>).map((u) => [u.achievement_id, u.unlocked_at]),
+      );
+
+      const achievements: AchievementView[] = (
+        (catalogData ?? []) as Array<{
+          id: string;
+          code: string;
+          name: string;
+          description: string | null;
+          icon: string;
+          category: string;
+          required_value: number;
+        }>
+      ).map((a) => ({
+        id: a.id,
+        code: a.code,
+        name: a.name,
+        description: a.description,
+        icon: a.icon,
+        category: a.category,
+        requiredValue: a.required_value,
+        unlocked: unlockedMap.has(a.id),
+        unlockedAt: unlockedMap.get(a.id) ?? null,
+      }));
+
+      gamification = {
+        totalXp: xp.total_xp,
+        level: lvl.level,
+        levelLabel: lvl.label,
+        progressPct: lvl.progressPct,
+        nextMin: lvl.nextMin,
+        currentStreak: xp.current_streak,
+        longestStreak: xp.longest_streak,
+        periodEnd: periodEnd.toISOString(),
+        achievements,
+      };
+    } catch {
+      // ignore — gamification opcional
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
@@ -66,6 +157,8 @@ export default async function ProfilePage() {
           />
         </div>
       </section>
+
+      {gamification && <GamificationSection {...gamification} />}
 
       <section>
         <h2 className="mb-3 inline-flex items-center gap-2 text-lg font-bold text-npb-text">
