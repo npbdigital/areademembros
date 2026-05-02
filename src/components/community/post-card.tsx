@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Heart, MessageCircle, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { timeAgoPtBr, videoEmbedUrl } from "@/lib/community";
 import { isElevatedRole, type AccessRole } from "@/lib/access";
@@ -20,6 +20,7 @@ export interface PostCardData {
   imageUrl: string | null;
   likesCount: number;
   repliesCount: number;
+  isPinned?: boolean;
   createdAt: string;
   authorId: string;
   authorName: string;
@@ -83,7 +84,13 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
   if (hidden) return null;
 
   return (
-    <li className="rounded-xl border border-npb-border bg-npb-bg2 p-5 transition hover:border-npb-gold/40">
+    <li
+      className={`rounded-xl border p-5 transition hover:border-npb-gold/40 ${
+        post.isPinned
+          ? "border-npb-gold/40 bg-npb-gold/5"
+          : "border-npb-border bg-npb-bg2"
+      }`}
+    >
       <div className="flex items-start gap-3">
         <Avatar
           src={post.authorAvatarUrl}
@@ -92,6 +99,12 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">
+            {post.isPinned && (
+              <span className="inline-flex items-center gap-1 rounded bg-npb-gold/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-npb-gold">
+                <Pin className="h-2.5 w-2.5" />
+                Fixado
+              </span>
+            )}
             <span className="text-sm font-semibold text-npb-text">
               {post.authorName}
             </span>

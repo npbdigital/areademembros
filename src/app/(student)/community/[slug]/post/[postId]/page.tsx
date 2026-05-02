@@ -11,6 +11,7 @@ import {
 } from "@/components/community/comment-thread";
 import { TopicLikeButton } from "@/components/community/topic-like-button";
 import { PostActionsBar } from "@/components/community/post-actions-bar";
+import { RealtimeFeedRefresher } from "@/components/community/realtime-feed-refresher";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function PostDetailPage({
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, status, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, status, is_pinned, created_at",
     )
     .eq("id", params.postId)
     .maybeSingle();
@@ -60,6 +61,7 @@ export default async function PostDetailPage({
     likes_count: number;
     replies_count: number;
     status: string;
+    is_pinned: boolean;
     created_at: string;
   };
 
@@ -192,6 +194,7 @@ export default async function PostDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <RealtimeFeedRefresher topicId={t.id} />
       <Link
         href={`/community/${page?.slug ?? params.slug}`}
         className="inline-flex items-center gap-1 text-sm text-npb-text-muted hover:text-npb-gold"
@@ -236,6 +239,7 @@ export default async function PostDetailPage({
             currentUserId={user.id}
             currentRole={role}
             status={t.status}
+            isPinned={t.is_pinned}
             pageId={t.page_id}
             pageSlug={page?.slug ?? params.slug}
             pageTitle={page?.title ?? "espaço"}

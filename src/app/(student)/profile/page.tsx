@@ -13,6 +13,7 @@ import {
   type AffiliateStats,
   AffiliateSection,
 } from "@/components/student/affiliate-section";
+import { formatDateBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -278,12 +279,8 @@ export default async function ProfilePage() {
             {enrollments.map((e) => {
               const cohort = Array.isArray(e.cohorts) ? e.cohorts[0] : e.cohorts;
               if (!cohort) return null;
-              const enrolled = new Date(e.enrolled_at).toLocaleDateString(
-                "pt-BR",
-              );
-              const expires = e.expires_at
-                ? new Date(e.expires_at).toLocaleDateString("pt-BR")
-                : null;
+              const enrolled = formatDateBrt(e.enrolled_at);
+              const expires = e.expires_at ? formatDateBrt(e.expires_at) : null;
               const expired =
                 e.expires_at && new Date(e.expires_at) < new Date();
 

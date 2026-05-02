@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
-  DollarSign,
   ExternalLink,
   Sparkles,
   Trash2,
@@ -354,9 +353,8 @@ function Verified({
             <p className="text-[11px] font-semibold uppercase tracking-wider text-npb-text-muted">
               Comissão acumulada
             </p>
-            <p className="mt-1 inline-flex items-baseline gap-1 text-2xl font-bold text-npb-gold">
-              <DollarSign className="h-5 w-5 self-center" />
-              {totalReais}
+            <p className="mt-1 text-2xl font-bold text-npb-gold">
+              R$ {totalReais}
             </p>
             <p className="mt-1 text-[10px] text-npb-text-muted">
               Soma de todas as vendas pagas (em R$)
@@ -417,7 +415,11 @@ function Verified({
                       : "text-red-400 line-through"
                   }`}
                 >
-                  R$ {(s.commissionCents / 100).toFixed(2)}
+                  R${" "}
+                  {(s.commissionCents / 100).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
                 </p>
               </li>
             ))}

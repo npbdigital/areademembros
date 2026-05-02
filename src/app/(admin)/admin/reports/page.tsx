@@ -26,6 +26,7 @@ const PERIODS: Array<{ value: Period; label: string }> = [
 interface SearchParams {
   period?: string;
   course?: string;
+  showFicticio?: string;
 }
 
 export default async function ReportsPage({
@@ -41,6 +42,7 @@ export default async function ReportsPage({
       ? searchParams.period
       : "30d";
   const selectedCourseId = searchParams.course?.trim() || null;
+  const showFicticio = searchParams.showFicticio === "1";
   const sinceIso = sinceFromPeriod(period);
 
   // Usa service_role pra ler dados agregados de TODOS os alunos (RLS de
@@ -48,7 +50,9 @@ export default async function ReportsPage({
   // de admin já é feita no layout /admin.
   const supabase = createAdminClient();
   const adminSupabase = supabase;
-  const excludedUserIds = await getNonStudentUserIds(supabase);
+  const excludedUserIds = await getNonStudentUserIds(supabase, {
+    includeFicticio: showFicticio,
+  });
 
   const { data: coursesData } = await supabase
     .schema("membros")
@@ -110,11 +114,23 @@ export default async function ReportsPage({
           </div>
           <h1 className="text-2xl font-bold text-npb-text">Engajamento</h1>
           <p className="text-sm text-npb-text-muted">
-            Aulas mais vistas, conclusões e avaliações. Admin e moderadores
-            ficam fora das contagens.
+            Aulas mais vistas, conclusões e avaliações. Admin, moderadores
+            {showFicticio ? "" : " e fictícios"} ficam fora das contagens.
           </p>
         </div>
-        <PeriodChips current={period} courseId={selectedCourseId} />
+        <div className="flex items-center gap-3">
+          <Link
+            href={
+              showFicticio
+                ? `/admin/reports?period=${period}${selectedCourseId ? `&course=${selectedCourseId}` : ""}`
+                : `/admin/reports?period=${period}${selectedCourseId ? `&course=${selectedCourseId}` : ""}&showFicticio=1`
+            }
+            className="text-xs text-npb-text-muted hover:text-npb-gold"
+          >
+            {showFicticio ? "Esconder fictícios" : "Mostrar fictícios"}
+          </Link>
+          <PeriodChips current={period} courseId={selectedCourseId} />
+        </div>
       </header>
 
       {selected ? (
@@ -457,6 +473,7 @@ function trendTone(pct: number): "good" | "warn" | "bad" | "neutral" {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

@@ -107,6 +107,7 @@ export default async function NotesPage() {
                 <p className="mt-3 text-[11px] text-npb-text-muted">
                   Atualizada em{" "}
                   {new Date(n.updatedAt).toLocaleDateString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
                     day: "2-digit",
                     month: "2-digit",
                     year: "numeric",

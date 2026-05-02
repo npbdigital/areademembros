@@ -135,6 +135,7 @@ export function timeAgoPtBr(iso: string): string {
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD} d atrás`;
   return d.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "short",
     year: "numeric",

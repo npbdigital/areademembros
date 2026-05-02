@@ -1,13 +1,16 @@
+import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Download,
   Wallet,
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { AffiliateRowActions } from "@/components/admin/affiliate-row-actions";
 import { ReprocessPendingButton } from "@/components/admin/reprocess-pending-button";
 import { AttachOrphanButton } from "@/components/admin/attach-orphan-button";
+import { AddManualSaleButton } from "@/components/admin/add-manual-sale-button";
 import { formatDateBrt, formatShortBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
@@ -54,8 +57,36 @@ function formatBRL(cents: number): string {
   });
 }
 
-export default async function AdminAffiliatesPage() {
+export default async function AdminAffiliatesPage({
+  searchParams,
+}: {
+  searchParams?: { q?: string; status?: string };
+}) {
+  const q = (searchParams?.q ?? "").trim();
+  const statusFilter = searchParams?.status; // "paid" | "refunded" | "chargedback" | undefined
+
   const supabase = createAdminClient();
+
+  let salesQuery = supabase
+    .schema("afiliados")
+    .from("sales")
+    .select(
+      "id, external_order_id, kiwify_email, kiwify_name, kiwify_affiliate_id, member_user_id, product_name, status, commission_value_cents, approved_at, created_at",
+    )
+    .eq("source", "kiwify");
+
+  if (statusFilter && ["paid", "refunded", "chargedback"].includes(statusFilter)) {
+    salesQuery = salesQuery.eq("status", statusFilter);
+  }
+  if (q) {
+    // Busca por email ou nome (case-insensitive)
+    salesQuery = salesQuery.or(
+      `kiwify_email.ilike.%${q}%,kiwify_name.ilike.%${q}%`,
+    );
+  }
+  salesQuery = salesQuery
+    .order("approved_at", { ascending: false })
+    .limit(200);
 
   const [
     { data: linksData },
@@ -70,15 +101,7 @@ export default async function AdminAffiliatesPage() {
       )
       .eq("source", "kiwify")
       .order("registered_at", { ascending: false }),
-    supabase
-      .schema("afiliados")
-      .from("sales")
-      .select(
-        "id, external_order_id, kiwify_email, kiwify_name, kiwify_affiliate_id, member_user_id, product_name, status, commission_value_cents, approved_at, created_at",
-      )
-      .eq("source", "kiwify")
-      .order("approved_at", { ascending: false })
-      .limit(100),
+    salesQuery,
     supabase
       .schema("afiliados")
       .from("sales_raw")
@@ -148,8 +171,64 @@ export default async function AdminAffiliatesPage() {
             <code>/api/webhooks/kiwify</code>.
           </p>
         </div>
-        <ReprocessPendingButton pendingCount={pendingCount ?? 0} />
+        <div className="flex items-center gap-2">
+          <AddManualSaleButton />
+          <Link
+            href={
+              `/api/admin/affiliates/export.csv` +
+              (q ? `?q=${encodeURIComponent(q)}` : "") +
+              (statusFilter
+                ? `${q ? "&" : "?"}status=${statusFilter}`
+                : "")
+            }
+            className="inline-flex items-center gap-1.5 rounded-md border border-npb-border bg-npb-bg2 px-3 py-1.5 text-xs font-semibold text-npb-text hover:border-npb-gold-dim hover:text-npb-gold"
+            title="Baixar CSV das vendas (respeitando filtros atuais)"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exportar CSV
+          </Link>
+          <ReprocessPendingButton pendingCount={pendingCount ?? 0} />
+        </div>
       </header>
+
+      {/* Filtros */}
+      <form
+        action="/admin/affiliates"
+        method="GET"
+        className="flex flex-wrap items-center gap-2 rounded-xl border border-npb-border bg-npb-bg2 p-3"
+      >
+        <input
+          type="text"
+          name="q"
+          defaultValue={q}
+          placeholder="Buscar por nome ou e-mail Kiwify…"
+          className="flex-1 min-w-[200px] rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text placeholder:text-npb-text-muted focus:border-npb-gold-dim focus:outline-none"
+        />
+        <select
+          name="status"
+          defaultValue={statusFilter ?? ""}
+          className="rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text focus:border-npb-gold-dim focus:outline-none"
+        >
+          <option value="">Todos status</option>
+          <option value="paid">Pagas</option>
+          <option value="refunded">Reembolsadas</option>
+          <option value="chargedback">Chargeback</option>
+        </select>
+        <button
+          type="submit"
+          className="rounded-md bg-npb-gold px-3 py-1.5 text-xs font-semibold text-black hover:bg-npb-gold-light"
+        >
+          Filtrar
+        </button>
+        {(q || statusFilter) && (
+          <Link
+            href="/admin/affiliates"
+            className="text-xs text-npb-text-muted hover:text-npb-text"
+          >
+            Limpar
+          </Link>
+        )}
+      </form>
 
       {/* Stats globais */}
       <div className="grid gap-3 sm:grid-cols-4">

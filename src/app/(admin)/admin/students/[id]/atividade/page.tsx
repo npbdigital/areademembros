@@ -522,6 +522,7 @@ function formatRelativeDateTime(iso: string): string {
   const diffD = Math.floor(diffH / 24);
   if (diffD < 7) return `${diffD}d atrás`;
   return date.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

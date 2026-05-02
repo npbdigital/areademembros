@@ -2,6 +2,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/access";
 import { LayoutList } from "lucide-react";
 import { PostCard, type PostCardData } from "@/components/community/post-card";
+import { RealtimeFeedRefresher } from "@/components/community/realtime-feed-refresher";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +22,10 @@ export default async function CommunityFeedPage() {
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, created_at",
     )
     .eq("status", "approved")
+    .order("is_pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .range(0, PAGE_SIZE - 1);
 
@@ -37,6 +39,7 @@ export default async function CommunityFeedPage() {
     image_url: string | null;
     likes_count: number;
     replies_count: number;
+    is_pinned: boolean;
     created_at: string;
   }>;
 
@@ -112,6 +115,7 @@ export default async function CommunityFeedPage() {
       imageUrl: p.image_url,
       likesCount: p.likes_count,
       repliesCount: p.replies_count,
+      isPinned: p.is_pinned,
       createdAt: p.created_at,
       authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",
@@ -125,6 +129,7 @@ export default async function CommunityFeedPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <RealtimeFeedRefresher />
       <header>
         <div className="flex items-center gap-2">
           <LayoutList className="h-6 w-6 text-npb-gold" />

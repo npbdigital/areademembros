@@ -104,6 +104,27 @@ export async function approvePostAction(
   }
 }
 
+export async function toggleTopicPinAction(
+  topicId: string,
+  pinned: boolean,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const sb = admin();
+    const { error } = await sb
+      .schema("membros")
+      .from("community_topics")
+      .update({ is_pinned: pinned, updated_at: new Date().toISOString() })
+      .eq("id", topicId);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
 export async function rejectPostAction(
   topicId: string,
 ): Promise<ActionResult> {
@@ -201,6 +222,143 @@ export async function updateSpaceAction(
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
 
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/** Move um espaço pra cima ou pra baixo na ordem da sidebar. */
+export async function moveSpaceAction(
+  id: string,
+  direction: "up" | "down",
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const sb = admin();
+
+    const { data: spaces } = await sb
+      .schema("membros")
+      .from("community_spaces")
+      .select("id, position")
+      .order("position", { ascending: true });
+    const list = (spaces ?? []) as Array<{ id: string; position: number }>;
+
+    const idx = list.findIndex((s) => s.id === id);
+    if (idx < 0) return { ok: false, error: "Espaço não encontrado." };
+    const swapWith = direction === "up" ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= list.length) {
+      return { ok: true }; // já está no extremo
+    }
+
+    const a = list[idx];
+    const b = list[swapWith];
+    await Promise.all([
+      sb
+        .schema("membros")
+        .from("community_spaces")
+        .update({ position: b.position })
+        .eq("id", a.id),
+      sb
+        .schema("membros")
+        .from("community_spaces")
+        .update({ position: a.position })
+        .eq("id", b.id),
+    ]);
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/** Move uma página dentro do espaço dela pra cima/baixo. */
+export async function movePageAction(
+  id: string,
+  direction: "up" | "down",
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const sb = admin();
+
+    const { data: target } = await sb
+      .schema("membros")
+      .from("community_pages")
+      .select("id, position, space_id")
+      .eq("id", id)
+      .maybeSingle();
+    const t = target as { id: string; position: number; space_id: string | null } | null;
+    if (!t) return { ok: false, error: "Página não encontrada." };
+
+    const { data: siblings } = await sb
+      .schema("membros")
+      .from("community_pages")
+      .select("id, position")
+      .eq(t.space_id === null ? "id" : "space_id", t.space_id ?? t.id)
+      .order("position", { ascending: true });
+    const list = (siblings ?? []) as Array<{ id: string; position: number }>;
+
+    const idx = list.findIndex((s) => s.id === id);
+    if (idx < 0) return { ok: false, error: "Página fora do espaço." };
+    const swapWith = direction === "up" ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= list.length) return { ok: true };
+
+    const a = list[idx];
+    const b = list[swapWith];
+    await Promise.all([
+      sb
+        .schema("membros")
+        .from("community_pages")
+        .update({ position: b.position })
+        .eq("id", a.id),
+      sb
+        .schema("membros")
+        .from("community_pages")
+        .update({ position: a.position })
+        .eq("id", b.id),
+    ]);
+
+    revalidatePath("/community", "layout");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/** Move um sidebar link pra cima/baixo. */
+export async function moveSidebarLinkAction(
+  id: string,
+  direction: "up" | "down",
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const sb = admin();
+    const { data: links } = await sb
+      .schema("membros")
+      .from("community_sidebar_links")
+      .select("id, position")
+      .order("position", { ascending: true });
+    const list = (links ?? []) as Array<{ id: string; position: number }>;
+    const idx = list.findIndex((s) => s.id === id);
+    if (idx < 0) return { ok: false, error: "Link não encontrado." };
+    const swapWith = direction === "up" ? idx - 1 : idx + 1;
+    if (swapWith < 0 || swapWith >= list.length) return { ok: true };
+    const a = list[idx];
+    const b = list[swapWith];
+    await Promise.all([
+      sb
+        .schema("membros")
+        .from("community_sidebar_links")
+        .update({ position: b.position })
+        .eq("id", a.id),
+      sb
+        .schema("membros")
+        .from("community_sidebar_links")
+        .update({ position: a.position })
+        .eq("id", b.id),
+    ]);
     revalidatePath("/community", "layout");
     return { ok: true };
   } catch (e) {

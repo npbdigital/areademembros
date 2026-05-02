@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { CheckCircle2, Plus, UserPlus, Users, XCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { formatDateBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -167,7 +168,7 @@ export default async function AdminStudentsPage({
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs text-npb-text-muted">
-                    {new Date(s.created_at).toLocaleDateString("pt-BR")}
+                    {formatDateBrt(s.created_at)}
                   </td>
                 </tr>
               ))}

@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-02 — Etapa 19: bugfixes XP + UX afiliados + comunidade + dashboard
-**Último commit no main:** `3c4eb44` — feat: Etapa 19 - bugfixes XP + UX afiliados/comunidade/dashboard
+**Última atualização:** 2026-05-02 — Etapa 20: pendências batidas (CSV, gráfico, pinning, realtime, cron, manual sale)
+**Último commit no main:** atualiza neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,68 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 20 — Sweep de pendências (2026-05-02 noite)
+
+Sweep limpando ~todas as pendências do HANDOFF antes de migrar pra Hostinger (o que ficou pra depois). Build verde, tudo testado.
+
+**1. UI de afiliados — limpeza:**
+- `$ 21,65` virou `R$ 21,65` (removido ícone DollarSign do `affiliate-section.tsx`)
+- Comissão da venda na lista usa `toLocaleString('pt-BR')` com vírgula em vez de ponto
+- Conquistas pequenas adicionadas pra dar dopamina cedo: `comm_kiwify_100` (R$100, 20 XP) e `comm_kiwify_500` (R$500, 50 XP)
+
+**2. Timezone BRT em todas as telas SSR:** todos os `toLocaleDateString` (ou `toLocaleString`) com saída server-rendered ganharam `timeZone: 'America/Sao_Paulo'`. Telas afetadas: students list/detalhe, profile (matrículas), cohorts/[id], reports, students/atividade, lesson_notes, favorites, gamification (achievements unlock_at), drip (release date), community (timeAgoPtBr).
+
+**3. Toggle "Mostrar fictícios" em /admin/reports e /admin/dashboard.** `getNonStudentUserIds(supabase, { includeFicticio: true })` exclui ou inclui `ficticio` no excluded list. Default: ESCONDE fictícios das stats. Link no header pra alternar via `?showFicticio=1`.
+
+**4. Filtros + CSV export em /admin/affiliates:**
+- Form GET com `?q=...` (busca em kiwify_email/kiwify_name) + `?status=paid|refunded|chargedback`
+- Botão "Exportar CSV" → endpoint `/api/admin/affiliates/export.csv` — gera CSV com BOM UTF-8 (Excel pt-BR ok), respeita os mesmos filtros, inclui aluno (se atribuído), produto, status, comissão, valor total, método de pagamento
+
+**5. Venda manual pra fictícios:** novo `addManualSaleAction` + componente [`AddManualSaleButton`](src/components/admin/add-manual-sale-button.tsx) no header de `/admin/affiliates`. Admin escolhe email do aluno, produto e comissão R$. Insere com `source='manual'`, status `paid`, dispara `awardXp` + `bumpMinLevel` (Nível II garantido). Útil pra popular dados de teste em fictícios sem precisar de webhook real.
+
+**6. Pinning de posts:**
+- Action `toggleTopicPinAction(topicId, pinned)` em `/admin/community/actions.ts`
+- Item "Fixar no topo / Desafixar" no menu de 3 pontinhos do `PostActionsBar` (só admin/mod)
+- `is_pinned` no SELECT das pages que listam posts (`/community/[slug]` e `/community/feed`)
+- Ordenação: `is_pinned DESC, created_at DESC` — fixados sempre no topo
+- Visual: borda dourada + badge "📌 Fixado" em cima do nome do autor no PostCard
+
+**7. Reorder de espaços/páginas/atalhos** — actions `moveSpaceAction`/`movePageAction`/`moveSidebarLinkAction` (sobe/desce trocando position com vizinho) + UI:
+- Menu do `SpaceActions` ganha "Subir" / "Descer"
+- Menu do `PageActions` ganha "Subir" / "Descer"
+- `SidebarLinkRow` ganha 2 botões inline (↑ ↓) ao lado da lixeira (visíveis no hover)
+
+(DnD via `@dnd-kit` foi descartado — overkill pra esse use case. Setas resolvem.)
+
+**8. Gráfico de comissão por mês no /admin/dashboard:** SVG inline (sem nova dep), barras dos últimos 12 meses normalizadas pelo maior valor. Hover mostra tooltip com R$ + nº vendas. Ao lado dos cards Hoje/7d/30d.
+
+**9. Realtime via Supabase channels:**
+- Migration: adicionado `community_topics` e `community_replies` ao publication `supabase_realtime`
+- Componente [`RealtimeFeedRefresher`](src/components/community/realtime-feed-refresher.tsx) — subscribe a INSERT/UPDATE de community_topics (filtro opcional por `pageId`) e a INSERT de community_replies (filtro por `topicId`). Em qualquer evento, chama `router.refresh()`.
+- Plugado em `/community/feed` (sem filtro), `/community/[slug]` (filter=pageId), `/community/[slug]/post/[postId]` (filter=topicId)
+- Resultado: quando admin aprova um post, ele aparece na hora pra todo mundo no feed. Quando aluno comenta, contagem atualiza no detalhe.
+
+**10. Cron diário pra notificar drip:**
+- Endpoint [`/api/cron/drip-notifications`](src/app/api/cron/drip-notifications/route.ts) — pra cada matrícula ativa, calcula `dias_desde_matricula`. Pra cada lição com `release_type='days_after_enrollment'` E `release_days = dias_atuais`, notifica o aluno (idempotente: checa se já notificou nas últimas 48h pra mesma combinação user+link).
+- `vercel.json` ganha `crons: [{ path: "/api/cron/drip-notifications", schedule: "0 12 * * *" }]` — roda diário às 12 UTC (= 09 BRT).
+- Auth via header `Authorization: Bearer $CRON_SECRET` (Vercel adiciona automaticamente). Sem `CRON_SECRET` setado no Vercel, o endpoint aceita qualquer chamada (modo dev). **Pendente:** Felipe precisa setar `CRON_SECRET` no Vercel pra produção.
+
+**Migrations aplicadas:**
+- `add_low_sales_value_achievements` — conquistas R$100 e R$500
+- `realtime_publish_community_topics_replies` — adiciona ao publication
+
+**Arquivos novos:**
+- `src/lib/format-date.ts` (já tinha, agora aplicado em mais lugares)
+- `src/app/api/admin/affiliates/export.csv/route.ts`
+- `src/components/admin/add-manual-sale-button.tsx`
+- `src/components/community/realtime-feed-refresher.tsx`
+- `src/app/api/cron/drip-notifications/route.ts`
+
+**Pendências em aberto (todas opcionais):**
+- Migrar pra Hostinger VPS (~6 meses, decisão do Felipe)
+- Suporte a Hotmart/Eduzz (schema é genérico via `source`, só precisa adapter por plataforma)
+- DnD real com @dnd-kit (atual: setas ↑↓ resolvem)
 
 ### Etapa 19 — Bugfixes críticos + UX afiliados/comunidade/dashboard (2026-05-02)
 
@@ -769,7 +831,12 @@ Configurado em `LEVEL_THRESHOLDS` em `src/lib/gamification.ts`.
     - `EXCEPTION WHEN OTHERS` em volta de tudo (zero risco de bloquear venda)
   - E rodar backfill das **2637 compras aprovadas** já existentes
 
-### Polimentos pequenos
+### ✅ Polimentos batidos na Etapa 20
+Movidos pra concluído na Etapa 20: filtros + CSV em /admin/affiliates, gráfico vendas/mês,
+manual sale UI, pinning, reorder de espaços, realtime feed, cron drip, formatDateBrt em
+todas as telas, toggle fictícios em reports/dashboard. Ver seção Etapa 20 acima.
+
+### Polimentos antigos (referência)
 - Quick-edit de **aula** (popup com título + cover + duração) — hoje só módulo tem
 - "Aula default do curso" — admin escolher qual aula abre na primeira vez (hoje a regra é automática: 1ª aula do 1º módulo no first access, depois última assistida via CTA)
 - Editor de aula em mobile (TipTap + abas pode apertar < 500px)

@@ -7,6 +7,8 @@ import {
   Loader2,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Trash2,
   XCircle,
 } from "lucide-react";
@@ -16,6 +18,7 @@ import { deleteTopicAction } from "@/app/(student)/community/actions";
 import {
   approvePostAction,
   rejectPostAction,
+  toggleTopicPinAction,
 } from "@/app/(admin)/admin/community/actions";
 import { PostModal } from "@/components/community/create-post-button";
 
@@ -25,6 +28,7 @@ interface Props {
   currentUserId: string;
   currentRole: AccessRole;
   status: string;
+  isPinned?: boolean;
   pageId: string;
   pageSlug: string;
   pageTitle: string;
@@ -39,6 +43,7 @@ export function PostActionsBar({
   currentUserId,
   currentRole,
   status,
+  isPinned = false,
   pageId,
   pageSlug,
   pageTitle,
@@ -51,12 +56,27 @@ export function PostActionsBar({
   const [editingOpen, setEditingOpen] = useState(false);
   const [pendingDelete, startDelete] = useTransition();
   const [pendingMod, startMod] = useTransition();
+  const [pendingPin, startPin] = useTransition();
 
   const isAuthor = authorId === currentUserId;
   const elevated = isElevatedRole(currentRole);
   const canEdit = isAuthor || elevated;
   const canDelete = isAuthor || elevated;
   const canModerate = elevated && status !== "approved";
+  const canPin = elevated && status === "approved";
+
+  function handleTogglePin() {
+    setMenuOpen(false);
+    startPin(async () => {
+      const res = await toggleTopicPinAction(topicId, !isPinned);
+      if (res.ok) {
+        toast.success(isPinned ? "Post desafixado." : "Post fixado no topo.");
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Falha.");
+      }
+    });
+  }
 
   function handleDelete() {
     setMenuOpen(false);
@@ -153,6 +173,21 @@ export function PostActionsBar({
                 >
                   <Pencil className="h-3 w-3" />
                   Editar
+                </button>
+              )}
+              {canPin && (
+                <button
+                  type="button"
+                  onClick={handleTogglePin}
+                  disabled={pendingPin}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+                >
+                  {isPinned ? (
+                    <PinOff className="h-3 w-3" />
+                  ) : (
+                    <Pin className="h-3 w-3" />
+                  )}
+                  {isPinned ? "Desafixar" : "Fixar no topo"}
                 </button>
               )}
               {canDelete && (

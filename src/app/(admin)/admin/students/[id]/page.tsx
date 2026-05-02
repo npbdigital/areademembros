@@ -17,6 +17,7 @@ import { ResendInviteButton } from "@/components/admin/resend-invite-button";
 import { SetPasswordForm } from "@/components/admin/set-password-form";
 import { AddEnrollmentsForm } from "@/components/admin/add-enrollments-form";
 import { updateStudentAction } from "../actions";
+import { formatDateBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +63,7 @@ export default async function EditStudentPage({
   );
 
   const updateAction = updateStudentAction.bind(null, userId);
-  const createdAt = new Date(student.created_at).toLocaleDateString("pt-BR");
+  const createdAt = formatDateBrt(student.created_at);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -187,12 +188,8 @@ export default async function EditStudentPage({
                   ? e.cohorts[0]
                   : e.cohorts;
                 if (!cohort) return null;
-                const enrolled = new Date(e.enrolled_at).toLocaleDateString(
-                  "pt-BR",
-                );
-                const expires = e.expires_at
-                  ? new Date(e.expires_at).toLocaleDateString("pt-BR")
-                  : null;
+                const enrolled = formatDateBrt(e.enrolled_at);
+                const expires = e.expires_at ? formatDateBrt(e.expires_at) : null;
                 const expired =
                   e.expires_at && new Date(e.expires_at) < new Date();
 

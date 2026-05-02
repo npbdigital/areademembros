@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   ChevronDown,
   ChevronRight,
   ExternalLink,
@@ -33,6 +35,9 @@ import {
   deletePageAction,
   deleteSidebarLinkAction,
   deleteSpaceAction,
+  movePageAction,
+  moveSidebarLinkAction,
+  moveSpaceAction,
   updatePageAction,
   updateSpaceAction,
 } from "@/app/(admin)/admin/community/actions";
@@ -300,6 +305,14 @@ function SidebarLinkRow({
     });
   }
 
+  function handleMove(direction: "up" | "down") {
+    startTransition(async () => {
+      const res = await moveSidebarLinkAction(link.id, direction);
+      if (res.ok) router.refresh();
+      else toast.error(res.error ?? "Falha.");
+    });
+  }
+
   return (
     <div className="group relative">
       <a
@@ -315,19 +328,39 @@ function SidebarLinkRow({
         )}
       </a>
       {canManage && (
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={pending}
-          className="absolute right-1 top-1/2 hidden -translate-y-1/2 rounded p-1 text-npb-text-muted hover:bg-red-500/10 hover:text-red-400 group-hover:block"
-          title="Remover"
-        >
-          {pending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <Trash2 className="h-3 w-3" />
-          )}
-        </button>
+        <div className="absolute right-1 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 group-hover:flex">
+          <button
+            type="button"
+            onClick={() => handleMove("up")}
+            disabled={pending}
+            className="rounded p-1 text-npb-text-muted hover:bg-npb-bg4 hover:text-npb-text"
+            title="Subir"
+          >
+            <ArrowUp className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleMove("down")}
+            disabled={pending}
+            className="rounded p-1 text-npb-text-muted hover:bg-npb-bg4 hover:text-npb-text"
+            title="Descer"
+          >
+            <ArrowDown className="h-3 w-3" />
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={pending}
+            className="rounded p-1 text-npb-text-muted hover:bg-red-500/10 hover:text-red-400"
+            title="Remover"
+          >
+            {pending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Trash2 className="h-3 w-3" />
+            )}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -376,6 +409,15 @@ function SpaceActions({
     });
   }
 
+  function handleMove(direction: "up" | "down") {
+    setOpenMenu(false);
+    startTransition(async () => {
+      const res = await moveSpaceAction(space.id, direction);
+      if (res.ok) router.refresh();
+      else toast.error(res.error ?? "Falha.");
+    });
+  }
+
   return (
     <div className="relative ml-auto" ref={ref}>
       <button
@@ -388,6 +430,25 @@ function SpaceActions({
       </button>
       {openMenu && (
         <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-npb-border bg-npb-bg3 py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => handleMove("up")}
+            disabled={pending}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+          >
+            <ArrowUp className="h-3 w-3" />
+            Subir
+          </button>
+          <button
+            type="button"
+            onClick={() => handleMove("down")}
+            disabled={pending}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+          >
+            <ArrowDown className="h-3 w-3" />
+            Descer
+          </button>
+          <div className="my-0.5 h-px bg-npb-border" />
           <button
             type="button"
             onClick={() => {
@@ -452,6 +513,15 @@ function PageActions({
     });
   }
 
+  function handleMove(direction: "up" | "down") {
+    setOpenMenu(false);
+    startTransition(async () => {
+      const res = await movePageAction(page.id, direction);
+      if (res.ok) router.refresh();
+      else toast.error(res.error ?? "Falha.");
+    });
+  }
+
   return (
     <div className="absolute right-1 top-1/2 -translate-y-1/2" ref={ref}>
       <button
@@ -467,6 +537,25 @@ function PageActions({
       </button>
       {openMenu && (
         <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-npb-border bg-npb-bg3 py-1 shadow-lg">
+          <button
+            type="button"
+            onClick={() => handleMove("up")}
+            disabled={pending}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+          >
+            <ArrowUp className="h-3 w-3" />
+            Subir
+          </button>
+          <button
+            type="button"
+            onClick={() => handleMove("down")}
+            disabled={pending}
+            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+          >
+            <ArrowDown className="h-3 w-3" />
+            Descer
+          </button>
+          <div className="my-0.5 h-px bg-npb-border" />
           <button
             type="button"
             onClick={() => {

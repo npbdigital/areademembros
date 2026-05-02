@@ -5,6 +5,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto";
 import { backfillOrphanSales, processSalesRaw } from "@/lib/affiliates/process";
 import { normalizeEmail } from "@/lib/affiliates/normalize";
+import { awardXp, bumpMinLevel } from "@/lib/gamification";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -289,6 +290,103 @@ export async function attachOrphanByStudentEmailAction(
 
     revalidatePath("/admin/affiliates");
     return { ok: true, data: { attached, userId: u.id } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/**
+ * Adiciona venda manual pra um aluno (útil pra fictícios populando dados de
+ * teste, ou pra compensar vendas que não chegaram pelo webhook). Insere em
+ * `afiliados.sales` com `source='manual'`, dispara XP, bumpa min_level, e
+ * reavalia conquistas. Status sempre 'paid'.
+ */
+export async function addManualSaleAction(
+  studentEmail: string,
+  productName: string,
+  commissionReais: number,
+): Promise<ActionResult<{ saleId: string; xpAwarded: number }>> {
+  try {
+    await assertAdmin();
+    const sb = createAdminClient();
+
+    const emailLookup = studentEmail.trim().toLowerCase();
+    if (!emailLookup || !emailLookup.includes("@")) {
+      return { ok: false, error: "E-mail do aluno inválido." };
+    }
+    if (!productName.trim()) {
+      return { ok: false, error: "Informe o nome do produto." };
+    }
+    if (!Number.isFinite(commissionReais) || commissionReais <= 0) {
+      return { ok: false, error: "Valor de comissão inválido." };
+    }
+
+    const { data: user } = await sb
+      .schema("membros")
+      .from("users")
+      .select("id, email, full_name")
+      .ilike("email", emailLookup)
+      .maybeSingle();
+    const u = user as
+      | { id: string; email: string; full_name: string | null }
+      | null;
+    if (!u) return { ok: false, error: `Aluno ${emailLookup} não encontrado.` };
+
+    const commissionCents = Math.round(commissionReais * 100);
+    const xpAmount = Math.floor(commissionCents / 100) + 10;
+    const orderId = `manual-${crypto.randomUUID()}`;
+
+    const { data: saleRow, error: saleErr } = await sb
+      .schema("afiliados")
+      .from("sales")
+      .insert({
+        source: "manual",
+        external_order_id: orderId,
+        kiwify_email: u.email,
+        kiwify_name: u.full_name ?? "",
+        member_user_id: u.id,
+        product_name: productName.trim(),
+        status: "paid",
+        commission_value_cents: commissionCents,
+        gross_value_cents: commissionCents,
+        currency: "BRL",
+        approved_at: new Date().toISOString(),
+        status_updated_at: new Date().toISOString(),
+        xp_awarded: 0,
+      })
+      .select("id")
+      .single();
+
+    if (saleErr || !saleRow) {
+      return {
+        ok: false,
+        error: `Falha ao inserir venda: ${saleErr?.message ?? "erro"}`,
+      };
+    }
+    const sale = saleRow as { id: string };
+
+    // Concede XP
+    try {
+      await awardXp(sb, {
+        userId: u.id,
+        amount: xpAmount,
+        reason: "kiwify_sale",
+        referenceId: sale.id,
+      });
+      await sb
+        .schema("afiliados")
+        .from("sales")
+        .update({ xp_awarded: xpAmount })
+        .eq("id", sale.id);
+      // 1ª venda = Nível II garantido
+      await bumpMinLevel(sb, u.id, 2);
+    } catch (e) {
+      console.error("[addManualSale] erro awardXp:", e);
+    }
+
+    revalidatePath("/admin/affiliates");
+    revalidatePath("/admin/dashboard");
+    return { ok: true, data: { saleId: sale.id, xpAwarded: xpAmount } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { formatDuration } from "@/lib/format-duration";
+import { formatDateBrt } from "@/lib/format-date";
 import { AddCourseToCohortForm } from "@/components/admin/add-course-to-cohort-form";
 import { CohortForm } from "@/components/admin/cohort-form";
 import { CommunityToggle } from "@/components/admin/community-toggle";
@@ -263,12 +264,8 @@ export default async function EditCohortPage({
               {enrollments.map((e) => {
                 const userRow = Array.isArray(e.users) ? e.users[0] : e.users;
                 if (!userRow) return null;
-                const enrolledDate = new Date(e.enrolled_at).toLocaleDateString(
-                  "pt-BR",
-                );
-                const expiresDate = e.expires_at
-                  ? new Date(e.expires_at).toLocaleDateString("pt-BR")
-                  : null;
+                const enrolledDate = formatDateBrt(e.enrolled_at);
+                const expiresDate = e.expires_at ? formatDateBrt(e.expires_at) : null;
                 const expired =
                   e.expires_at && new Date(e.expires_at) < new Date();
 

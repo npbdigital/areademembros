@@ -3,6 +3,7 @@ import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/access";
 import { PostCard, type PostCardData } from "@/components/community/post-card";
 import { CreatePostButton } from "@/components/community/create-post-button";
+import { RealtimeFeedRefresher } from "@/components/community/realtime-feed-refresher";
 
 export const dynamic = "force-dynamic";
 
@@ -50,10 +51,11 @@ export default async function CommunityPagePage({
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, created_at",
     )
     .eq("page_id", page.id)
     .eq("status", "approved")
+    .order("is_pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .range(0, PAGE_SIZE - 1);
 
@@ -67,6 +69,7 @@ export default async function CommunityPagePage({
     image_url: string | null;
     likes_count: number;
     replies_count: number;
+    is_pinned: boolean;
     created_at: string;
   }>;
 
@@ -135,6 +138,7 @@ export default async function CommunityPagePage({
       imageUrl: p.image_url,
       likesCount: p.likes_count,
       repliesCount: p.replies_count,
+      isPinned: p.is_pinned,
       createdAt: p.created_at,
       authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",
@@ -148,6 +152,7 @@ export default async function CommunityPagePage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      <RealtimeFeedRefresher pageId={page.id} />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">

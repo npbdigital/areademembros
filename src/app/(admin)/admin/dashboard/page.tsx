@@ -12,10 +12,16 @@ import {
   Wallet,
 } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { getNonStudentUserIds } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminDashboardPage() {
+export default async function AdminDashboardPage({
+  searchParams,
+}: {
+  searchParams?: { showFicticio?: string };
+}) {
+  const showFicticio = searchParams?.showFicticio === "1";
   // Conteúdo (cursos/módulos/aulas) — RLS deixa admin ler.
   const supabase = createClient();
   // Métricas que dependem de ler dados de TODOS os alunos — RLS de
@@ -36,11 +42,25 @@ export default async function AdminDashboardPage() {
   const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60_000).toISOString();
   const since30d = new Date(now.getTime() - 30 * 24 * 60 * 60_000).toISOString();
 
+  // IDs a excluir das contagens de engajamento (admin/mod sempre, ficticio
+  // se admin não pediu pra mostrar)
+  const excludedIds = await getNonStudentUserIds(adminSupabase, {
+    includeFicticio: showFicticio,
+  });
+
+  // Filtra rows pelo set de excluídos. Quando excludedIds vazio, retorna todos.
+  const excludeFilter = (rows: Array<{ user_id: string }> | null) => {
+    if (!rows) return [];
+    if (excludedIds.length === 0) return rows;
+    const exc = new Set(excludedIds);
+    return rows.filter((r) => !exc.has(r.user_id));
+  };
+
   const [
     { count: coursesCount },
     { count: modulesCount },
     { count: lessonsCount },
-    { count: studentsCount },
+    studentsRes,
     { data: liveRows },
     { data: todayRows },
     { data: last7dRows },
@@ -63,7 +83,7 @@ export default async function AdminDashboardPage() {
       .schema("membros")
       .from("users")
       .select("id", { count: "exact", head: true })
-      .eq("role", "student"),
+      .in("role", showFicticio ? ["student", "ficticio"] : ["student"]),
     adminSupabase
       .schema("membros")
       .from("lesson_progress")
@@ -84,24 +104,37 @@ export default async function AdminDashboardPage() {
       .from("lesson_progress")
       .select("user_id")
       .gte("last_watched_at", since30d),
-    // Vendas afiliados — só pagas pra contar como "venda concretizada"
-    adminSupabase
-      .schema("afiliados")
-      .from("sales")
-      .select("approved_at, commission_value_cents, status, member_user_id")
-      .eq("status", "paid")
-      .gte("approved_at", since30d),
+    // Vendas afiliados — só pagas. Janela de 12 meses pra incluir o gráfico.
+    (() => {
+      const since12m = new Date(now);
+      since12m.setMonth(since12m.getMonth() - 12);
+      since12m.setDate(1);
+      since12m.setHours(0, 0, 0, 0);
+      return adminSupabase
+        .schema("afiliados")
+        .from("sales")
+        .select("approved_at, commission_value_cents, status, member_user_id")
+        .eq("status", "paid")
+        .gte("approved_at", since12m.toISOString());
+    })(),
   ]);
 
-  const distinctCount = (
-    rows: Array<{ user_id: string }> | null,
-  ): number => new Set((rows ?? []).map((r) => r.user_id)).size;
+  const studentsCount = studentsRes.count ?? 0;
 
-  const liveNow = distinctCount(liveRows as Array<{ user_id: string }> | null);
-  const today = distinctCount(todayRows as Array<{ user_id: string }> | null);
-  const last7d = distinctCount(last7dRows as Array<{ user_id: string }> | null);
+  const distinctCount = (rows: Array<{ user_id: string }>): number =>
+    new Set(rows.map((r) => r.user_id)).size;
+
+  const liveNow = distinctCount(
+    excludeFilter(liveRows as Array<{ user_id: string }> | null),
+  );
+  const today = distinctCount(
+    excludeFilter(todayRows as Array<{ user_id: string }> | null),
+  );
+  const last7d = distinctCount(
+    excludeFilter(last7dRows as Array<{ user_id: string }> | null),
+  );
   const last30d = distinctCount(
-    last30dRows as Array<{ user_id: string }> | null,
+    excludeFilter(last30dRows as Array<{ user_id: string }> | null),
   );
 
   // Stats de vendas afiliados — total inclui órfãs (sem differenciar). Aqui
@@ -116,11 +149,41 @@ export default async function AdminDashboardPage() {
     iso !== null && iso >= fromIso;
   const salesToday = sales.filter((s) => inWindow(s.approved_at, startOfDay));
   const sales7d = sales.filter((s) => inWindow(s.approved_at, since7d));
-  const sales30d = sales; // já vem filtrado >= since30d
+  const sales30d = sales.filter((s) => inWindow(s.approved_at, since30d));
   const sumCents = (arr: typeof sales) =>
     arr.reduce((acc, s) => acc + (s.commission_value_cents ?? 0), 0);
   const formatBRL = (cents: number) =>
     `R$ ${(cents / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  // Buckets por mês (últimos 12) pra gráfico
+  const monthBuckets: Array<{ key: string; label: string; cents: number; count: number }> =
+    [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now);
+    d.setMonth(d.getMonth() - i);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    const next = new Date(d);
+    next.setMonth(next.getMonth() + 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const label = d.toLocaleDateString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      month: "short",
+    });
+    const inThisMonth = sales.filter(
+      (s) =>
+        s.approved_at !== null &&
+        s.approved_at >= d.toISOString() &&
+        s.approved_at < next.toISOString(),
+    );
+    monthBuckets.push({
+      key,
+      label,
+      cents: sumCents(inThisMonth),
+      count: inThisMonth.length,
+    });
+  }
+  const maxCents = Math.max(1, ...monthBuckets.map((b) => b.cents));
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -128,12 +191,23 @@ export default async function AdminDashboardPage() {
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-npb-gold/10 text-npb-gold">
           <LayoutDashboard className="h-5 w-5" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold text-npb-text">Painel admin</h1>
           <p className="text-sm text-npb-text-muted">
-            Visão geral da plataforma — conteúdo e engajamento dos alunos.
+            Visão geral da plataforma — conteúdo e engajamento dos alunos
+            {showFicticio ? " (fictícios incluídos)" : " (fictícios escondidos)"}.
           </p>
         </div>
+        <Link
+          href={
+            showFicticio
+              ? "/admin/dashboard"
+              : "/admin/dashboard?showFicticio=1"
+          }
+          className="text-xs text-npb-text-muted hover:text-npb-gold"
+        >
+          {showFicticio ? "Esconder fictícios" : "Mostrar fictícios"}
+        </Link>
       </div>
 
       <section>
@@ -144,7 +218,7 @@ export default async function AdminDashboardPage() {
           <StatCard
             icon={Users}
             label="Cadastrados"
-            value={studentsCount ?? 0}
+            value={studentsCount}
             href="/admin/students"
             tone="default"
           />
@@ -234,6 +308,52 @@ export default async function AdminDashboardPage() {
             value={sales30d.length}
             hint={formatBRL(sumCents(sales30d))}
           />
+        </div>
+
+        {/* Gráfico mensal */}
+        <div className="mt-3 rounded-xl border border-npb-border bg-npb-bg2 p-4">
+          <div className="mb-3 flex items-end justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-npb-text-muted">
+                Comissão por mês
+              </p>
+              <p className="text-[10px] text-npb-text-muted">
+                Últimos 12 meses · só vendas pagas
+              </p>
+            </div>
+            <p className="text-xs text-npb-gold">
+              total: {formatBRL(monthBuckets.reduce((a, b) => a + b.cents, 0))}
+            </p>
+          </div>
+          <div className="flex items-end gap-1.5" style={{ height: "140px" }}>
+            {monthBuckets.map((b) => {
+              const heightPct = b.cents > 0 ? (b.cents / maxCents) * 100 : 2;
+              return (
+                <div
+                  key={b.key}
+                  className="group flex flex-1 flex-col items-center gap-1"
+                >
+                  <div className="relative flex h-full w-full items-end">
+                    <div
+                      className={`w-full rounded-t transition ${
+                        b.cents > 0
+                          ? "bg-npb-gold/70 group-hover:bg-npb-gold"
+                          : "bg-npb-bg3"
+                      }`}
+                      style={{ height: `${heightPct}%` }}
+                      title={`${b.label}: ${formatBRL(b.cents)} (${b.count} vendas)`}
+                    />
+                    <div className="pointer-events-none absolute -top-8 left-1/2 z-10 hidden -translate-x-1/2 whitespace-nowrap rounded bg-npb-bg3 px-2 py-1 text-[10px] text-npb-text shadow-lg group-hover:block">
+                      {formatBRL(b.cents)} · {b.count}
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-npb-text-muted">
+                    {b.label.replace(".", "")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
 

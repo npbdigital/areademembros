@@ -164,6 +164,7 @@ function formatRelativeDate(iso: string): string {
   if (diffDays < 2) return "ontem";
   if (diffDays < 7) return `${diffDays}d atrás`;
   return date.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
     day: "2-digit",
     month: "2-digit",
   });

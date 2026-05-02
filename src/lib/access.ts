@@ -38,17 +38,22 @@ export async function getUserRole(
 }
 
 /**
- * Devolve os ids dos usuários que NÃO contam pras estatísticas (admin + moderator).
- * Usado pra excluir essas pessoas dos relatórios — eles enxergam tudo de graça.
+ * Devolve os ids dos usuários que NÃO contam pras estatísticas reais.
+ * Por padrão exclui admin + moderator + ficticio (usuários de teste).
+ * Passe `includeFicticio=true` quando o admin quiser ver tudo.
  */
 export async function getNonStudentUserIds(
   supabase: SupabaseClient,
+  options: { includeFicticio?: boolean } = {},
 ): Promise<string[]> {
+  const roles = options.includeFicticio
+    ? ["admin", "moderator"]
+    : ["admin", "moderator", "ficticio"];
   const { data } = await supabase
     .schema("membros")
     .from("users")
     .select("id")
-    .in("role", ["admin", "moderator"]);
+    .in("role", roles);
   return ((data ?? []) as Array<{ id: string }>).map((u) => u.id);
 }
 
