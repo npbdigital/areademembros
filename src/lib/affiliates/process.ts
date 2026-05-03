@@ -76,9 +76,19 @@ function toCents(v: string | number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Kiwify manda timestamps SEM timezone explícito — ex: "2026-05-03 10:11".
+ * O fuso é o de São Paulo (UTC-3). Sem o offset, `new Date()` interpreta
+ * como UTC (no Vercel) e a venda aparece 3h antes do horário real.
+ *
+ * Nota: BRT é UTC-3 fixo (não tem horário de verão desde 2019).
+ */
 function parseKiwifyDate(s: string | null | undefined): string | null {
   if (!s) return null;
-  const d = new Date(s.replace(" ", "T"));
+  // Se já vier com timezone (Z, +XX:XX, -XX:XX), respeita
+  const hasTz = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(s.trim());
+  const iso = s.replace(" ", "T") + (hasTz ? "" : "-03:00");
+  const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
