@@ -29,7 +29,7 @@ export default async function StudentLayout({
     .schema("membros")
     .from("users")
     .select(
-      "full_name, avatar_url, role, welcome_accepted_at, equipped_decoration_id",
+      "full_name, avatar_url, role, welcome_accepted_at, needs_onboarding, equipped_decoration_id",
     )
     .eq("id", user.id)
     .single();
@@ -88,10 +88,14 @@ export default async function StudentLayout({
   }));
 
   const settings = await getPlatformSettings(supabase);
+  // Não mostra a boas-vindas durante /onboarding — senão ela bloqueia o
+  // form de onboarding (1ª tela do one-click). Aluno passa pelo onboarding,
+  // chega no /dashboard, e aí o popup de boas-vindas aparece.
   const showWelcome =
     settings.welcomeEnabled &&
     !profile?.welcome_accepted_at &&
-    profile?.role === "student";
+    profile?.role === "student" &&
+    !profile?.needs_onboarding;
 
   // Carrega XP/streak pra mostrar no topbar (silent-fail se não der).
   // Admin não tem gamification — não faz sentido pra quem gerencia a plataforma.

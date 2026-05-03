@@ -88,138 +88,165 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
 
   if (hidden) return null;
 
+  const previewIsLong = (post.contentHtml?.length ?? 0) > 240;
+
   return (
     <li
-      className={`rounded-xl border p-5 transition hover:border-npb-gold/40 ${
+      className={`overflow-hidden rounded-xl border transition hover:border-npb-gold/40 ${
         post.isPinned
           ? "border-npb-gold/40 bg-npb-gold/5"
           : "border-npb-border bg-npb-bg2"
       }`}
     >
-      <div className="flex items-start gap-3">
-        <DecoratedAvatar
-          src={post.authorAvatarUrl}
-          decorationUrl={post.authorDecorationUrl}
-          name={post.authorName}
-          size={36}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+      <div className="p-5">
+        {/* Linha de topo: pin + título + menu */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             {post.isPinned && (
-              <span className="inline-flex items-center gap-1 rounded bg-npb-gold/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-npb-gold">
+              <span className="mb-2 inline-flex items-center gap-1 rounded bg-npb-gold/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-npb-gold">
                 <Pin className="h-2.5 w-2.5" />
                 Fixado
               </span>
             )}
+            <Link
+              href={detailUrl}
+              className="block text-lg font-bold leading-tight text-npb-text hover:text-npb-gold"
+            >
+              {post.title}
+            </Link>
+          </div>
+
+          {(canEdit || canDelete) && (
+            <div className="relative flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                title="Opções"
+                className="rounded-md p-1 text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-npb-border bg-npb-bg3 py-1 shadow-lg">
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setEditingOpen(true);
+                      }}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Editar
+                    </button>
+                  )}
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      disabled={pendingDelete}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Excluir
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {editingOpen && (
+                <PostModal
+                  pageId={post.pageId}
+                  pageTitle={post.pageTitle}
+                  editing={{
+                    topicId: post.id,
+                    title: post.title,
+                    bodyHtml: post.contentHtml ?? "",
+                    videoUrl: post.videoUrl,
+                  }}
+                  onClose={() => setEditingOpen(false)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Linha do autor */}
+        <div className="mt-3 flex items-center gap-2.5">
+          <DecoratedAvatar
+            src={post.authorAvatarUrl}
+            decorationUrl={post.authorDecorationUrl}
+            name={post.authorName}
+            size={32}
+          />
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
             <span className="text-sm font-semibold text-npb-text">
               {post.authorName}
             </span>
-            <LevelBadge level={post.authorLevel} size={16} />
+            <LevelBadge level={post.authorLevel} size={14} />
             <span className="text-xs text-npb-text-muted">
-              {timeAgoPtBr(post.createdAt)}
+              · {timeAgoPtBr(post.createdAt)}
             </span>
           </div>
-          <Link
-            href={detailUrl}
-            className="mt-1 block text-base font-bold text-npb-text hover:text-npb-gold"
-          >
-            {post.title}
-          </Link>
         </div>
-
-        {(canEdit || canDelete) && (
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((v) => !v)}
-              title="Opções"
-              className="rounded-md p-1 text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1 min-w-[140px] rounded-md border border-npb-border bg-npb-bg3 py-1 shadow-lg">
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setEditingOpen(true);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
-                  >
-                    <Pencil className="h-3 w-3" />
-                    Editar
-                  </button>
-                )}
-                {canDelete && (
-                  <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={pendingDelete}
-                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    Excluir
-                  </button>
-                )}
-              </div>
-            )}
-
-            {editingOpen && (
-              <PostModal
-                pageId={post.pageId}
-                pageTitle={post.pageTitle}
-                editing={{
-                  topicId: post.id,
-                  title: post.title,
-                  bodyHtml: post.contentHtml ?? "",
-                  videoUrl: post.videoUrl,
-                }}
-                onClose={() => setEditingOpen(false)}
-              />
-            )}
-          </div>
-        )}
       </div>
 
-      {(preview || firstImageUrl) && (
-        <Link
-          href={detailUrl}
-          className="mt-3 flex items-start gap-3 text-sm leading-relaxed text-npb-text-muted hover:text-npb-text"
-        >
-          {preview && (
-            <span className="min-w-0 flex-1">
-              {preview}
-              {(post.contentHtml?.length ?? 0) > 240 && "…"}
-            </span>
-          )}
-          {firstImageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={firstImageUrl}
-              alt=""
-              aria-hidden
-              className="h-20 w-20 flex-shrink-0 rounded-lg border border-npb-border bg-npb-bg3 object-cover"
-            />
-          )}
+      {/* Imagem hero (full width). Vai abaixo do header — fica chamativa
+          como uma capa de post. Quando há HTML rico com várias imagens,
+          mostra só a primeira. */}
+      {firstImageUrl && (
+        <Link href={detailUrl} className="block bg-black">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={firstImageUrl}
+            alt=""
+            aria-hidden
+            className="block max-h-[480px] w-full object-cover"
+          />
         </Link>
       )}
 
-      {/* Vídeo embaixo do texto, conforme decisão de produto */}
-      {embed && (
-        <div className="mt-3 aspect-video w-full overflow-hidden rounded-lg border border-npb-border bg-black">
-          <iframe
-            src={embed}
-            title={post.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="h-full w-full"
-          />
+      {/* Body */}
+      {(preview || embed) && (
+        <div className="px-5 pb-5 pt-4">
+          {preview && (
+            <Link
+              href={detailUrl}
+              className="block text-sm leading-relaxed text-npb-text-muted hover:text-npb-text"
+            >
+              <span className="line-clamp-3 whitespace-pre-wrap">
+                {preview}
+                {previewIsLong && "…"}
+              </span>
+              {previewIsLong && (
+                <span className="mt-1.5 inline-block text-xs font-semibold text-npb-gold hover:underline">
+                  Ver mais
+                </span>
+              )}
+            </Link>
+          )}
+
+          {embed && (
+            <div
+              className={`aspect-video w-full overflow-hidden rounded-lg border border-npb-border bg-black ${
+                preview ? "mt-3" : ""
+              }`}
+            >
+              <iframe
+                src={embed}
+                title={post.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                className="h-full w-full"
+              />
+            </div>
+          )}
         </div>
       )}
 
-      <div className="mt-4 flex items-center gap-4 text-xs">
+      {/* Footer: ações */}
+      <div className="flex items-center gap-4 border-t border-npb-border/50 px-5 py-3 text-xs">
         <button
           type="button"
           onClick={handleLike}
