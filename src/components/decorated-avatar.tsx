@@ -27,9 +27,8 @@ export function DecoratedAvatar({
   size = 36,
   className,
 }: Props) {
-  // Decoração estende ~30% além do avatar pra cobrir as bordas
-  const decoSize = Math.round(size * 1.3);
-  const decoOffset = Math.round((decoSize - size) / 2);
+  // Decoração estende ~40% além do avatar pra abraçar a borda
+  const decoSize = Math.round(size * 1.4);
   const initial = (name?.trim()?.[0] ?? "?").toUpperCase();
 
   return (
@@ -59,7 +58,10 @@ export function DecoratedAvatar({
         )}
       </div>
 
-      {/* Decoração sobreposta (z-1) */}
+      {/* Decoração sobreposta (z-10), centralizada SEM esticar.
+          object-fit:contain preserva aspect ratio do PNG, então PNGs
+          não-quadrados ficam sem distorção (mas pra alinhamento ideal
+          recomendamos PNG quadrado 512x512 com centro transparente). */}
       {decorationUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -70,8 +72,10 @@ export function DecoratedAvatar({
           style={{
             width: decoSize,
             height: decoSize,
-            top: -decoOffset,
-            left: -decoOffset,
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            objectFit: "contain",
           }}
         />
       )}
