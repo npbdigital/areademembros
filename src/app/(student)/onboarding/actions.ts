@@ -53,6 +53,16 @@ export async function completeOnboardingAction(params: {
         password: newPassword,
       });
       if (pwErr) return { ok: false, error: pwErr.message };
+
+      // Trocar senha invalida todas as sessões existentes (incluindo a do
+      // próprio aluno que veio do magic link). Re-sign-in imediato com a
+      // nova senha pra reescrever os cookies de sessão — sem isso, o
+      // próximo request cai no /login.
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email!,
+        password: newPassword,
+      });
+      if (signInErr) return { ok: false, error: signInErr.message };
     }
 
     revalidatePath("/", "layout");
