@@ -106,6 +106,12 @@ export async function createCourseAction(
       is_published: bool(formData, "is_published"),
       is_for_sale: bool(formData, "is_for_sale"),
       sale_url: nullableStr(formData, "sale_url"),
+      welcome_popup_enabled: bool(formData, "welcome_popup_enabled"),
+      welcome_popup_title: nullableStr(formData, "welcome_popup_title"),
+      welcome_popup_description: nullableStr(formData, "welcome_popup_description"),
+      welcome_popup_video_id: nullableStr(formData, "welcome_popup_video_id"),
+      welcome_popup_terms: nullableStr(formData, "welcome_popup_terms"),
+      welcome_popup_button_label: nullableStr(formData, "welcome_popup_button_label"),
       position,
     })
     .select("id")
@@ -146,6 +152,12 @@ export async function updateCourseAction(
       is_published: newPublished,
       is_for_sale: bool(formData, "is_for_sale"),
       sale_url: nullableStr(formData, "sale_url"),
+      welcome_popup_enabled: bool(formData, "welcome_popup_enabled"),
+      welcome_popup_title: nullableStr(formData, "welcome_popup_title"),
+      welcome_popup_description: nullableStr(formData, "welcome_popup_description"),
+      welcome_popup_video_id: nullableStr(formData, "welcome_popup_video_id"),
+      welcome_popup_terms: nullableStr(formData, "welcome_popup_terms"),
+      welcome_popup_button_label: nullableStr(formData, "welcome_popup_button_label"),
     })
     .eq("id", id);
 

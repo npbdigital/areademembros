@@ -16,6 +16,7 @@ import {
   Radio,
   Settings,
   Sparkles,
+  Trophy,
   Users,
   Wallet,
 } from "lucide-react";
@@ -59,6 +60,7 @@ const groups = [
     items: [
       { href: "/admin/reports", label: "Relatórios", icon: BarChart3 },
       { href: "/admin/affiliates", label: "Afiliados Kiwify", icon: Wallet },
+      { href: "/admin/achievements", label: "Conquistas", icon: Trophy },
     ],
   },
   {
@@ -67,6 +69,7 @@ const groups = [
       { href: "/admin/decorations", label: "Decorações", icon: Sparkles },
       { href: "/admin/youtube", label: "YouTube", icon: PlaySquare },
       { href: "/admin/links", label: "Encurtador", icon: Link2 },
+      { href: "/admin/one-click-test", label: "One-Click (teste)", icon: Sparkles },
       { href: "/admin/settings", label: "Configurações", icon: Settings },
     ],
   },

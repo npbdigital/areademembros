@@ -32,7 +32,7 @@ export default async function EditCoursePage({
     .schema("membros")
     .from("courses")
     .select(
-      "id, title, description, cover_url, is_published, is_for_sale, sale_url",
+      "id, title, description, cover_url, is_published, is_for_sale, sale_url, welcome_popup_enabled, welcome_popup_title, welcome_popup_description, welcome_popup_video_id, welcome_popup_terms, welcome_popup_button_label",
     )
     .eq("id", courseId)
     .single();

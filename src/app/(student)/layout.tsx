@@ -10,6 +10,7 @@ import { StudentMobileNav } from "@/components/student-mobile-nav";
 import { StudentChromeWrapper } from "@/components/student-chrome-wrapper";
 import { PushPermissionPrompt } from "@/components/push-permission-prompt";
 import { BroadcastBanners } from "@/components/student/broadcast-banners";
+import { AchievementCelebrationListener } from "@/components/student/achievement-celebration";
 
 export default async function StudentLayout({
   children,
@@ -178,6 +179,9 @@ export default async function StudentLayout({
         vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""}
         enabled={settings.pushNotificationsEnabled}
       />
+      {settings.gamificationEnabled && (
+        <AchievementCelebrationListener userId={user.id} />
+      )}
       <Toaster
         theme="dark"
         position="top-right"

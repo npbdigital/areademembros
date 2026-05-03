@@ -15,6 +15,12 @@ export interface CourseFormValues {
   is_published?: boolean | null;
   is_for_sale?: boolean | null;
   sale_url?: string | null;
+  welcome_popup_enabled?: boolean | null;
+  welcome_popup_title?: string | null;
+  welcome_popup_description?: string | null;
+  welcome_popup_video_id?: string | null;
+  welcome_popup_terms?: string | null;
+  welcome_popup_button_label?: string | null;
 }
 
 interface CourseFormProps {
@@ -108,6 +114,89 @@ export function CourseForm({
           Usada quando &quot;À venda&quot; está ligado.
         </p>
       </div>
+
+      <fieldset className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg3 p-5">
+        <legend className="-ml-2 px-2 text-xs font-semibold uppercase tracking-wide text-npb-gold">
+          Pop-up de boas-vindas (1ª vez no curso)
+        </legend>
+
+        <Toggle
+          name="welcome_popup_enabled"
+          defaultChecked={Boolean(init.welcome_popup_enabled)}
+          label="Mostrar popup quando aluno abrir o curso pela 1ª vez"
+          help="Após aceitar uma vez, o aluno não vê de novo nesse curso."
+        />
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_popup_title" className="text-npb-text">
+            Título do popup
+          </Label>
+          <Input
+            id="welcome_popup_title"
+            name="welcome_popup_title"
+            defaultValue={init.welcome_popup_title ?? ""}
+            placeholder={`Bem-vindo a ${init.title ?? "este curso"}`}
+            className="bg-npb-bg2 border-npb-border text-npb-text"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_popup_description" className="text-npb-text">
+            Descrição (subtítulo)
+          </Label>
+          <textarea
+            id="welcome_popup_description"
+            name="welcome_popup_description"
+            defaultValue={init.welcome_popup_description ?? ""}
+            rows={2}
+            placeholder="Mensagem curta de boas-vindas"
+            className="w-full rounded-md border border-npb-border bg-npb-bg2 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_popup_video_id" className="text-npb-text">
+            ID do vídeo YouTube (opcional)
+          </Label>
+          <Input
+            id="welcome_popup_video_id"
+            name="welcome_popup_video_id"
+            defaultValue={init.welcome_popup_video_id ?? ""}
+            placeholder="dQw4w9WgXcQ"
+            className="bg-npb-bg2 border-npb-border text-npb-text font-mono"
+          />
+          <p className="text-[11px] text-npb-text-muted">
+            Só o ID — sem URL completa. O player aparece no topo do popup.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_popup_terms" className="text-npb-text">
+            Termos / texto longo (opcional)
+          </Label>
+          <textarea
+            id="welcome_popup_terms"
+            name="welcome_popup_terms"
+            defaultValue={init.welcome_popup_terms ?? ""}
+            rows={6}
+            placeholder="Cole aqui os termos que o aluno precisa aceitar antes de acessar o curso. Quando vazio, o checkbox de aceite é escondido."
+            className="w-full rounded-md border border-npb-border bg-npb-bg2 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="welcome_popup_button_label" className="text-npb-text">
+            Texto do botão de aceite
+          </Label>
+          <Input
+            id="welcome_popup_button_label"
+            name="welcome_popup_button_label"
+            defaultValue={init.welcome_popup_button_label ?? ""}
+            placeholder="Vamos começar"
+            className="bg-npb-bg2 border-npb-border text-npb-text"
+          />
+        </div>
+      </fieldset>
 
       {state?.error && (
         <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-400">

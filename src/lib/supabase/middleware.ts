@@ -51,7 +51,9 @@ export async function updateSession(request: NextRequest) {
   const isPublicAuthRoute =
     isAuthRoute || pathname.startsWith("/reset-password");
 
-  const isPublicApi = pathname.startsWith("/api/webhooks");
+  const isPublicApi =
+    pathname.startsWith("/api/webhooks") ||
+    pathname.startsWith("/api/auth/one-click");
   const isPwaAsset =
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js" ||

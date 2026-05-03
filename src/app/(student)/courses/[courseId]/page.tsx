@@ -13,6 +13,7 @@ import {
   SortableModulesGrid,
   type AdminModuleCard,
 } from "@/components/student/sortable-modules-grid";
+import { CourseWelcomeModal } from "@/components/student/course-welcome-modal";
 
 export const dynamic = "force-dynamic";
 
@@ -52,11 +53,28 @@ export default async function CoursePage({
   const { data: course } = await supabase
     .schema("membros")
     .from("courses")
-    .select("id, title, description, cover_url, is_published")
+    .select(
+      "id, title, description, cover_url, is_published, welcome_popup_enabled, welcome_popup_title, welcome_popup_description, welcome_popup_video_id, welcome_popup_terms, welcome_popup_button_label",
+    )
     .eq("id", params.courseId)
     .maybeSingle();
 
   if (!course || !course.is_published) notFound();
+
+  // Welcome popup do curso (1ª vez que aluno abre)
+  let showCourseWelcome = false;
+  if (
+    (course as { welcome_popup_enabled?: boolean }).welcome_popup_enabled
+  ) {
+    const { data: accepted } = await supabase
+      .schema("membros")
+      .from("course_welcome_accepted")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .eq("course_id", course.id)
+      .maybeSingle();
+    showCourseWelcome = !accepted;
+  }
 
   const role = await getUserRole(supabase, user.id);
   const isElevated = isElevatedRole(role);
@@ -148,8 +166,27 @@ export default async function CoursePage({
     }),
   );
 
+  const c = course as {
+    welcome_popup_enabled?: boolean;
+    welcome_popup_title?: string | null;
+    welcome_popup_description?: string | null;
+    welcome_popup_video_id?: string | null;
+    welcome_popup_terms?: string | null;
+    welcome_popup_button_label?: string | null;
+  };
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
+      {showCourseWelcome && (
+        <CourseWelcomeModal
+          courseId={course.id}
+          title={c.welcome_popup_title?.trim() || `Bem-vindo a ${course.title}`}
+          description={c.welcome_popup_description?.trim() || ""}
+          videoId={c.welcome_popup_video_id?.trim() || null}
+          terms={c.welcome_popup_terms ?? ""}
+          buttonLabel={c.welcome_popup_button_label?.trim() || "Vamos começar"}
+        />
+      )}
       <Link
         href="/dashboard"
         className="inline-flex items-center gap-1 text-sm text-npb-text-muted transition hover:text-npb-gold"

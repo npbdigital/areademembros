@@ -4,6 +4,11 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
 import { expiresAtFromDuration } from "@/lib/enrollment";
 import { getPlatformSettings } from "@/lib/settings";
+import {
+  buildOneClickUrl,
+  generateMagicToken,
+  markUserNeedsOnboarding,
+} from "@/lib/one-click";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +31,8 @@ interface SuccessBody {
   user_id: string;
   enrollment_id: string;
   invite_email_sent?: boolean;
+  /** URL one-click reutilizável por 7 dias. Use no Unnichat/WhatsApp. */
+  one_click_login_url?: string;
 }
 
 interface ErrorBody {
@@ -201,7 +208,15 @@ export async function POST(request: Request) {
     let inviteEmailSent = false;
     if (userId.created) {
       inviteEmailSent = await sendInvite(supabase, email, fullName);
+      // Marca onboarding pra forçar tela de senha+foto após one-click login
+      await markUserNeedsOnboarding(userId.id);
     }
+
+    // Gera (ou reaproveita) magic token pra one-click login. Sempre retorna,
+    // até pra users existentes — Unnichat pode mandar pra alunos que renovaram
+    // matrícula etc.
+    const magic = await generateMagicToken(userId.id, "webhook");
+    const oneClickUrl = magic ? buildOneClickUrl(magic.token) : undefined;
 
     await logSuccess(supabase, payload, userId.id, startedAt);
 
@@ -211,6 +226,7 @@ export async function POST(request: Request) {
         user_id: userId.id,
         enrollment_id: enrollmentId,
         invite_email_sent: inviteEmailSent,
+        one_click_login_url: oneClickUrl,
       },
       { status: 200 },
     );
