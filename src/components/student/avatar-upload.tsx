@@ -10,6 +10,8 @@ interface Props {
   userId: string;
   defaultValue?: string | null;
   fallbackText: string;
+  /** URL do PNG da decoração equipada — desenha em volta do avatar. */
+  decorationUrl?: string | null;
 }
 
 const ACCEPT = "image/jpeg,image/jpg,image/png,image/webp";
@@ -22,6 +24,7 @@ export function AvatarUpload({
   userId,
   defaultValue,
   fallbackText,
+  decorationUrl,
 }: Props) {
   const [url, setUrl] = useState<string>(defaultValue ?? "");
   const [uploading, setUploading] = useState(false);
@@ -72,19 +75,38 @@ export function AvatarUpload({
 
   return (
     <div className="flex items-center gap-4">
-      <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-full bg-npb-bg3 ring-2 ring-npb-gold">
-        {url ? (
+      <div className="relative h-20 w-20 flex-shrink-0">
+        <div className="relative h-20 w-20 overflow-hidden rounded-full bg-npb-bg3">
+          {url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={url} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full items-center justify-center text-xl font-bold text-npb-gold">
+              {fallbackText}
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+              <Loader2 className="h-6 w-6 animate-spin text-white" />
+            </div>
+          )}
+        </div>
+        {decorationUrl && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" className="h-full w-full object-cover" />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xl font-bold text-npb-gold">
-            {fallbackText}
-          </div>
-        )}
-        {uploading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-            <Loader2 className="h-6 w-6 animate-spin text-white" />
-          </div>
+          <img
+            src={decorationUrl}
+            alt=""
+            aria-hidden
+            className="pointer-events-none absolute z-10 select-none"
+            style={{
+              width: 112,
+              height: 112,
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              objectFit: "contain",
+            }}
+          />
         )}
       </div>
 

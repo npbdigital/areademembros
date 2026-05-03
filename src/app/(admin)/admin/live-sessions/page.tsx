@@ -31,26 +31,56 @@ const RECURRENCE_LABEL: Record<string, string> = {
 export default async function AdminLiveSessionsPage() {
   const sb = createAdminClient();
 
-  const [{ data: sessionsData }, { data: cohortsData }, { data: linkRows }] =
-    await Promise.all([
-      sb
-        .schema("membros")
-        .from("live_sessions")
-        .select(
-          "id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, recurrence, started_at, ended_at, created_at",
-        )
-        .order("scheduled_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false }),
-      sb.schema("membros").from("cohorts").select("id, name").order("name"),
-      sb
-        .schema("membros")
-        .from("live_session_cohorts")
-        .select("session_id, cohort_id"),
-    ]);
+  const [
+    { data: sessionsData },
+    { data: cohortsData },
+    { data: linkRows },
+    { data: cohortCoursesData },
+  ] = await Promise.all([
+    sb
+      .schema("membros")
+      .from("live_sessions")
+      .select(
+        "id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, recurrence, started_at, ended_at, created_at",
+      )
+      .order("scheduled_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false }),
+    sb.schema("membros").from("cohorts").select("id, name").order("name"),
+    sb
+      .schema("membros")
+      .from("live_session_cohorts")
+      .select("session_id, cohort_id"),
+    // Cursos atrelados a cada turma — vira "hint" do combobox
+    sb
+      .schema("membros")
+      .from("cohort_courses")
+      .select("cohort_id, courses(title)"),
+  ]);
 
   const sessions = (sessionsData ?? []) as SessionRow[];
   const cohorts = (cohortsData ?? []) as Array<{ id: string; name: string }>;
   const cohortMap = new Map(cohorts.map((c) => [c.id, c.name]));
+
+  // Mapa cohort_id → string com cursos ("Curso A · Curso B")
+  const courseHintByCohort = new Map<string, string>();
+  for (const row of (cohortCoursesData ?? []) as Array<{
+    cohort_id: string;
+    courses: { title: string } | { title: string }[] | null;
+  }>) {
+    const courseObj = Array.isArray(row.courses) ? row.courses[0] : row.courses;
+    if (!courseObj) continue;
+    const existing = courseHintByCohort.get(row.cohort_id);
+    courseHintByCohort.set(
+      row.cohort_id,
+      existing ? `${existing} · ${courseObj.title}` : courseObj.title,
+    );
+  }
+
+  const cohortOptions = cohorts.map((c) => ({
+    id: c.id,
+    name: c.name,
+    hint: courseHintByCohort.get(c.id),
+  }));
 
   // Mapa session_id → array de cohort names
   const sessionCohorts = new Map<string, string[]>();
@@ -101,7 +131,7 @@ export default async function AdminLiveSessionsPage() {
         <h2 className="mb-3 inline-flex items-center gap-2 text-base font-bold text-npb-text">
           <Plus className="h-4 w-4 text-npb-gold" /> Nova monitoria
         </h2>
-        <CreateLiveSessionForm cohorts={cohorts} />
+        <CreateLiveSessionForm cohorts={cohortOptions} />
       </section>
 
       {live.length > 0 && (

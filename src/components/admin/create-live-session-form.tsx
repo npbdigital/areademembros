@@ -12,9 +12,13 @@ import {
   type ActionResult,
   createLiveSessionAction,
 } from "@/app/(admin)/admin/live-sessions/actions";
+import {
+  type CohortOption,
+  CohortMultiSelect,
+} from "@/components/admin/cohort-multi-select";
 
 interface Props {
-  cohorts: Array<{ id: string; name: string }>;
+  cohorts: CohortOption[];
 }
 
 export function CreateLiveSessionForm({ cohorts }: Props) {
@@ -49,25 +53,10 @@ export function CreateLiveSessionForm({ cohorts }: Props) {
           Turmas <span className="text-npb-gold">*</span>
         </Label>
         <p className="text-[10px] text-npb-text-muted">
-          Marque uma ou mais turmas. A monitoria fica visível pra alunos
-          matriculados em qualquer turma marcada.
+          Selecione uma ou mais turmas. Pode buscar por nome ou pelo curso
+          atrelado.
         </p>
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 max-h-48 overflow-y-auto npb-scrollbar pr-1 rounded-md border border-npb-border bg-npb-bg3 p-2">
-          {cohorts.map((c) => (
-            <label
-              key={c.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-npb-text transition hover:bg-npb-bg2"
-            >
-              <input
-                type="checkbox"
-                name="cohort_ids"
-                value={c.id}
-                className="h-4 w-4 accent-npb-gold"
-              />
-              <span className="truncate">{c.name}</span>
-            </label>
-          ))}
-        </div>
+        <CohortMultiSelect name="cohort_ids" options={cohorts} />
       </div>
 
       <div className="space-y-1.5">

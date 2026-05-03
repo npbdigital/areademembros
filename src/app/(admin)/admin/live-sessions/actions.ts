@@ -59,26 +59,43 @@ function parseFormDateTime(raw: string | null): string | null {
 }
 
 /**
- * Calcula próxima ocorrência somando o intervalo de recorrência. Mantém
- * hora/minuto. Mensal usa setMonth (cuida de meses curtos automaticamente).
+ * Calcula próxima ocorrência somando o intervalo de recorrência, garantindo
+ * que cai no FUTURO. Mantém o "ritmo" original (mesmo dia da semana, mesma
+ * hora) — ex: monitoria toda segunda 19h. Se admin encerra no domingo
+ * (atrasada), próxima vira "segunda 19h" (próxima futura). Se encerra no
+ * próprio dia, vira a segunda da semana seguinte.
+ *
+ * Mensal usa setMonth (Date cuida de meses curtos automaticamente).
  */
 function nextOccurrence(iso: string, recurrence: Recurrence): string | null {
   if (recurrence === "none") return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  switch (recurrence) {
-    case "daily":
-      d.setDate(d.getDate() + 1);
-      break;
-    case "weekly":
-      d.setDate(d.getDate() + 7);
-      break;
-    case "biweekly":
-      d.setDate(d.getDate() + 14);
-      break;
-    case "monthly":
-      d.setMonth(d.getMonth() + 1);
-      break;
+
+  const advance = () => {
+    switch (recurrence) {
+      case "daily":
+        d.setDate(d.getDate() + 1);
+        break;
+      case "weekly":
+        d.setDate(d.getDate() + 7);
+        break;
+      case "biweekly":
+        d.setDate(d.getDate() + 14);
+        break;
+      case "monthly":
+        d.setMonth(d.getMonth() + 1);
+        break;
+    }
+  };
+
+  // Avança pelo menos 1x. Continua avançando enquanto < agora pra sempre
+  // cair no futuro (cobre o caso de admin encerrar várias semanas depois).
+  advance();
+  const now = Date.now();
+  let safety = 200; // proteção contra loop infinito (200 iterações = 4 anos diários)
+  while (d.getTime() <= now && safety-- > 0) {
+    advance();
   }
   return d.toISOString();
 }

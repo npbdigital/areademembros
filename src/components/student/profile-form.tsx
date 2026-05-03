@@ -20,6 +20,7 @@ interface Props {
   initialPhone: string;
   initialAvatarUrl: string | null;
   initialEmailNotificationsEnabled?: boolean;
+  decorationUrl?: string | null;
 }
 
 export function ProfileForm({
@@ -29,6 +30,7 @@ export function ProfileForm({
   initialPhone,
   initialAvatarUrl,
   initialEmailNotificationsEnabled = true,
+  decorationUrl,
 }: Props) {
   const router = useRouter();
   const [state, formAction] = useFormState<ActionResult | null, FormData>(
@@ -56,6 +58,7 @@ export function ProfileForm({
           userId={userId}
           defaultValue={initialAvatarUrl}
           fallbackText={initials}
+          decorationUrl={decorationUrl}
         />
       </div>
 

@@ -265,6 +265,7 @@ export default async function ProfilePage() {
   // DECORAÇÕES — opções que o aluno pode equipar (desbloqueadas + bloqueadas
   // sem revelar quantas vendas precisa). Admin não tem.
   const decorationOptions: DecorationOption[] = [];
+  let equippedDecorationUrl: string | null = null;
   if (!isAdminUser) {
     const [decorationsRows, paidSalesCount] = await Promise.all([
       listActiveDecorations(adminSb),
@@ -277,6 +278,9 @@ export default async function ProfilePage() {
         imageUrl: d.image_url,
         unlocked: paidSalesCount >= d.required_sales,
       });
+      if (d.id === equippedDecorationId) {
+        equippedDecorationUrl = d.image_url;
+      }
     }
   }
 
@@ -306,6 +310,7 @@ export default async function ProfilePage() {
             initialEmailNotificationsEnabled={
               profile?.email_notifications_enabled !== false
             }
+            decorationUrl={equippedDecorationUrl}
           />
         </div>
       </section>

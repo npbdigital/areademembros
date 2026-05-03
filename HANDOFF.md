@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 24.1: Monitorias com múltiplas turmas + recorrência
-**Último commit no main:** `0e8ba71` — feat(live-sessions): múltiplas turmas + recorrência
+**Última atualização:** 2026-05-03 — Etapa 24.2: combobox turmas + ritmo recorrência + decoração no topbar/profile
+**Último commit no main:** atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,59 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 24.2 — Combobox de turmas + ritmo recorrência + decoração no topbar/profile (2026-05-03)
+
+Pequeno follow-up à Etapa 24.1 com 4 ajustes pedidos pelo Felipe.
+
+**1. `<CohortMultiSelect>` com busca (substitui checkboxes)**
+- Componente novo em `src/components/admin/cohort-multi-select.tsx`
+- Tags dos selecionados em cima (X pra remover) + dropdown com input de
+  busca + lista filtrada conforme digita
+- Busca **normalizada** (case-insensitive, sem acento) em `name` E em
+  `hint` (cursos atrelados)
+- Hidden inputs `<input type="hidden" name="cohort_ids" value={id}>` por
+  selecionado — form serializa direitinho
+- `/admin/live-sessions/page.tsx` agora carrega `cohort_courses` join com
+  `courses` pra montar o `hint` de cada turma (ex: "Curso A · Curso B"
+  abaixo do nome) — admin filtra por curso facilmente
+- Escala bem com 50+ turmas (ao contrário das checkboxes anteriores)
+
+**2. Recorrência mantém ritmo da semana**
+- `nextOccurrence` agora tem **loop** que continua avançando enquanto a
+  data calculada está no passado
+- Resultado: se você criou monitoria pra "segunda 19h" e encerrou no
+  domingo, a próxima vai ser na **segunda seguinte 19h** (não hoje à
+  noite). Mantém o dia/hora original do "ritmo".
+- Loop tem proteção (max 200 iterações) pra evitar loop infinito
+- Cobre também o caso de admin encerrar várias semanas atrasado — sempre
+  cai na próxima ocorrência futura
+
+**3. Decoração de avatar no topbar e profile**
+- `<UserDropdown>` (topbar) ganha prop `decorationUrl` opcional. Quando
+  passada, renderiza `<img>` da decoração absoluta em volta do avatar
+  (z-10, 48px sobre avatar de 34px)
+- `(student)/layout.tsx` resolve `equippedDecorationUrl` do user logado
+  via `equipped_decoration_id` + lookup em `avatar_decorations` (idêntico
+  ao fluxo de community pages)
+- `<AvatarUpload>` no profile ganha mesma prop. Renderiza decoração
+  sobre o avatar grande (80px) com PNG de 112px (ratio 1.4x)
+- `<ProfileForm>` propaga `decorationUrl` pra `AvatarUpload`
+- `(student)/profile/page.tsx` resolve a URL durante o map de
+  decorationOptions (zero query extra)
+- Resultado: decoração aparece em 4 lugares agora — comunidade, topbar,
+  modal "Mudar decoração" e foto do profile
+
+**4. Push notification ao iniciar monitoria — já implementado (Etapa 24)**
+- `startLiveSessionAction` chama `tryNotifyMany(userIds, { title: "🔴
+  Monitoria ao vivo agora", body, link, pushCategory: "broadcast" })`
+- Notif in-app + push mobile/desktop disparam pra TODOS os alunos das
+  cohorts associadas (deduplica)
+- Pra push aparecer: aluno precisa ter autorizado push (PushPermissionPrompt
+  da Etapa 22) E VAPID env vars setadas no Vercel
+- Categoria `broadcast` = sempre on (aluno não consegue desligar)
+
+**Migrations:** nenhuma nesta etapa.
 
 ### Etapa 24.1 — Monitorias com múltiplas turmas + recorrência (2026-05-03)
 

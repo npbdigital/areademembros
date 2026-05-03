@@ -25,9 +25,27 @@ export default async function StudentLayout({
   const { data: profile } = await supabase
     .schema("membros")
     .from("users")
-    .select("full_name, avatar_url, role, welcome_accepted_at")
+    .select(
+      "full_name, avatar_url, role, welcome_accepted_at, equipped_decoration_id",
+    )
     .eq("id", user.id)
     .single();
+
+  // Resolve URL da decoração equipada (pra desenhar em volta do avatar do topbar)
+  let equippedDecorationUrl: string | null = null;
+  const equippedId = (
+    profile as { equipped_decoration_id?: string | null } | null
+  )?.equipped_decoration_id;
+  if (equippedId) {
+    const { data: deco } = await createAdminClient()
+      .schema("membros")
+      .from("avatar_decorations")
+      .select("image_url, is_active")
+      .eq("id", equippedId)
+      .maybeSingle();
+    const d = deco as { image_url: string | null; is_active: boolean } | null;
+    if (d?.is_active && d.image_url) equippedDecorationUrl = d.image_url;
+  }
 
   const [
     { count: notificationsCount },
@@ -121,6 +139,7 @@ export default async function StudentLayout({
                 fullName: profile?.full_name ?? "",
                 email: user.email ?? "",
                 avatarUrl: profile?.avatar_url ?? null,
+                decorationUrl: equippedDecorationUrl,
                 isAdmin: profile?.role === "admin",
                 isModerator: profile?.role === "moderator",
               }}

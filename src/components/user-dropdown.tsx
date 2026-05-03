@@ -10,6 +10,7 @@ export interface UserDropdownProps {
   fullName: string;
   email: string;
   avatarUrl?: string | null;
+  decorationUrl?: string | null;
   isAdmin?: boolean;
   isModerator?: boolean;
 }
@@ -18,6 +19,7 @@ export function UserDropdown({
   fullName,
   email,
   avatarUrl,
+  decorationUrl,
   isAdmin,
   isModerator,
 }: UserDropdownProps) {
@@ -56,21 +58,40 @@ export function UserDropdown({
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={avatarUrl}
-            alt={fullName}
-            className="h-[34px] w-[34px] rounded-full border-2 border-npb-gold object-cover"
-          />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={fallbackUrl}
-            alt={initials}
-            className="h-[34px] w-[34px] rounded-full border-2 border-npb-gold"
-          />
-        )}
+        <div className="relative h-[34px] w-[34px] flex-shrink-0">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt={fullName}
+              className="h-[34px] w-[34px] rounded-full border-2 border-npb-gold object-cover"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={fallbackUrl}
+              alt={initials}
+              className="h-[34px] w-[34px] rounded-full border-2 border-npb-gold"
+            />
+          )}
+          {decorationUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={decorationUrl}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute z-10 select-none"
+              style={{
+                width: 48,
+                height: 48,
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                objectFit: "contain",
+              }}
+            />
+          )}
+        </div>
         <ChevronDown
           className={cn(
             "hidden h-3.5 w-3.5 text-npb-text-muted transition-transform md:block",
