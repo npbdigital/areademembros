@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { type BroadcastAudience, sendBroadcast } from "@/lib/push";
 
 export type ActionResult<T = unknown> = {
@@ -9,6 +9,45 @@ export type ActionResult<T = unknown> = {
   error?: string;
   data?: T;
 };
+
+/**
+ * Upload da imagem que vai aparecer no topo do popup grande de broadcast.
+ * Bucket público com leitura aberta (qualquer aluno enxerga); escrita
+ * só pra admin via membros.is_admin().
+ */
+export async function uploadBroadcastPopupImageAction(
+  formData: FormData,
+): Promise<ActionResult<{ url: string }>> {
+  try {
+    await assertAdmin();
+
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      return { ok: false, error: "Arquivo inválido." };
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return { ok: false, error: "Imagem maior que 5MB." };
+    }
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    if (!["jpg", "jpeg", "png", "webp"].includes(ext)) {
+      return { ok: false, error: "Formato não suportado (use JPG/PNG/WebP)." };
+    }
+
+    const admin = createAdminClient();
+    const path = `${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await admin.storage
+      .from("broadcast-popup-images")
+      .upload(path, file, { contentType: file.type, cacheControl: "3600" });
+    if (upErr) return { ok: false, error: upErr.message };
+
+    const { data } = admin.storage
+      .from("broadcast-popup-images")
+      .getPublicUrl(path);
+    return { ok: true, data: { url: data.publicUrl } };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
 
 async function assertAdmin(): Promise<string> {
   const supabase = createClient();

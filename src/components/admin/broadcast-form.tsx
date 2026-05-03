@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2, Send } from "lucide-react";
+import { ImagePlus, Loader2, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { sendBroadcastAction } from "@/app/(admin)/admin/notifications/actions";
+import {
+  sendBroadcastAction,
+  uploadBroadcastPopupImageAction,
+} from "@/app/(admin)/admin/notifications/actions";
 
 interface Cohort {
   id: string;
@@ -33,8 +36,23 @@ export function BroadcastForm({ cohorts }: Props) {
   const [deliverPopup, setDeliverPopup] = useState(false);
   const [bannerExpiresAt, setBannerExpiresAt] = useState("");
   const [popupImageUrl, setPopupImageUrl] = useState("");
+  const [popupImageUploading, setPopupImageUploading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  async function handlePopupImageUpload(file: File) {
+    setPopupImageUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await uploadBroadcastPopupImageAction(fd);
+    setPopupImageUploading(false);
+    if (res.ok && res.data) {
+      setPopupImageUrl(res.data.url);
+      toast.success("Imagem carregada.");
+    } else {
+      toast.error(res.error ?? "Falha no upload.");
+    }
+  }
 
   function cycleCohort(id: string) {
     setPicks((prev) => {
@@ -311,18 +329,56 @@ export function BroadcastForm({ cohorts }: Props) {
             </div>
           )}
           {deliverPopup && (
-            <div className="mt-3 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
-              <label className="mb-1 block text-[11px] font-semibold text-npb-text-muted">
-                URL da imagem do popup (opcional) — fica no topo do modal
+            <div className="mt-3 space-y-2 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
+              <label className="block text-[11px] font-semibold text-npb-text-muted">
+                Imagem do popup (opcional) — fica no topo do modal · max 5MB,
+                ideal 1200×600
               </label>
-              <input
-                type="url"
-                value={popupImageUrl}
-                onChange={(e) => setPopupImageUrl(e.target.value)}
-                placeholder="https://... (ideal 1200×600 ou similar)"
-                className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-              />
-              <p className="mt-1 text-[10px] text-npb-text-muted">
+
+              {popupImageUrl ? (
+                <div className="relative inline-block overflow-hidden rounded-md border border-npb-border bg-npb-bg3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={popupImageUrl}
+                    alt=""
+                    className="block max-h-40 max-w-full object-contain"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPopupImageUrl("")}
+                    aria-label="Remover imagem"
+                    className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-npb-border bg-npb-bg3 px-3 py-4 text-xs text-npb-text-muted transition hover:border-npb-gold-dim hover:text-npb-text">
+                  {popupImageUploading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Enviando…
+                    </>
+                  ) : (
+                    <>
+                      <ImagePlus className="h-4 w-4" />
+                      Clique pra escolher uma imagem (JPG/PNG/WebP)
+                    </>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={popupImageUploading}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handlePopupImageUpload(f);
+                    }}
+                  />
+                </label>
+              )}
+
+              <p className="text-[10px] text-npb-text-muted">
                 Cada aluno vê o popup só uma vez (registrado em
                 broadcast_popup_seen). Se fechar, não aparece de novo.
               </p>

@@ -24,6 +24,7 @@ export function AddManualSaleButton() {
   const [selected, setSelected] = useState<StudentResult | null>(null);
   const [product, setProduct] = useState("");
   const [commissionStr, setCommissionStr] = useState("");
+  const [quantityStr, setQuantityStr] = useState("1");
 
   useEffect(() => {
     if (!open) return;
@@ -51,6 +52,7 @@ export function AddManualSaleButton() {
     setSelected(null);
     setProduct("");
     setCommissionStr("");
+    setQuantityStr("1");
   }
 
   function handleClose() {
@@ -70,15 +72,28 @@ export function AddManualSaleButton() {
       toast.error("Valor de comissão inválido.");
       return;
     }
+    const qty = parseInt(quantityStr, 10);
+    if (!Number.isFinite(qty) || qty < 1 || qty > 100) {
+      toast.error("Quantidade entre 1 e 100.");
+      return;
+    }
     if (!product.trim()) {
       toast.error("Informe o nome do produto.");
       return;
     }
     startTransition(async () => {
-      const res = await addManualSaleAction(selected.id, product, commission);
+      const res = await addManualSaleAction(
+        selected.id,
+        product,
+        commission,
+        qty,
+      );
       if (res.ok && res.data) {
+        const { created, totalXpAwarded } = res.data;
         toast.success(
-          `Venda fictícia registrada (+${res.data.xpAwarded} XP pro fictício).`,
+          created === 1
+            ? `Venda fictícia registrada (+${totalXpAwarded} XP).`
+            : `${created} vendas fictícias registradas (+${totalXpAwarded} XP no total).`,
         );
         setOpen(false);
         reset();
@@ -235,21 +250,62 @@ export function AddManualSaleButton() {
               />
             </div>
 
-            {/* Comissão */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-npb-text">
-                Comissão (R$)
-              </label>
-              <input
-                type="text"
-                required
-                inputMode="decimal"
-                value={commissionStr}
-                onChange={(e) => setCommissionStr(e.target.value)}
-                placeholder="21,65"
-                className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-              />
+            {/* Comissão + quantidade lado a lado */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-npb-text">
+                  Comissão por venda (R$)
+                </label>
+                <input
+                  type="text"
+                  required
+                  inputMode="decimal"
+                  value={commissionStr}
+                  onChange={(e) => setCommissionStr(e.target.value)}
+                  placeholder="21,65"
+                  className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-npb-text">
+                  Quantidade
+                </label>
+                <input
+                  type="number"
+                  required
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={quantityStr}
+                  onChange={(e) => setQuantityStr(e.target.value)}
+                  className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+                />
+              </div>
             </div>
+
+            {(() => {
+              const c = Number(commissionStr.replace(",", "."));
+              const q = parseInt(quantityStr, 10);
+              if (
+                !Number.isFinite(c) ||
+                c <= 0 ||
+                !Number.isFinite(q) ||
+                q < 1
+              ) {
+                return null;
+              }
+              const xpPerSale = Math.floor(c) + 10;
+              const totalXp = xpPerSale * q;
+              const totalValue = c * q;
+              return (
+                <p className="rounded-md border border-npb-border/50 bg-npb-bg3/40 px-3 py-2 text-[11px] text-npb-text-muted">
+                  Vai gerar <strong className="text-npb-text">{q}</strong>{" "}
+                  venda{q > 1 ? "s" : ""} de R$ {c.toFixed(2).replace(".", ",")}{" "}
+                  (R$ {totalValue.toFixed(2).replace(".", ",")} no total) ·{" "}
+                  <strong className="text-npb-gold">+{totalXp} XP</strong>
+                </p>
+              );
+            })()}
 
             <div className="flex justify-end gap-2 pt-1">
               <button

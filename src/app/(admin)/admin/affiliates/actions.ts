@@ -401,7 +401,10 @@ export async function addManualSaleAction(
   studentUserId: string,
   productName: string,
   commissionReais: number,
-): Promise<ActionResult<{ saleId: string; xpAwarded: number }>> {
+  quantity: number = 1,
+): Promise<
+  ActionResult<{ created: number; totalXpAwarded: number }>
+> {
   try {
     await assertAdmin();
     const sb = createAdminClient();
@@ -414,6 +417,10 @@ export async function addManualSaleAction(
     }
     if (!Number.isFinite(commissionReais) || commissionReais <= 0) {
       return { ok: false, error: "Valor de comissão inválido." };
+    }
+    const qty = Math.floor(quantity);
+    if (!Number.isFinite(qty) || qty < 1 || qty > 100) {
+      return { ok: false, error: "Quantidade entre 1 e 100." };
     }
 
     const { data: user } = await sb
@@ -434,60 +441,76 @@ export async function addManualSaleAction(
     }
 
     const commissionCents = Math.round(commissionReais * 100);
-    const xpAmount = Math.floor(commissionCents / 100) + 10;
-    const orderId = `manual-${crypto.randomUUID()}`;
+    const xpPerSale = Math.floor(commissionCents / 100) + 10;
 
-    const { data: saleRow, error: saleErr } = await sb
+    // Insere as vendas em lote — uma linha por unidade pra contagem de
+    // conquista (sales_kiwify_5 quer ver 5 linhas, não 1 com qty=5).
+    const nowIso = new Date().toISOString();
+    const rows = Array.from({ length: qty }, () => ({
+      source: "manual",
+      external_order_id: `manual-${crypto.randomUUID()}`,
+      kiwify_email: u.email,
+      kiwify_name: u.full_name ?? "",
+      member_user_id: u.id,
+      product_name: productName.trim(),
+      status: "paid",
+      commission_value_cents: commissionCents,
+      gross_value_cents: commissionCents,
+      currency: "BRL",
+      approved_at: nowIso,
+      status_updated_at: nowIso,
+      xp_awarded: 0,
+    }));
+
+    const { data: insertedRows, error: saleErr } = await sb
       .schema("afiliados")
       .from("sales")
-      .insert({
-        source: "manual",
-        external_order_id: orderId,
-        kiwify_email: u.email,
-        kiwify_name: u.full_name ?? "",
-        member_user_id: u.id,
-        product_name: productName.trim(),
-        status: "paid",
-        commission_value_cents: commissionCents,
-        gross_value_cents: commissionCents,
-        currency: "BRL",
-        approved_at: new Date().toISOString(),
-        status_updated_at: new Date().toISOString(),
-        xp_awarded: 0,
-      })
-      .select("id")
-      .single();
+      .insert(rows)
+      .select("id");
 
-    if (saleErr || !saleRow) {
+    if (saleErr || !insertedRows) {
       return {
         ok: false,
-        error: `Falha ao inserir venda: ${saleErr?.message ?? "erro"}`,
+        error: `Falha ao inserir vendas: ${saleErr?.message ?? "erro"}`,
       };
     }
-    const sale = saleRow as { id: string };
+    const created = (insertedRows as Array<{ id: string }>).length;
+    let totalXp = 0;
 
-    // Concede XP + bump nível + avalia decoração + avalia conquistas de venda
+    for (const row of insertedRows as Array<{ id: string }>) {
+      try {
+        await awardXp(sb, {
+          userId: u.id,
+          amount: xpPerSale,
+          reason: "kiwify_sale",
+          referenceId: row.id,
+        });
+        await sb
+          .schema("afiliados")
+          .from("sales")
+          .update({ xp_awarded: xpPerSale })
+          .eq("id", row.id);
+        totalXp += xpPerSale;
+      } catch (e) {
+        console.error("[addManualSale] erro awardXp em linha:", row.id, e);
+      }
+    }
+
+    // Bump nível + avalia decoração + avalia conquistas de venda só uma
+    // vez no fim — todas operações são idempotentes/cumulativas.
     try {
-      await awardXp(sb, {
-        userId: u.id,
-        amount: xpAmount,
-        reason: "kiwify_sale",
-        referenceId: sale.id,
-      });
-      await sb
-        .schema("afiliados")
-        .from("sales")
-        .update({ xp_awarded: xpAmount })
-        .eq("id", sale.id);
       await bumpMinLevel(sb, u.id, 2);
       await evaluateAvatarDecorations(sb, u.id);
       await evaluateKiwifyAchievements(sb, u.id);
     } catch (e) {
-      console.error("[addManualSale] erro awardXp:", e);
+      console.error("[addManualSale] erro pós-insert:", e);
     }
 
     revalidatePath("/admin/affiliates");
-    return { ok: true, data: { saleId: sale.id, xpAwarded: xpAmount } };
+    return {
+      ok: true,
+      data: { created, totalXpAwarded: totalXp },
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }
