@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-03 — Etapa 23: decorações de avatar + badges de nível + admin sem XP + fixes
-**Último commit no main:** atualizado neste push
+**Último commit no main:** `3633620` — docs(handoff): registra Etapa 23
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
