@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Loader2, Search, UserCheck, X } from "lucide-react";
+import { BadgeCheck, Loader2, Search, UserCheck, X } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
@@ -21,6 +21,7 @@ interface StudentResult {
   email: string;
   avatarUrl: string | null;
   role: string;
+  hasKiwifyLink: boolean;
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -192,6 +193,12 @@ export function AttachOrphanButton({ saleId, suggestedEmail }: Props) {
                             <p className="truncate text-sm font-medium text-npb-text">
                               {s.fullName || "(sem nome)"}
                             </p>
+                            {s.hasKiwifyLink && (
+                              <BadgeCheck
+                                className="h-3.5 w-3.5 flex-shrink-0 text-emerald-400"
+                                aria-label="Já tem vinculação Kiwify"
+                              />
+                            )}
                             {s.role === "ficticio" && (
                               <span className="flex-shrink-0 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-blue-300">
                                 Fictício

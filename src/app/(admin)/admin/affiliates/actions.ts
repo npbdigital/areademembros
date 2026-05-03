@@ -198,6 +198,7 @@ export async function searchStudentsAction(query: string): Promise<
       email: string;
       avatarUrl: string | null;
       role: string;
+      hasKiwifyLink: boolean;
     }>
   >
 > {
@@ -227,6 +228,22 @@ export async function searchStudentsAction(query: string): Promise<
       avatar_url: string | null;
       role: string;
     }>;
+
+    // Marca quais já têm vinculação Kiwify (pra mostrar check na UI)
+    const linkedSet = new Set<string>();
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      const { data: links } = await supabase
+        .schema("afiliados")
+        .from("affiliate_links")
+        .select("member_user_id")
+        .eq("source", "kiwify")
+        .in("member_user_id", ids);
+      for (const l of (links ?? []) as Array<{ member_user_id: string }>) {
+        linkedSet.add(l.member_user_id);
+      }
+    }
+
     return {
       ok: true,
       data: rows.map((r) => ({
@@ -235,6 +252,7 @@ export async function searchStudentsAction(query: string): Promise<
         email: r.email,
         avatarUrl: r.avatar_url,
         role: r.role,
+        hasKiwifyLink: linkedSet.has(r.id),
       })),
     };
   } catch (e) {
