@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 28.1: Top loader bar (NextTopLoader)
-**Último commit no main:** `3cf453e` — feat(ux): top loader bar branca durante navegacoes (NextTopLoader)
+**Última atualização:** 2026-05-03 — Etapa 28.2: Fix one-click hash callback + link encurtado
+**Último commit no main:** `b8e7e04` — fix(one-click): hash callback + URL encurtada via /l/{slug}
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -45,6 +45,24 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 28.2 — Fix one-click hash callback + link encurtado (2026-05-03)
+
+**Commit:** `b8e7e04`
+
+**Bug:** o magic link gerado por `auth.admin.generateLink({type:'magiclink'})` usa o **fluxo IMPLICIT** do Supabase — devolve tokens no `#hash` da URL. Mas o nosso `/auth/callback` server-side só sabe ler `?code=` (PKCE). Resultado: aluno caía em `/login#access_token=...` sem sessão criada.
+
+**Fix do callback:**
+- Nova página client-only `/auth/hash-callback` (`src/app/auth/hash-callback/page.tsx`) com `<Suspense>` (pro `useSearchParams`)
+- Lê `window.location.hash`, extrai `access_token` + `refresh_token`, chama `supabase.auth.setSession({...})`. Cookies setados via `@supabase/ssr`. Redireciona pro `next` (default `/dashboard`)
+- `/api/auth/one-click` agora usa `redirectTo: /auth/hash-callback?next=...` em vez de `/auth/callback`
+- Middleware libera `/auth/hash-callback` em `isPublicAuthRoute` (mesmo pra user logado, pra rodar o JS antes de redirecionar)
+
+**Encurtador:**
+- Nova função `buildShortOneClickUrl(token)` em `lib/one-click.ts` — usa `getOrCreateShortLink` existente, retorna `/l/{slug}` (silent fallback pra URL longa se encurtador falhar)
+- Webhook `/api/webhooks/enrollment` + `/admin/one-click-test` agora usam a versão encurtada
+- Payload do webhook (`one_click_login_url`) fica bonito no WhatsApp via Unnichat
+- Middleware libera `/l/` como rota pública (link chega antes da sessão)
 
 ### Etapa 28.1 — Top loader bar (2026-05-03)
 
