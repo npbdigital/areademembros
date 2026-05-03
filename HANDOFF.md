@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 23: decorações de avatar + badges de nível + admin sem XP + fixes
-**Último commit no main:** `3633620` — docs(handoff): registra Etapa 23
+**Última atualização:** 2026-05-03 — Etapa 24: Monitorias ao vivo (Zoom Web SDK embed)
+**Último commit no main:** atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,99 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 24 — Monitorias ao vivo via Zoom Web SDK (2026-05-03)
+
+Sistema de **lives Zoom embeddadas dentro da plataforma** — aluno entra com
+câmera, microfone, levanta a mão, compartilha tela, sem sair pra Zoom. Liberação
+manual: admin clica "Iniciar agora" e push notification dispara pra todos os
+alunos da turma.
+
+**Schema (migration `live_sessions_schema`):**
+```
+membros.live_sessions (
+  id, cohort_id (FK), title, description,
+  scheduled_at,                         -- só pra exibir "previsto pra 19h"
+  zoom_meeting_id, zoom_password,       -- credenciais da reunião
+  status: scheduled | live | ended | cancelled,
+  started_at, ended_at,                 -- preenchidos pelos botões
+  created_by, created_at, updated_at
+)
+```
+
+**RLS:** aluno vê monitoria SE tem matrícula ativa na `cohort_id` (não
+expirada). Admin/moderator veem tudo.
+
+**Backend (`/api/zoom/signature`):**
+- POST recebe `{ sessionId }`
+- Valida user autenticado + sessão existe + status='live' + acesso à cohort
+- Assina JWT (jsonwebtoken HS256) com `appKey` + `sdkKey` + `mn` + `role` +
+  `iat`/`exp`/`tokenExp` (válido 2h)
+- Aluno: `role=0` (attendee). Admin/moderator: `role=1` (host)
+- Retorna tudo que o SDK precisa: `signature`, `sdkKey`, `meetingNumber`,
+  `password`, `userName`, `userEmail`, `role`
+
+**Server actions admin:** `createLiveSessionAction`, `updateLiveSessionAction`,
+`startLiveSessionAction` (notifica push), `endLiveSessionAction`,
+`deleteLiveSessionAction`. Parser de `scheduled_at` interpreta o input
+`datetime-local` como **BRT** (mesmo padrão do fix de timezone Kiwify da
+Etapa 20.1).
+
+**UI admin (`/admin/live-sessions`):**
+- Form de criação inline (turma, título, descrição, horário, Meeting ID, senha)
+- Lista agrupada: 🔴 Ao vivo / Agendadas / Encerradas (10 últimas)
+- Cada linha: botões "Iniciar agora" (em scheduled) / "Abrir player" + "Encerrar"
+  (em live) / Excluir
+- Item "Monitorias ao vivo" na sidebar admin (grupo Sistema, ícone Radio)
+
+**UI aluno (`/monitorias`):**
+- Lista próximas e ao vivo (RLS filtra por matrícula automaticamente)
+- Card vermelho destacado pra monitoria live → clica e abre o player
+- Item "Monitorias ao vivo" na sidebar aluno (entre Comunidade e Notificações)
+
+**Player (`/monitorias/[id]`):**
+- 3 estados: scheduled (lobby aguardando), live (embed Zoom), ended/cancelled
+- `<ZoomEmbedPlayer>` (client component): lazy-load do `@zoom/meetingsdk`,
+  `ZoomMtgEmbedded.createClient()` + `init` Component View (video resizable
+  + toolbar custom) + `join` com signature do backend
+- Cleanup `leaveMeeting()` no unmount
+- UI de erro orienta o aluno se browser bloquear cookies de terceiros
+
+**Push notification:** ao iniciar, `tryNotifyMany` cria notif in-app +
+dispara push pros alunos elegíveis (categoria `broadcast`, sempre ativa).
+
+**Deps novas:**
+- `@zoom/meetingsdk` (~3MB, lazy-loaded)
+- `jsonwebtoken` + `@types/jsonwebtoken`
+
+**Env vars (Felipe precisa setar no Vercel):**
+- `NEXT_PUBLIC_ZOOM_SDK_KEY` — Client ID do app Zoom Marketplace
+- `ZOOM_SDK_SECRET` — Client Secret (server-only)
+
+**Setup do app Zoom (já feito):**
+- App "General App" criado em marketplace.zoom.us → ativado feature **Embed →
+  Meeting SDK** → credenciais `2DRMnNxoS4WL5jK9lxNOJw` (key) + secret
+- "Domain Allow List" pode ser ignorada (é pra Zoom Apps client desktop, não
+  Meeting SDK web embed)
+- Aviso da Zoom sobre OBF/ZAK tokens (março 2026): NÃO afeta — nossas
+  monitorias rodam na conta do próprio Felipe (ele é o host)
+
+**Limitações conhecidas:**
+- iOS Safari < 16: SDK não funciona — orientar aluno a usar Chrome/Edge
+  ou instalar PWA (Etapa 21) primeiro
+- Brave / Safari com bloqueio agressivo de 3rd-party cookies pode falhar
+- Limite de participantes = limite do plano Zoom (Pro = 100)
+- Felipe precisa abrir Zoom desktop separadamente pra ASSUMIR host de
+  verdade (a plataforma só dá o embed; o admin role=1 do JWT permite host
+  com restrição até ele entrar via Zoom desktop com ZAK)
+
+**Como testar end-to-end:**
+1. Felipe configura env vars no Vercel + redeploy
+2. Cria reunião no Zoom (anota Meeting ID + senha)
+3. Vai em /admin/live-sessions, cria monitoria pra uma turma com Meeting ID
+4. Abre Zoom desktop e entra como host
+5. Volta na plataforma, clica "Iniciar agora" → alunos da turma recebem push
+6. Aluno entra em /monitorias → clica no card vermelho → embed carrega
 
 ### Etapa 23 — Decorações de avatar + Badges de nível + Admin sem XP (2026-05-03)
 
