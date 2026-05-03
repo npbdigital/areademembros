@@ -29,10 +29,14 @@ export default async function ProfilePage() {
     .schema("membros")
     .from("users")
     .select(
-      "full_name, email, phone, avatar_url, created_at, email_notifications_enabled",
+      "full_name, email, phone, avatar_url, created_at, email_notifications_enabled, role",
     )
     .eq("id", user.id)
     .single();
+
+  // Admin não tem gamification (XP, conquistas, streak) — não faz sentido
+  // pra quem gerencia a plataforma. Pula a seção inteira.
+  const isAdminUser = (profile as { role?: string } | null)?.role === "admin";
 
   const { data: enrollmentsRaw } = await supabase
     .schema("membros")
@@ -70,7 +74,7 @@ export default async function ProfilePage() {
     achievements: AchievementView[];
   } | null = null;
 
-  if (settings.gamificationEnabled) {
+  if (settings.gamificationEnabled && !isAdminUser) {
     try {
       const xp = await ensureUserXp(adminSb, user.id);
       const lvl = levelFromXp(xp.total_xp, xp.min_level ?? 1);

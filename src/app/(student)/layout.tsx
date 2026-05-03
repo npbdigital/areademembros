@@ -72,7 +72,9 @@ export default async function StudentLayout({
     !profile?.welcome_accepted_at &&
     profile?.role === "student";
 
-  // Carrega XP/streak pra mostrar no topbar (silent-fail se não der)
+  // Carrega XP/streak pra mostrar no topbar (silent-fail se não der).
+  // Admin não tem gamification — não faz sentido pra quem gerencia a plataforma.
+  const isAdminUser = profile?.role === "admin";
   let xpInfo:
     | {
         totalXp: number;
@@ -83,7 +85,7 @@ export default async function StudentLayout({
         currentStreak: number;
       }
     | undefined;
-  if (settings.gamificationEnabled) {
+  if (settings.gamificationEnabled && !isAdminUser) {
     try {
       const adminSb = createAdminClient();
       const xp = await ensureUserXp(adminSb, user.id);

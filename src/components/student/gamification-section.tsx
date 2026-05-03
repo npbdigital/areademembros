@@ -138,7 +138,7 @@ export function GamificationSection({
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-npb-gold">
                   Desbloqueadas
                 </p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {unlocked.map((a) => (
                     <AchievementBadge key={a.id} a={a} />
                   ))}
@@ -150,7 +150,7 @@ export function GamificationSection({
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-npb-text-muted">
                   Pra desbloquear
                 </p>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {locked.map((a) => (
                     <AchievementBadge key={a.id} a={a} />
                   ))}

@@ -520,6 +520,8 @@ function addDays(yyyymmdd: string, delta: number): string {
 /**
  * Atalho que server actions usam — cria admin client + lê settings + chama
  * awardXp se gamification ativo. Silent-fail (não bloqueia UX).
+ *
+ * Admin não acumula XP — não faz sentido pra quem gerencia a plataforma.
  */
 export async function tryAwardXp(params: {
   userId: string;
@@ -532,6 +534,16 @@ export async function tryAwardXp(params: {
     const settings = await getPlatformSettings(admin);
     if (!settings.gamificationEnabled) return;
     if (params.amount <= 0) return;
+
+    // Admin não acumula XP. Checa role direto — defesa em profundidade.
+    const { data: profile } = await admin
+      .schema("membros")
+      .from("users")
+      .select("role")
+      .eq("id", params.userId)
+      .maybeSingle();
+    if ((profile as { role?: string } | null)?.role === "admin") return;
+
     await awardXp(admin, params);
   } catch {
     // best-effort
