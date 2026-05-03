@@ -12,6 +12,7 @@ import {
 } from "@/app/(student)/community/actions";
 import { PostModal } from "@/components/community/create-post-button";
 import { DecoratedAvatar } from "@/components/decorated-avatar";
+import { LevelBadge } from "@/components/level-badge";
 
 export interface PostCardData {
   id: string;
@@ -27,6 +28,7 @@ export interface PostCardData {
   authorName: string;
   authorAvatarUrl: string | null;
   authorDecorationUrl?: string | null;
+  authorLevel?: number | null;
   liked: boolean;
   pageSlug: string;
   pageId: string;
@@ -101,7 +103,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
           size={36}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
             {post.isPinned && (
               <span className="inline-flex items-center gap-1 rounded bg-npb-gold/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-npb-gold">
                 <Pin className="h-2.5 w-2.5" />
@@ -111,6 +113,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
             <span className="text-sm font-semibold text-npb-text">
               {post.authorName}
             </span>
+            <LevelBadge level={post.authorLevel} size={16} />
             <span className="text-xs text-npb-text-muted">
               {timeAgoPtBr(post.createdAt)}
             </span>

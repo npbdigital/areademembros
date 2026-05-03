@@ -12,6 +12,8 @@ import { TopicLikeButton } from "@/components/community/topic-like-button";
 import { PostActionsBar } from "@/components/community/post-actions-bar";
 import { RealtimeFeedRefresher } from "@/components/community/realtime-feed-refresher";
 import { DecoratedAvatar } from "@/components/decorated-avatar";
+import { LevelBadge } from "@/components/level-badge";
+import { fetchAuthorMeta, fetchSingleAuthorMeta } from "@/lib/author-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -43,18 +45,10 @@ export default async function PostDetailPage({
       }
     | null;
 
-  // Decoração equipada do user atual (pro avatar nos comentários otimistas)
-  let currentUserDecorationUrl: string | null = null;
-  if (currentUserProfile?.equipped_decoration_id) {
-    const { data: deco } = await adminSupabase
-      .schema("membros")
-      .from("avatar_decorations")
-      .select("image_url, is_active")
-      .eq("id", currentUserProfile.equipped_decoration_id)
-      .maybeSingle();
-    const d = deco as { image_url: string | null; is_active: boolean } | null;
-    if (d?.is_active && d.image_url) currentUserDecorationUrl = d.image_url;
-  }
+  // Meta (decoração + level) do user atual pros comentários otimistas
+  const currentUserMeta = await fetchSingleAuthorMeta(adminSupabase, user.id);
+  const currentUserDecorationUrl = currentUserMeta.decorationUrl;
+  const currentUserLevel = currentUserMeta.level;
 
   const { data: topic } = await supabase
     .schema("membros")
@@ -115,18 +109,12 @@ export default async function PostDetailPage({
       }
     | null;
 
-  // Resolve URL da decoração do autor (se equipou)
-  let authorDecorationUrl: string | null = null;
-  if (author?.equipped_decoration_id) {
-    const { data: deco } = await adminSupabase
-      .schema("membros")
-      .from("avatar_decorations")
-      .select("image_url, is_active")
-      .eq("id", author.equipped_decoration_id)
-      .maybeSingle();
-    const d = deco as { image_url: string | null; is_active: boolean } | null;
-    if (d?.is_active && d.image_url) authorDecorationUrl = d.image_url;
-  }
+  // Decoração + level do autor
+  const authorMeta = author
+    ? await fetchSingleAuthorMeta(adminSupabase, author.id)
+    : { decorationUrl: null, level: null };
+  const authorDecorationUrl = authorMeta.decorationUrl;
+  const authorLevel = authorMeta.level;
 
   // Comentários (todos, root + replies)
   const { data: repliesData } = await supabase
@@ -147,62 +135,30 @@ export default async function PostDetailPage({
     created_at: string;
   }>;
 
-  // Hidrata autores das respostas + decorações
+  // Hidrata autores das respostas + meta (decoração + level)
   const replyUserIds = Array.from(new Set(replies.map((r) => r.user_id)));
   const replyAuthors = new Map<
     string,
-    {
-      id: string;
-      full_name: string | null;
-      avatar_url: string | null;
-      decoration_url: string | null;
-    }
+    { full_name: string | null; avatar_url: string | null }
   >();
   if (replyUserIds.length > 0) {
     const { data: users } = await adminSupabase
       .schema("membros")
       .from("users")
-      .select("id, full_name, avatar_url, equipped_decoration_id")
+      .select("id, full_name, avatar_url")
       .in("id", replyUserIds);
-    const userRows = (users ?? []) as Array<{
+    for (const u of (users ?? []) as Array<{
       id: string;
       full_name: string | null;
       avatar_url: string | null;
-      equipped_decoration_id: string | null;
-    }>;
-    const replyDecoIds = Array.from(
-      new Set(
-        userRows
-          .map((u) => u.equipped_decoration_id)
-          .filter((x): x is string => !!x),
-      ),
-    );
-    const replyDecoMap = new Map<string, string | null>();
-    if (replyDecoIds.length > 0) {
-      const { data: decos } = await adminSupabase
-        .schema("membros")
-        .from("avatar_decorations")
-        .select("id, image_url, is_active")
-        .in("id", replyDecoIds);
-      for (const d of (decos ?? []) as Array<{
-        id: string;
-        image_url: string | null;
-        is_active: boolean;
-      }>) {
-        if (d.is_active && d.image_url) replyDecoMap.set(d.id, d.image_url);
-      }
-    }
-    for (const u of userRows) {
+    }>) {
       replyAuthors.set(u.id, {
-        id: u.id,
         full_name: u.full_name,
         avatar_url: u.avatar_url,
-        decoration_url: u.equipped_decoration_id
-          ? replyDecoMap.get(u.equipped_decoration_id) ?? null
-          : null,
       });
     }
   }
+  const replyAuthorMeta = await fetchAuthorMeta(adminSupabase, replyUserIds);
 
   // Likes do user (no topic + nas replies)
   const { data: likedTopic } = await supabase
@@ -232,12 +188,14 @@ export default async function PostDetailPage({
   const byParent = new Map<string, CommentNode[]>();
   for (const r of replies) {
     const a = replyAuthors.get(r.user_id);
+    const m = replyAuthorMeta.get(r.user_id);
     const node: CommentNode = {
       id: r.id,
       authorId: r.user_id,
       authorName: a?.full_name ?? "Aluno",
       authorAvatarUrl: a?.avatar_url ?? null,
-      authorDecorationUrl: a?.decoration_url ?? null,
+      authorDecorationUrl: m?.decorationUrl ?? null,
+      authorLevel: m?.level ?? null,
       contentHtml: r.content_html,
       likesCount: r.likes_count,
       createdAt: r.created_at,
@@ -280,10 +238,11 @@ export default async function PostDetailPage({
             size={40}
           />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-baseline gap-x-2">
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
               <span className="text-sm font-semibold text-npb-text">
                 {author?.full_name ?? "Aluno"}
               </span>
+              <LevelBadge level={authorLevel} size={16} />
               {(author?.role === "admin" || author?.role === "moderator") && (
                 <span className="rounded bg-npb-gold/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-npb-gold">
                   {author.role === "admin" ? "Admin" : "Moderador"}
@@ -368,6 +327,7 @@ export default async function PostDetailPage({
           currentUserName={currentUserProfile?.full_name ?? "Você"}
           currentUserAvatarUrl={currentUserProfile?.avatar_url ?? null}
           currentUserDecorationUrl={currentUserDecorationUrl}
+          currentUserLevel={currentUserLevel}
           currentRole={role}
         />
       </section>

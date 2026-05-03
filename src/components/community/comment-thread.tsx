@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { sanitizePostHtml, timeAgoPtBr } from "@/lib/community";
 import { isElevatedRole, type AccessRole } from "@/lib/access";
 import { DecoratedAvatar } from "@/components/decorated-avatar";
+import { LevelBadge } from "@/components/level-badge";
 import {
   createReplyAction,
   deleteReplyAction,
@@ -18,6 +19,7 @@ export interface CommentNode {
   authorName: string;
   authorAvatarUrl: string | null;
   authorDecorationUrl?: string | null;
+  authorLevel?: number | null;
   contentHtml: string;
   likesCount: number;
   createdAt: string;
@@ -33,6 +35,7 @@ interface Props {
   currentUserName: string;
   currentUserAvatarUrl: string | null;
   currentUserDecorationUrl?: string | null;
+  currentUserLevel?: number | null;
   currentRole: AccessRole;
 }
 
@@ -43,6 +46,7 @@ export function CommentThread({
   currentUserName,
   currentUserAvatarUrl,
   currentUserDecorationUrl,
+  currentUserLevel,
   currentRole,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -66,6 +70,7 @@ export function CommentThread({
       authorName: currentUserName,
       authorAvatarUrl: currentUserAvatarUrl,
       authorDecorationUrl: currentUserDecorationUrl,
+      authorLevel: currentUserLevel,
       contentHtml: body,
       likesCount: 0,
       createdAt: new Date().toISOString(),
@@ -177,6 +182,7 @@ export function CommentThread({
                   currentUserName={currentUserName}
                   currentUserAvatarUrl={currentUserAvatarUrl}
                   currentUserDecorationUrl={currentUserDecorationUrl}
+                  currentUserLevel={currentUserLevel}
                   currentRole={currentRole}
                   isReply={false}
                   onOptimisticReply={(opt) => addOptimisticReply(node.id, opt)}
@@ -196,6 +202,7 @@ export function CommentThread({
                           currentUserName={currentUserName}
                           currentUserAvatarUrl={currentUserAvatarUrl}
                           currentUserDecorationUrl={currentUserDecorationUrl}
+                          currentUserLevel={currentUserLevel}
                           currentRole={currentRole}
                           isReply={true}
                         />
@@ -219,6 +226,7 @@ function CommentItem({
   currentUserName,
   currentUserAvatarUrl,
   currentUserDecorationUrl,
+  currentUserLevel,
   currentRole,
   isReply,
   onOptimisticReply,
@@ -231,6 +239,7 @@ function CommentItem({
   currentUserName: string;
   currentUserAvatarUrl: string | null;
   currentUserDecorationUrl?: string | null;
+  currentUserLevel?: number | null;
   currentRole: AccessRole;
   isReply: boolean;
   onOptimisticReply?: (optimistic: CommentNode) => void;
@@ -294,6 +303,7 @@ function CommentItem({
       authorName: currentUserName,
       authorAvatarUrl: currentUserAvatarUrl,
       authorDecorationUrl: currentUserDecorationUrl,
+      authorLevel: currentUserLevel,
       contentHtml: sanitizePostHtml(trimmed),
       likesCount: 0,
       createdAt: new Date().toISOString(),
@@ -332,10 +342,11 @@ function CommentItem({
             isOptimistic ? "opacity-70" : ""
           }`}
         >
-          <div className="flex flex-wrap items-baseline gap-x-2">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
             <span className="text-sm font-semibold text-npb-text">
               {node.authorName}
             </span>
+            <LevelBadge level={node.authorLevel} size={14} />
             <span className="text-[10px] text-npb-text-muted">
               {isOptimistic ? "enviando…" : timeAgoPtBr(node.createdAt)}
             </span>

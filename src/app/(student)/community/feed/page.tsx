@@ -3,6 +3,7 @@ import { getUserRole } from "@/lib/access";
 import { LayoutList } from "lucide-react";
 import { PostCard, type PostCardData } from "@/components/community/post-card";
 import { RealtimeFeedRefresher } from "@/components/community/realtime-feed-refresher";
+import { fetchAuthorMeta } from "@/lib/author-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -66,62 +67,27 @@ export default async function CommunityFeedPage() {
   // Filtra posts cuja página foi desativada / sem slug
   const visiblePosts = posts.filter((p) => pageMap.has(p.page_id));
 
-  // Hidrata autores + decorações equipadas
+  // Hidrata autores + decorações + level
   const userIds = Array.from(new Set(visiblePosts.map((p) => p.user_id)));
   const authors = new Map<
     string,
-    {
-      id: string;
-      full_name: string | null;
-      avatar_url: string | null;
-      decoration_url: string | null;
-    }
+    { full_name: string | null; avatar_url: string | null }
   >();
   if (userIds.length > 0) {
     const { data: users } = await adminSupabase
       .schema("membros")
       .from("users")
-      .select("id, full_name, avatar_url, equipped_decoration_id")
+      .select("id, full_name, avatar_url")
       .in("id", userIds);
-    const userRows = (users ?? []) as Array<{
+    for (const u of (users ?? []) as Array<{
       id: string;
       full_name: string | null;
       avatar_url: string | null;
-      equipped_decoration_id: string | null;
-    }>;
-    const decoIds = Array.from(
-      new Set(
-        userRows
-          .map((u) => u.equipped_decoration_id)
-          .filter((x): x is string => !!x),
-      ),
-    );
-    const decoMap = new Map<string, string | null>();
-    if (decoIds.length > 0) {
-      const { data: decos } = await adminSupabase
-        .schema("membros")
-        .from("avatar_decorations")
-        .select("id, image_url, is_active")
-        .in("id", decoIds);
-      for (const d of (decos ?? []) as Array<{
-        id: string;
-        image_url: string | null;
-        is_active: boolean;
-      }>) {
-        if (d.is_active && d.image_url) decoMap.set(d.id, d.image_url);
-      }
-    }
-    for (const u of userRows) {
-      authors.set(u.id, {
-        id: u.id,
-        full_name: u.full_name,
-        avatar_url: u.avatar_url,
-        decoration_url: u.equipped_decoration_id
-          ? decoMap.get(u.equipped_decoration_id) ?? null
-          : null,
-      });
+    }>) {
+      authors.set(u.id, { full_name: u.full_name, avatar_url: u.avatar_url });
     }
   }
+  const authorMeta = await fetchAuthorMeta(adminSupabase, userIds);
 
   // Likes do user
   const likedSet = new Set<string>();
@@ -142,6 +108,7 @@ export default async function CommunityFeedPage() {
 
   const cards: PostCardData[] = visiblePosts.map((p) => {
     const author = authors.get(p.user_id);
+    const meta = authorMeta.get(p.user_id);
     const pg = pageMap.get(p.page_id)!;
     return {
       id: p.id,
@@ -156,7 +123,8 @@ export default async function CommunityFeedPage() {
       authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",
       authorAvatarUrl: author?.avatar_url ?? null,
-      authorDecorationUrl: author?.decoration_url ?? null,
+      authorDecorationUrl: meta?.decorationUrl ?? null,
+      authorLevel: meta?.level ?? null,
       liked: likedSet.has(p.id),
       pageSlug: pg.slug,
       pageId: p.page_id,
