@@ -6,6 +6,7 @@ import { decrypt } from "@/lib/crypto";
 import { backfillOrphanSales, processSalesRaw } from "@/lib/affiliates/process";
 import { normalizeEmail } from "@/lib/affiliates/normalize";
 import { awardXp, bumpMinLevel } from "@/lib/gamification";
+import { evaluateAvatarDecorations } from "@/lib/decorations";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -380,6 +381,8 @@ export async function addManualSaleAction(
         .eq("id", sale.id);
       // 1ª venda = Nível II garantido
       await bumpMinLevel(sb, u.id, 2);
+      // Avalia decorações (auto-equipa novo marco se desbloqueou)
+      await evaluateAvatarDecorations(sb, u.id);
     } catch (e) {
       console.error("[addManualSale] erro awardXp:", e);
     }

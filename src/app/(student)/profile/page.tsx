@@ -14,6 +14,11 @@ import {
   AffiliateSection,
 } from "@/components/student/affiliate-section";
 import { PushSettingsSection } from "@/components/student/push-settings-section";
+import {
+  type DecorationOption,
+  DecorationSection,
+} from "@/components/student/decoration-section";
+import { countPaidSales, listActiveDecorations } from "@/lib/decorations";
 import { formatDateBrt } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +34,7 @@ export default async function ProfilePage() {
     .schema("membros")
     .from("users")
     .select(
-      "full_name, email, phone, avatar_url, created_at, email_notifications_enabled, role",
+      "full_name, email, phone, avatar_url, created_at, email_notifications_enabled, role, equipped_decoration_id",
     )
     .eq("id", user.id)
     .single();
@@ -37,6 +42,9 @@ export default async function ProfilePage() {
   // Admin não tem gamification (XP, conquistas, streak) — não faz sentido
   // pra quem gerencia a plataforma. Pula a seção inteira.
   const isAdminUser = (profile as { role?: string } | null)?.role === "admin";
+  const equippedDecorationId =
+    (profile as { equipped_decoration_id?: string | null } | null)
+      ?.equipped_decoration_id ?? null;
 
   const { data: enrollmentsRaw } = await supabase
     .schema("membros")
@@ -254,6 +262,24 @@ export default async function ProfilePage() {
     pushEnabled: p.push_enabled,
   }));
 
+  // DECORAÇÕES — opções que o aluno pode equipar (desbloqueadas + bloqueadas
+  // sem revelar quantas vendas precisa). Admin não tem.
+  const decorationOptions: DecorationOption[] = [];
+  if (!isAdminUser) {
+    const [decorationsRows, paidSalesCount] = await Promise.all([
+      listActiveDecorations(adminSb),
+      countPaidSales(adminSb, user.id),
+    ]);
+    for (const d of decorationsRows) {
+      decorationOptions.push({
+        id: d.id,
+        name: d.name,
+        imageUrl: d.image_url,
+        unlocked: paidSalesCount >= d.required_sales,
+      });
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-8">
       <header>
@@ -285,6 +311,15 @@ export default async function ProfilePage() {
       </section>
 
       {gamification && <GamificationSection {...gamification} />}
+
+      {!isAdminUser && (
+        <DecorationSection
+          avatarUrl={profile?.avatar_url ?? null}
+          userName={profile?.full_name ?? null}
+          equippedDecorationId={equippedDecorationId}
+          options={decorationOptions}
+        />
+      )}
 
       <AffiliateSection link={affiliateLink} stats={affiliateStats} />
 

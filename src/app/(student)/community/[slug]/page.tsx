@@ -73,24 +73,62 @@ export default async function CommunityPagePage({
     created_at: string;
   }>;
 
-  // Hidrata autores (admin client pra ver todos)
+  // Hidrata autores (admin client pra ver todos) + decorações equipadas
   const userIds = Array.from(new Set(posts.map((p) => p.user_id)));
   const authors = new Map<
     string,
-    { id: string; full_name: string | null; avatar_url: string | null }
+    {
+      id: string;
+      full_name: string | null;
+      avatar_url: string | null;
+      decoration_url: string | null;
+    }
   >();
   if (userIds.length > 0) {
     const { data: users } = await adminSupabase
       .schema("membros")
       .from("users")
-      .select("id, full_name, avatar_url")
+      .select(
+        "id, full_name, avatar_url, equipped_decoration_id",
+      )
       .in("id", userIds);
-    for (const u of (users ?? []) as Array<{
+    const userRows = (users ?? []) as Array<{
       id: string;
       full_name: string | null;
       avatar_url: string | null;
-    }>) {
-      authors.set(u.id, u);
+      equipped_decoration_id: string | null;
+    }>;
+    const decoIds = Array.from(
+      new Set(
+        userRows
+          .map((u) => u.equipped_decoration_id)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const decoMap = new Map<string, string | null>();
+    if (decoIds.length > 0) {
+      const { data: decos } = await adminSupabase
+        .schema("membros")
+        .from("avatar_decorations")
+        .select("id, image_url, is_active")
+        .in("id", decoIds);
+      for (const d of (decos ?? []) as Array<{
+        id: string;
+        image_url: string | null;
+        is_active: boolean;
+      }>) {
+        if (d.is_active && d.image_url) decoMap.set(d.id, d.image_url);
+      }
+    }
+    for (const u of userRows) {
+      authors.set(u.id, {
+        id: u.id,
+        full_name: u.full_name,
+        avatar_url: u.avatar_url,
+        decoration_url: u.equipped_decoration_id
+          ? decoMap.get(u.equipped_decoration_id) ?? null
+          : null,
+      });
     }
   }
 
@@ -143,6 +181,7 @@ export default async function CommunityPagePage({
       authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",
       authorAvatarUrl: author?.avatar_url ?? null,
+      authorDecorationUrl: author?.decoration_url ?? null,
       liked: likedSet.has(p.id),
       pageSlug: page.slug ?? params.slug,
       pageId: page.id,

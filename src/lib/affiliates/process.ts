@@ -22,6 +22,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { awardXp, bumpMinLevel } from "@/lib/gamification";
 import { notifyAndEmail, tryNotify } from "@/lib/notifications";
 import { normalizeEmail, normalizeName } from "@/lib/affiliates/normalize";
+import { evaluateAvatarDecorations } from "@/lib/decorations";
 
 interface KiwifyStore {
   id?: string;
@@ -301,6 +302,7 @@ async function processApproved(
     }
 
     await evaluateKiwifyAchievements(supabase, link.member_user_id);
+    await evaluateAvatarDecorations(supabase, link.member_user_id);
   }
 }
 
@@ -545,7 +547,9 @@ export async function backfillOrphanSales(
   }
 
   if (attached > 0) {
-    await evaluateKiwifyAchievements(createAdminClient(), memberUserId);
+    const adminSb = createAdminClient();
+    await evaluateKiwifyAchievements(adminSb, memberUserId);
+    await evaluateAvatarDecorations(adminSb, memberUserId);
   }
 
   return attached;

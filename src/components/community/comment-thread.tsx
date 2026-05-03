@@ -5,7 +5,7 @@ import { Heart, Loader2, MessageCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { sanitizePostHtml, timeAgoPtBr } from "@/lib/community";
 import { isElevatedRole, type AccessRole } from "@/lib/access";
-import { Avatar } from "@/components/community/post-card";
+import { DecoratedAvatar } from "@/components/decorated-avatar";
 import {
   createReplyAction,
   deleteReplyAction,
@@ -17,6 +17,7 @@ export interface CommentNode {
   authorId: string;
   authorName: string;
   authorAvatarUrl: string | null;
+  authorDecorationUrl?: string | null;
   contentHtml: string;
   likesCount: number;
   createdAt: string;
@@ -31,6 +32,7 @@ interface Props {
   currentUserId: string;
   currentUserName: string;
   currentUserAvatarUrl: string | null;
+  currentUserDecorationUrl?: string | null;
   currentRole: AccessRole;
 }
 
@@ -40,6 +42,7 @@ export function CommentThread({
   currentUserId,
   currentUserName,
   currentUserAvatarUrl,
+  currentUserDecorationUrl,
   currentRole,
 }: Props) {
   const [draft, setDraft] = useState("");
@@ -62,6 +65,7 @@ export function CommentThread({
       authorId: currentUserId,
       authorName: currentUserName,
       authorAvatarUrl: currentUserAvatarUrl,
+      authorDecorationUrl: currentUserDecorationUrl,
       contentHtml: body,
       likesCount: 0,
       createdAt: new Date().toISOString(),
@@ -172,6 +176,7 @@ export function CommentThread({
                   currentUserId={currentUserId}
                   currentUserName={currentUserName}
                   currentUserAvatarUrl={currentUserAvatarUrl}
+                  currentUserDecorationUrl={currentUserDecorationUrl}
                   currentRole={currentRole}
                   isReply={false}
                   onOptimisticReply={(opt) => addOptimisticReply(node.id, opt)}
@@ -190,6 +195,7 @@ export function CommentThread({
                           currentUserId={currentUserId}
                           currentUserName={currentUserName}
                           currentUserAvatarUrl={currentUserAvatarUrl}
+                          currentUserDecorationUrl={currentUserDecorationUrl}
                           currentRole={currentRole}
                           isReply={true}
                         />
@@ -212,6 +218,7 @@ function CommentItem({
   currentUserId,
   currentUserName,
   currentUserAvatarUrl,
+  currentUserDecorationUrl,
   currentRole,
   isReply,
   onOptimisticReply,
@@ -223,6 +230,7 @@ function CommentItem({
   currentUserId: string;
   currentUserName: string;
   currentUserAvatarUrl: string | null;
+  currentUserDecorationUrl?: string | null;
   currentRole: AccessRole;
   isReply: boolean;
   onOptimisticReply?: (optimistic: CommentNode) => void;
@@ -285,6 +293,7 @@ function CommentItem({
       authorId: currentUserId,
       authorName: currentUserName,
       authorAvatarUrl: currentUserAvatarUrl,
+      authorDecorationUrl: currentUserDecorationUrl,
       contentHtml: sanitizePostHtml(trimmed),
       likesCount: 0,
       createdAt: new Date().toISOString(),
@@ -311,10 +320,11 @@ function CommentItem({
 
   return (
     <div className="flex items-start gap-2.5">
-      <Avatar
+      <DecoratedAvatar
         src={node.authorAvatarUrl}
+        decorationUrl={node.authorDecorationUrl}
         name={node.authorName}
-        className="h-7 w-7"
+        size={28}
       />
       <div className="min-w-0 flex-1">
         <div

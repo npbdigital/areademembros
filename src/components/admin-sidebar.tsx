@@ -13,6 +13,7 @@ import {
   MessageCircle,
   PlaySquare,
   Settings,
+  Sparkles,
   Users,
   Wallet,
 } from "lucide-react";
@@ -56,6 +57,7 @@ const groups = [
   {
     label: "Sistema",
     items: [
+      { href: "/admin/decorations", label: "Decorações", icon: Sparkles },
       { href: "/admin/youtube", label: "YouTube", icon: PlaySquare },
       { href: "/admin/settings", label: "Configurações", icon: Settings },
     ],

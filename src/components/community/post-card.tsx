@@ -11,6 +11,7 @@ import {
   toggleTopicLikeAction,
 } from "@/app/(student)/community/actions";
 import { PostModal } from "@/components/community/create-post-button";
+import { DecoratedAvatar } from "@/components/decorated-avatar";
 
 export interface PostCardData {
   id: string;
@@ -25,6 +26,7 @@ export interface PostCardData {
   authorId: string;
   authorName: string;
   authorAvatarUrl: string | null;
+  authorDecorationUrl?: string | null;
   liked: boolean;
   pageSlug: string;
   pageId: string;
@@ -92,10 +94,11 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
       }`}
     >
       <div className="flex items-start gap-3">
-        <Avatar
+        <DecoratedAvatar
           src={post.authorAvatarUrl}
+          decorationUrl={post.authorDecorationUrl}
           name={post.authorName}
-          className="h-9 w-9"
+          size={36}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline gap-x-2">

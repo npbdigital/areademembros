@@ -4,7 +4,6 @@ import { ChevronLeft } from "lucide-react";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { getUserRole } from "@/lib/access";
 import { sanitizePostHtml, timeAgoPtBr, videoEmbedUrl } from "@/lib/community";
-import { Avatar } from "@/components/community/post-card";
 import {
   CommentThread,
   type CommentNode,
@@ -12,6 +11,7 @@ import {
 import { TopicLikeButton } from "@/components/community/topic-like-button";
 import { PostActionsBar } from "@/components/community/post-actions-bar";
 import { RealtimeFeedRefresher } from "@/components/community/realtime-feed-refresher";
+import { DecoratedAvatar } from "@/components/decorated-avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +32,29 @@ export default async function PostDetailPage({
   const { data: currentProfile } = await supabase
     .schema("membros")
     .from("users")
-    .select("full_name, avatar_url")
+    .select("full_name, avatar_url, equipped_decoration_id")
     .eq("id", user.id)
     .maybeSingle();
   const currentUserProfile = currentProfile as
-    | { full_name: string | null; avatar_url: string | null }
+    | {
+        full_name: string | null;
+        avatar_url: string | null;
+        equipped_decoration_id: string | null;
+      }
     | null;
+
+  // Decoração equipada do user atual (pro avatar nos comentários otimistas)
+  let currentUserDecorationUrl: string | null = null;
+  if (currentUserProfile?.equipped_decoration_id) {
+    const { data: deco } = await adminSupabase
+      .schema("membros")
+      .from("avatar_decorations")
+      .select("image_url, is_active")
+      .eq("id", currentUserProfile.equipped_decoration_id)
+      .maybeSingle();
+    const d = deco as { image_url: string | null; is_active: boolean } | null;
+    if (d?.is_active && d.image_url) currentUserDecorationUrl = d.image_url;
+  }
 
   const { data: topic } = await supabase
     .schema("membros")
@@ -85,7 +102,7 @@ export default async function PostDetailPage({
   const { data: authorRow } = await adminSupabase
     .schema("membros")
     .from("users")
-    .select("id, full_name, avatar_url, role")
+    .select("id, full_name, avatar_url, role, equipped_decoration_id")
     .eq("id", t.user_id)
     .maybeSingle();
   const author = authorRow as
@@ -94,8 +111,22 @@ export default async function PostDetailPage({
         full_name: string | null;
         avatar_url: string | null;
         role: string;
+        equipped_decoration_id: string | null;
       }
     | null;
+
+  // Resolve URL da decoração do autor (se equipou)
+  let authorDecorationUrl: string | null = null;
+  if (author?.equipped_decoration_id) {
+    const { data: deco } = await adminSupabase
+      .schema("membros")
+      .from("avatar_decorations")
+      .select("image_url, is_active")
+      .eq("id", author.equipped_decoration_id)
+      .maybeSingle();
+    const d = deco as { image_url: string | null; is_active: boolean } | null;
+    if (d?.is_active && d.image_url) authorDecorationUrl = d.image_url;
+  }
 
   // Comentários (todos, root + replies)
   const { data: repliesData } = await supabase
@@ -116,24 +147,60 @@ export default async function PostDetailPage({
     created_at: string;
   }>;
 
-  // Hidrata autores das respostas
+  // Hidrata autores das respostas + decorações
   const replyUserIds = Array.from(new Set(replies.map((r) => r.user_id)));
   const replyAuthors = new Map<
     string,
-    { id: string; full_name: string | null; avatar_url: string | null }
+    {
+      id: string;
+      full_name: string | null;
+      avatar_url: string | null;
+      decoration_url: string | null;
+    }
   >();
   if (replyUserIds.length > 0) {
     const { data: users } = await adminSupabase
       .schema("membros")
       .from("users")
-      .select("id, full_name, avatar_url")
+      .select("id, full_name, avatar_url, equipped_decoration_id")
       .in("id", replyUserIds);
-    for (const u of (users ?? []) as Array<{
+    const userRows = (users ?? []) as Array<{
       id: string;
       full_name: string | null;
       avatar_url: string | null;
-    }>) {
-      replyAuthors.set(u.id, u);
+      equipped_decoration_id: string | null;
+    }>;
+    const replyDecoIds = Array.from(
+      new Set(
+        userRows
+          .map((u) => u.equipped_decoration_id)
+          .filter((x): x is string => !!x),
+      ),
+    );
+    const replyDecoMap = new Map<string, string | null>();
+    if (replyDecoIds.length > 0) {
+      const { data: decos } = await adminSupabase
+        .schema("membros")
+        .from("avatar_decorations")
+        .select("id, image_url, is_active")
+        .in("id", replyDecoIds);
+      for (const d of (decos ?? []) as Array<{
+        id: string;
+        image_url: string | null;
+        is_active: boolean;
+      }>) {
+        if (d.is_active && d.image_url) replyDecoMap.set(d.id, d.image_url);
+      }
+    }
+    for (const u of userRows) {
+      replyAuthors.set(u.id, {
+        id: u.id,
+        full_name: u.full_name,
+        avatar_url: u.avatar_url,
+        decoration_url: u.equipped_decoration_id
+          ? replyDecoMap.get(u.equipped_decoration_id) ?? null
+          : null,
+      });
     }
   }
 
@@ -170,6 +237,7 @@ export default async function PostDetailPage({
       authorId: r.user_id,
       authorName: a?.full_name ?? "Aluno",
       authorAvatarUrl: a?.avatar_url ?? null,
+      authorDecorationUrl: a?.decoration_url ?? null,
       contentHtml: r.content_html,
       likesCount: r.likes_count,
       createdAt: r.created_at,
@@ -205,10 +273,11 @@ export default async function PostDetailPage({
 
       <article className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
         <header className="flex items-start gap-3">
-          <Avatar
+          <DecoratedAvatar
             src={author?.avatar_url ?? null}
+            decorationUrl={authorDecorationUrl}
             name={author?.full_name ?? "Aluno"}
-            className="h-10 w-10"
+            size={40}
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline gap-x-2">
@@ -298,6 +367,7 @@ export default async function PostDetailPage({
           currentUserId={user.id}
           currentUserName={currentUserProfile?.full_name ?? "Você"}
           currentUserAvatarUrl={currentUserProfile?.avatar_url ?? null}
+          currentUserDecorationUrl={currentUserDecorationUrl}
           currentRole={role}
         />
       </section>
