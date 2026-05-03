@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-03 — Etapa 25: 5 ajustes UX (mobile profile, PWA Android, topbar comunidade, thumb post, comentários estilo Twitter)
-**Último commit no main:** atualizado neste push
+**Último commit no main:** `1204738` — feat: 5 ajustes UX (mobile profile, PWA Android, topbar comunidade, thumb post, comentários Twitter)
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
