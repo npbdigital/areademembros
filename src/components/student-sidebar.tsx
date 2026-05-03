@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AtSign, Bell, Bookmark, Home, NotebookPen, Smile, User } from "lucide-react";
+import { AtSign, Bell, Bookmark, Home, NotebookPen, Radio, Smile, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NpbLogo } from "@/components/npb-logo";
 import { PwaInstallButton } from "@/components/pwa-install-button";
@@ -12,6 +12,7 @@ const items = [
   { href: "/favorites", label: "Favoritos", icon: Bookmark },
   { href: "/notes", label: "Anotações", icon: NotebookPen },
   { href: "/community", label: "Comunidade", icon: Smile },
+  { href: "/monitorias", label: "Monitorias ao vivo", icon: Radio },
   { href: "/notifications", label: "Notificações", icon: Bell },
   { href: "/profile", label: "Perfil", icon: User },
 ];
