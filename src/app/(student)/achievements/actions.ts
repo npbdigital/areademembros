@@ -12,6 +12,36 @@ export type ActionResult<T = unknown> = {
 };
 
 /**
+ * Marca o popup celebrativo dessa conquista como exibido pro user atual.
+ * Usado pelo `<AchievementCelebrationListener>` quando o aluno fecha o
+ * modal — sem isso o popup re-apareceria a cada novo acesso.
+ */
+export async function markAchievementCelebratedAction(
+  achievementId: string,
+): Promise<ActionResult> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Não autenticado." };
+
+    const admin = createAdminClient();
+    const { error } = await admin
+      .schema("membros")
+      .from("user_achievements")
+      .update({ celebrated_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("achievement_id", achievementId)
+      .is("celebrated_at", null);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/**
  * Compartilha uma conquista desbloqueada na página /community/resultados.
  *
  * Cria um post auto-aprovado com o badge da conquista + texto opcional

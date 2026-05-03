@@ -7,7 +7,10 @@ import { toast } from "sonner";
 import confetti from "canvas-confetti";
 import { useRouter } from "next/navigation";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
-import { shareAchievementAction } from "@/app/(student)/achievements/actions";
+import {
+  markAchievementCelebratedAction,
+  shareAchievementAction,
+} from "@/app/(student)/achievements/actions";
 
 export interface CelebratableAchievement {
   id: string;
@@ -29,18 +32,125 @@ interface ListenerProps {
 }
 
 /**
- * Listener Realtime que escuta INSERTs em user_achievements pra esse user
- * e dispara o popup celebrativo quando a conquista tem `celebrate=true`.
+ * Listener que dispara o popup celebrativo. Combina dois fluxos:
  *
- * Roda no student layout — sempre disponível enquanto aluno tá no app.
+ * 1. **Replay no mount** — query em `user_achievements` por linhas com
+ *    `celebrated_at IS NULL` e `celebrate=true`. Cobre o caso "admin
+ *    gerou venda fictícia / aluno desbloqueou enquanto offline → Realtime
+ *    perdeu o evento". No próximo acesso o popup dispara.
+ * 2. **Realtime INSERT** — escuta novas linhas em tempo real pra disparar
+ *    popup imediato quando aluno está logado e algo acontece.
+ *
+ * Quando o aluno fecha o modal, `celebrated_at` é setado pra evitar que o
+ * popup re-apareça na próxima nav.
  */
 export function AchievementCelebrationListener({ userId }: ListenerProps) {
-  const [queue, setQueue] = useState<CelebratableAchievement[]>([]);
+  const [queue, setQueue] = useState<
+    Array<CelebratableAchievement & { avatarUrl: string | null }>
+  >([]);
   const seenRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const supabase = createBrowserClient();
+    let cancelled = false;
 
+    async function fetchAchievement(achievementId: string) {
+      const { data } = await supabase
+        .schema("membros")
+        .from("achievements")
+        .select(
+          "id, code, name, description, icon, shareable, celebrate, celebration_image_url, unlocks_decoration_id, avatar_decorations(name, image_url)",
+        )
+        .eq("id", achievementId)
+        .maybeSingle();
+      return data as
+        | {
+            id: string;
+            code: string;
+            name: string;
+            description: string | null;
+            icon: string;
+            shareable: boolean;
+            celebrate: boolean;
+            celebration_image_url: string | null;
+            unlocks_decoration_id: string | null;
+            avatar_decorations:
+              | { name: string; image_url: string | null }
+              | { name: string; image_url: string | null }[]
+              | null;
+          }
+        | null;
+    }
+
+    async function fetchAvatar(): Promise<string | null> {
+      const { data: userRow } = await supabase
+        .schema("membros")
+        .from("users")
+        .select("avatar_url")
+        .eq("id", userId)
+        .maybeSingle();
+      return (
+        (userRow as { avatar_url: string | null } | null)?.avatar_url ?? null
+      );
+    }
+
+    function pushToQueue(
+      a: NonNullable<Awaited<ReturnType<typeof fetchAchievement>>>,
+      avatarUrl: string | null,
+    ) {
+      if (cancelled) return;
+      if (seenRef.current.has(a.id)) return;
+      seenRef.current.add(a.id);
+      const deco = Array.isArray(a.avatar_decorations)
+        ? a.avatar_decorations[0]
+        : a.avatar_decorations;
+      setQueue((q) => [
+        ...q,
+        {
+          id: a.id,
+          code: a.code,
+          name: a.name,
+          description: a.description,
+          icon: a.icon,
+          shareable: a.shareable,
+          imageUrl: a.celebration_image_url ?? null,
+          decorationName: deco?.name ?? null,
+          decorationImageUrl: deco?.image_url ?? null,
+          avatarUrl,
+        },
+      ]);
+    }
+
+    // 1. Replay: pega celebrações pendentes (celebrated_at IS NULL)
+    (async () => {
+      const { data: pendingRows } = await supabase
+        .schema("membros")
+        .from("user_achievements")
+        .select("achievement_id, unlocked_at")
+        .eq("user_id", userId)
+        .is("celebrated_at", null)
+        .order("unlocked_at", { ascending: true })
+        .limit(5);
+
+      if (cancelled) return;
+      const ids = (
+        (pendingRows ?? []) as Array<{ achievement_id: string }>
+      ).map((r) => r.achievement_id);
+      if (ids.length === 0) return;
+
+      const avatarUrl = await fetchAvatar();
+      for (const id of ids) {
+        const a = await fetchAchievement(id);
+        if (!a || !a.celebrate) {
+          // Conquista sem celebração marca como vista pra não ficar consultando
+          await markAchievementCelebratedAction(id);
+          continue;
+        }
+        pushToQueue(a, avatarUrl);
+      }
+    })();
+
+    // 2. Realtime: novos INSERTs disparam popup ao vivo
     const channel = supabase
       .channel(`celebrate-${userId}`)
       .on(
@@ -56,71 +166,16 @@ export function AchievementCelebrationListener({ userId }: ListenerProps) {
             payload.new as { achievement_id?: string }
           )?.achievement_id;
           if (!achievementId || seenRef.current.has(achievementId)) return;
-          seenRef.current.add(achievementId);
-
-          // Busca dados completos — só celebra se celebrate=true
-          const { data } = await supabase
-            .schema("membros")
-            .from("achievements")
-            .select(
-              "id, code, name, description, icon, shareable, celebrate, celebration_image_url, unlocks_decoration_id, avatar_decorations(name, image_url)",
-            )
-            .eq("id", achievementId)
-            .maybeSingle();
-          const a = data as
-            | {
-                id: string;
-                code: string;
-                name: string;
-                description: string | null;
-                icon: string;
-                shareable: boolean;
-                celebrate: boolean;
-                celebration_image_url: string | null;
-                unlocks_decoration_id: string | null;
-                avatar_decorations:
-                  | { name: string; image_url: string | null }
-                  | { name: string; image_url: string | null }[]
-                  | null;
-              }
-            | null;
+          const a = await fetchAchievement(achievementId);
           if (!a || !a.celebrate) return;
-
-          // Pega avatar atual do user pra montar o card de frame
-          const { data: userRow } = await supabase
-            .schema("membros")
-            .from("users")
-            .select("avatar_url")
-            .eq("id", userId)
-            .maybeSingle();
-          const avatarUrl =
-            (userRow as { avatar_url: string | null } | null)?.avatar_url ??
-            null;
-
-          const deco = Array.isArray(a.avatar_decorations)
-            ? a.avatar_decorations[0]
-            : a.avatar_decorations;
-
-          setQueue((q) => [
-            ...q,
-            {
-              id: a.id,
-              code: a.code,
-              name: a.name,
-              description: a.description,
-              icon: a.icon,
-              shareable: a.shareable,
-              imageUrl: a.celebration_image_url ?? null,
-              decorationName: deco?.name ?? null,
-              decorationImageUrl: deco?.image_url ?? null,
-              avatarUrl,
-            } as CelebratableAchievement & { avatarUrl: string | null },
-          ]);
+          const avatarUrl = await fetchAvatar();
+          pushToQueue(a, avatarUrl);
         },
       )
       .subscribe();
 
     return () => {
+      cancelled = true;
       supabase.removeChannel(channel);
     };
   }, [userId]);
@@ -130,6 +185,10 @@ export function AchievementCelebrationListener({ userId }: ListenerProps) {
   const current = queue[0];
 
   function handleClose() {
+    // Marca como celebrado no DB pra não disparar de novo no próximo acesso
+    markAchievementCelebratedAction(current.id).catch(() => {
+      // best-effort — se falhar, popup pode aparecer de novo, mas não é crítico
+    });
     setQueue((q) => q.slice(1));
   }
 
@@ -138,10 +197,7 @@ export function AchievementCelebrationListener({ userId }: ListenerProps) {
       key={current.id}
       achievement={current}
       onClose={handleClose}
-      previewAvatarUrl={
-        (current as CelebratableAchievement & { avatarUrl?: string | null })
-          .avatarUrl ?? null
-      }
+      previewAvatarUrl={current.avatarUrl}
     />
   );
 }
