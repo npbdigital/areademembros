@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-03 — Etapa 28.4: Excluir aluno + fix favicon + popup broadcast
-**Último commit no main:** (a vir)
+**Último commit no main:** `5da1721` — feat(etapa28.4): excluir aluno + fix favicon + popup broadcast
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
