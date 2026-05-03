@@ -221,8 +221,8 @@ export default async function LessonPage({
         lessonTitle={lesson.title}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-6">
           {lesson.youtube_video_id && (
             <YouTubePlayer
               lessonId={lesson.id}
@@ -260,7 +260,7 @@ export default async function LessonPage({
             />
           </div>
 
-          <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+          <div className="overflow-hidden rounded-2xl border border-npb-border bg-npb-bg2 p-4 md:p-6">
             <LessonTabs
               lessonId={lesson.id}
               descriptionHtml={lesson.description_html}

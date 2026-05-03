@@ -38,22 +38,23 @@ export function LessonTabs({
   const hasAttachments = attachments.length > 0;
 
   return (
-    <div>
-      <div className="flex gap-1 border-b border-npb-border">
+    <div className="min-w-0">
+      {/* Tabs scrolláveis horizontal no mobile pra não quebrar layout. */}
+      <div className="-mx-2 flex gap-1 overflow-x-auto border-b border-npb-border px-2 npb-scrollbar [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <TabButton active={tab === "description"} onClick={() => setTab("description")}>
           Descrição
         </TabButton>
-        <TabButton
-          active={tab === "attachments"}
-          onClick={() => setTab("attachments")}
-        >
-          Anexos
-          {hasAttachments && (
+        {hasAttachments && (
+          <TabButton
+            active={tab === "attachments"}
+            onClick={() => setTab("attachments")}
+          >
+            Anexos
             <span className="ml-1.5 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-semibold text-npb-text-muted">
               {attachments.length}
             </span>
-          )}
-        </TabButton>
+          </TabButton>
+        )}
         <TabButton active={tab === "notes"} onClick={() => setTab("notes")}>
           Anotações
         </TabButton>
@@ -144,7 +145,7 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`px-4 py-2.5 text-sm font-semibold transition ${
+      className={`flex-shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-semibold transition ${
         active
           ? "border-b-2 border-npb-gold text-npb-text"
           : "border-b-2 border-transparent text-npb-text-muted hover:text-npb-text"
@@ -165,7 +166,7 @@ function DescriptionTab({ descriptionHtml }: { descriptionHtml: string | null })
   }
   return (
     <div
-      className="prose prose-invert max-w-none text-sm text-npb-text"
+      className="prose prose-invert max-w-none text-sm text-npb-text [overflow-wrap:anywhere] [&_a]:break-all [&_pre]:overflow-x-auto"
       dangerouslySetInnerHTML={{ __html: descriptionHtml }}
     />
   );
