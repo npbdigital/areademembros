@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic";
 
 interface SessionRow {
   id: string;
-  cohort_id: string;
   title: string;
   description: string | null;
   scheduled_at: string | null;
@@ -34,7 +33,7 @@ export default async function MonitoriaPlayerPage({
     .schema("membros")
     .from("live_sessions")
     .select(
-      "id, cohort_id, title, description, scheduled_at, status, started_at, ended_at",
+      "id, title, description, scheduled_at, status, started_at, ended_at",
     )
     .eq("id", params.id)
     .maybeSingle();

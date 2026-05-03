@@ -44,37 +44,44 @@ export function CreateLiveSessionForm({ cohorts }: Props) {
 
   return (
     <form ref={formRef} action={formAction} className="space-y-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="cohort_id" className="text-npb-text">
-            Turma <span className="text-npb-gold">*</span>
-          </Label>
-          <select
-            id="cohort_id"
-            name="cohort_id"
-            required
-            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-          >
-            {cohorts.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+      <div className="space-y-1.5">
+        <Label className="text-npb-text">
+          Turmas <span className="text-npb-gold">*</span>
+        </Label>
+        <p className="text-[10px] text-npb-text-muted">
+          Marque uma ou mais turmas. A monitoria fica visível pra alunos
+          matriculados em qualquer turma marcada.
+        </p>
+        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 max-h-48 overflow-y-auto npb-scrollbar pr-1 rounded-md border border-npb-border bg-npb-bg3 p-2">
+          {cohorts.map((c) => (
+            <label
+              key={c.id}
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-npb-text transition hover:bg-npb-bg2"
+            >
+              <input
+                type="checkbox"
+                name="cohort_ids"
+                value={c.id}
+                className="h-4 w-4 accent-npb-gold"
+              />
+              <span className="truncate">{c.name}</span>
+            </label>
+          ))}
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="title" className="text-npb-text">
-            Título <span className="text-npb-gold">*</span>
-          </Label>
-          <Input
-            id="title"
-            name="title"
-            required
-            maxLength={120}
-            placeholder="Monitoria semanal — Estratégia"
-            className="bg-npb-bg3 border-npb-border text-npb-text"
-          />
-        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="title" className="text-npb-text">
+          Título <span className="text-npb-gold">*</span>
+        </Label>
+        <Input
+          id="title"
+          name="title"
+          required
+          maxLength={120}
+          placeholder="Monitoria semanal — Estratégia"
+          className="bg-npb-bg3 border-npb-border text-npb-text"
+        />
       </div>
 
       <div className="space-y-1.5">
@@ -91,7 +98,7 @@ export function CreateLiveSessionForm({ cohorts }: Props) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="scheduled_at" className="text-npb-text">
             Horário previsto (BRT)
@@ -106,6 +113,30 @@ export function CreateLiveSessionForm({ cohorts }: Props) {
             Só pra exibir. Liberação é manual.
           </p>
         </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="recurrence" className="text-npb-text">
+            Repetir
+          </Label>
+          <select
+            id="recurrence"
+            name="recurrence"
+            defaultValue="none"
+            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+          >
+            <option value="none">Não repetir</option>
+            <option value="daily">Diariamente</option>
+            <option value="weekly">Semanalmente</option>
+            <option value="biweekly">Quinzenalmente</option>
+            <option value="monthly">Mensalmente</option>
+          </select>
+          <p className="text-[10px] text-npb-text-muted">
+            Quando você encerrar uma monitoria recorrente, criamos a próxima
+            automaticamente com mesmo horário, turmas e Zoom.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="zoom_meeting_id" className="text-npb-text">
             Zoom Meeting ID <span className="text-npb-gold">*</span>

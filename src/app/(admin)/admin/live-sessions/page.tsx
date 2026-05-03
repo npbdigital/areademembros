@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, Plus, Radio } from "lucide-react";
+import { ArrowLeft, Plus, Radio, Repeat } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { LiveSessionRowActions } from "@/components/admin/live-session-row-actions";
 import { CreateLiveSessionForm } from "@/components/admin/create-live-session-form";
@@ -9,36 +9,60 @@ export const dynamic = "force-dynamic";
 
 interface SessionRow {
   id: string;
-  cohort_id: string;
   title: string;
   description: string | null;
   scheduled_at: string | null;
   zoom_meeting_id: string;
   zoom_password: string | null;
   status: string;
+  recurrence: string;
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
 }
 
+const RECURRENCE_LABEL: Record<string, string> = {
+  daily: "Diariamente",
+  weekly: "Semanalmente",
+  biweekly: "Quinzenalmente",
+  monthly: "Mensalmente",
+};
+
 export default async function AdminLiveSessionsPage() {
   const sb = createAdminClient();
 
-  const [{ data: sessionsData }, { data: cohortsData }] = await Promise.all([
-    sb
-      .schema("membros")
-      .from("live_sessions")
-      .select(
-        "id, cohort_id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, started_at, ended_at, created_at",
-      )
-      .order("scheduled_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false }),
-    sb.schema("membros").from("cohorts").select("id, name").order("name"),
-  ]);
+  const [{ data: sessionsData }, { data: cohortsData }, { data: linkRows }] =
+    await Promise.all([
+      sb
+        .schema("membros")
+        .from("live_sessions")
+        .select(
+          "id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, recurrence, started_at, ended_at, created_at",
+        )
+        .order("scheduled_at", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false }),
+      sb.schema("membros").from("cohorts").select("id, name").order("name"),
+      sb
+        .schema("membros")
+        .from("live_session_cohorts")
+        .select("session_id, cohort_id"),
+    ]);
 
   const sessions = (sessionsData ?? []) as SessionRow[];
   const cohorts = (cohortsData ?? []) as Array<{ id: string; name: string }>;
   const cohortMap = new Map(cohorts.map((c) => [c.id, c.name]));
+
+  // Mapa session_id → array de cohort names
+  const sessionCohorts = new Map<string, string[]>();
+  for (const row of (linkRows ?? []) as Array<{
+    session_id: string;
+    cohort_id: string;
+  }>) {
+    const arr = sessionCohorts.get(row.session_id) ?? [];
+    const name = cohortMap.get(row.cohort_id);
+    if (name) arr.push(name);
+    sessionCohorts.set(row.session_id, arr);
+  }
 
   const live = sessions.filter((s) => s.status === "live");
   const scheduled = sessions.filter((s) => s.status === "scheduled");
@@ -67,8 +91,9 @@ export default async function AdminLiveSessionsPage() {
         <p className="mt-1 text-sm text-npb-text-muted">
           Aluno só vê monitoria das turmas em que está matriculado. A
           liberação é manual: clique <strong>Iniciar agora</strong> no horário
-          que você quiser começar — alunos da turma recebem notificação push
-          na hora.
+          que você quiser começar — alunos das turmas recebem notificação push
+          na hora. Se for recorrente, ao encerrar criamos a próxima
+          ocorrência automaticamente.
         </p>
       </header>
 
@@ -89,7 +114,7 @@ export default async function AdminLiveSessionsPage() {
               <SessionRow
                 key={s.id}
                 session={s}
-                cohortName={cohortMap.get(s.cohort_id) ?? "—"}
+                cohortNames={sessionCohorts.get(s.id) ?? []}
               />
             ))}
           </ul>
@@ -110,7 +135,7 @@ export default async function AdminLiveSessionsPage() {
               <SessionRow
                 key={s.id}
                 session={s}
-                cohortName={cohortMap.get(s.cohort_id) ?? "—"}
+                cohortNames={sessionCohorts.get(s.id) ?? []}
               />
             ))}
           </ul>
@@ -127,7 +152,7 @@ export default async function AdminLiveSessionsPage() {
               <SessionRow
                 key={s.id}
                 session={s}
-                cohortName={cohortMap.get(s.cohort_id) ?? "—"}
+                cohortNames={sessionCohorts.get(s.id) ?? []}
               />
             ))}
           </ul>
@@ -139,10 +164,10 @@ export default async function AdminLiveSessionsPage() {
 
 function SessionRow({
   session,
-  cohortName,
+  cohortNames,
 }: {
   session: SessionRow;
-  cohortName: string;
+  cohortNames: string[];
 }) {
   const statusBadge =
     session.status === "live"
@@ -153,19 +178,32 @@ function SessionRow({
           ? { label: "ENCERRADA", className: "bg-npb-bg3 text-npb-text-muted" }
           : { label: "CANCELADA", className: "bg-npb-bg3 text-npb-text-muted" };
 
+  const recurrenceLabel = RECURRENCE_LABEL[session.recurrence];
+
   return (
     <li className="rounded-xl border border-npb-border bg-npb-bg2 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span
               className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${statusBadge.className}`}
             >
               {statusBadge.label}
             </span>
-            <span className="rounded bg-npb-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-npb-gold">
-              {cohortName}
-            </span>
+            {cohortNames.map((name) => (
+              <span
+                key={name}
+                className="rounded bg-npb-gold/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-npb-gold"
+              >
+                {name}
+              </span>
+            ))}
+            {recurrenceLabel && (
+              <span className="inline-flex items-center gap-1 rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-300">
+                <Repeat className="h-2.5 w-2.5" />
+                {recurrenceLabel}
+              </span>
+            )}
           </div>
           <h3 className="mt-1.5 text-base font-bold text-npb-text">
             {session.title}

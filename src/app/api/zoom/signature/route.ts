@@ -64,13 +64,12 @@ export async function POST(req: NextRequest) {
   const { data: sessionRow } = await sb
     .schema("membros")
     .from("live_sessions")
-    .select("id, cohort_id, zoom_meeting_id, zoom_password, status")
+    .select("id, zoom_meeting_id, zoom_password, status")
     .eq("id", sessionId)
     .maybeSingle();
   const session = sessionRow as
     | {
         id: string;
-        cohort_id: string;
         zoom_meeting_id: string;
         zoom_password: string | null;
         status: string;
@@ -89,7 +88,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. User é admin OU tem matrícula ativa na cohort
+  // 3. User é admin OU tem matrícula ativa em ALGUMA das cohorts associadas
   const { data: profile } = await sb
     .schema("membros")
     .from("users")
@@ -110,12 +109,28 @@ export async function POST(req: NextRequest) {
     userRow.role === "admin" || userRow.role === "moderator";
 
   if (!isAdminOrMod) {
+    // Pega cohorts da session e checa se user tem matrícula ativa em alguma
+    const { data: linkRows } = await sb
+      .schema("membros")
+      .from("live_session_cohorts")
+      .select("cohort_id")
+      .eq("session_id", sessionId);
+    const cohortIds = (
+      (linkRows ?? []) as Array<{ cohort_id: string }>
+    ).map((r) => r.cohort_id);
+    if (cohortIds.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "Monitoria sem turmas." },
+        { status: 403 },
+      );
+    }
+
     const { data: enrollment } = await sb
       .schema("membros")
       .from("enrollments")
       .select("id, expires_at")
       .eq("user_id", user.id)
-      .eq("cohort_id", session.cohort_id)
+      .in("cohort_id", cohortIds)
       .eq("is_active", true)
       .maybeSingle();
     const enr = enrollment as

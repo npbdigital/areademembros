@@ -10,6 +10,16 @@ export type ActionResult<T = unknown> = {
   data?: T;
 };
 
+type Recurrence = "none" | "daily" | "weekly" | "biweekly" | "monthly";
+
+const VALID_RECURRENCES: Recurrence[] = [
+  "none",
+  "daily",
+  "weekly",
+  "biweekly",
+  "monthly",
+];
+
 async function assertAdmin(): Promise<string> {
   const supabase = createClient();
   const {
@@ -37,7 +47,57 @@ function nullableStr(formData: FormData, key: string): string | null {
   return v === "" ? null : v;
 }
 
-/** Cria uma monitoria. Status inicial = scheduled (não notifica). */
+/**
+ * Parser de horário do form (input datetime-local). Sem timezone explícito,
+ * assume BRT (-03:00) — alinhado com o resto da plataforma e display.
+ */
+function parseFormDateTime(raw: string | null): string | null {
+  if (!raw) return null;
+  const withTz = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(raw) ? raw : raw + "-03:00";
+  const d = new Date(withTz);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
+ * Calcula próxima ocorrência somando o intervalo de recorrência. Mantém
+ * hora/minuto. Mensal usa setMonth (cuida de meses curtos automaticamente).
+ */
+function nextOccurrence(iso: string, recurrence: Recurrence): string | null {
+  if (recurrence === "none") return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  switch (recurrence) {
+    case "daily":
+      d.setDate(d.getDate() + 1);
+      break;
+    case "weekly":
+      d.setDate(d.getDate() + 7);
+      break;
+    case "biweekly":
+      d.setDate(d.getDate() + 14);
+      break;
+    case "monthly":
+      d.setMonth(d.getMonth() + 1);
+      break;
+  }
+  return d.toISOString();
+}
+
+function parseCohortIds(formData: FormData): string[] {
+  return formData
+    .getAll("cohort_ids")
+    .map((v) => String(v).trim())
+    .filter((v) => v.length > 0);
+}
+
+function parseRecurrence(formData: FormData): Recurrence {
+  const v = strField(formData, "recurrence");
+  return VALID_RECURRENCES.includes(v as Recurrence)
+    ? (v as Recurrence)
+    : "none";
+}
+
+/** Cria uma monitoria + linhas na junção pra cada cohort selecionada. */
 export async function createLiveSessionAction(
   _prev: ActionResult | null,
   formData: FormData,
@@ -46,57 +106,70 @@ export async function createLiveSessionAction(
     const adminId = await assertAdmin();
     const sb = createAdminClient();
 
-    const cohortId = strField(formData, "cohort_id");
+    const cohortIds = parseCohortIds(formData);
     const title = strField(formData, "title");
     const description = nullableStr(formData, "description");
-    const scheduledAtRaw = nullableStr(formData, "scheduled_at");
+    const scheduledAt = parseFormDateTime(nullableStr(formData, "scheduled_at"));
     const zoomMeetingId = strField(formData, "zoom_meeting_id");
     const zoomPassword = nullableStr(formData, "zoom_password");
+    const recurrence = parseRecurrence(formData);
 
-    if (!cohortId) return { ok: false, error: "Turma é obrigatória." };
+    if (cohortIds.length === 0)
+      return { ok: false, error: "Selecione pelo menos uma turma." };
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (!zoomMeetingId)
       return { ok: false, error: "Meeting ID do Zoom é obrigatório." };
-
-    // scheduled_at chega como datetime-local string ("2026-05-03T19:00")
-    // Sem timezone — assume BRT (-03:00) pra alinhar com display
-    let scheduledAt: string | null = null;
-    if (scheduledAtRaw) {
-      const withTz =
-        /[Zz]$|[+-]\d{2}:?\d{2}$/.test(scheduledAtRaw)
-          ? scheduledAtRaw
-          : scheduledAtRaw + "-03:00";
-      const d = new Date(withTz);
-      if (!Number.isNaN(d.getTime())) scheduledAt = d.toISOString();
+    if (recurrence !== "none" && !scheduledAt) {
+      return {
+        ok: false,
+        error:
+          "Pra recorrência funcionar, defina o horário previsto (vai ser usado pra gerar as próximas).",
+      };
     }
 
     const { data, error } = await sb
       .schema("membros")
       .from("live_sessions")
       .insert({
-        cohort_id: cohortId,
         title,
         description,
         scheduled_at: scheduledAt,
         zoom_meeting_id: zoomMeetingId.replace(/\s/g, ""),
         zoom_password: zoomPassword,
         status: "scheduled",
+        recurrence,
         created_by: adminId,
       })
       .select("id")
       .single();
     if (error || !data)
       return { ok: false, error: error?.message ?? "Falha ao criar." };
+    const sessionId = (data as { id: string }).id;
+
+    // Insere as cohorts associadas
+    const { error: linkErr } = await sb
+      .schema("membros")
+      .from("live_session_cohorts")
+      .insert(cohortIds.map((cid) => ({ session_id: sessionId, cohort_id: cid })));
+    if (linkErr) {
+      // rollback manual — exclui a session que ficou sem cohort
+      await sb
+        .schema("membros")
+        .from("live_sessions")
+        .delete()
+        .eq("id", sessionId);
+      return { ok: false, error: linkErr.message };
+    }
 
     revalidatePath("/admin/live-sessions");
     revalidatePath("/monitorias", "layout");
-    return { ok: true, data: { id: (data as { id: string }).id } };
+    return { ok: true, data: { id: sessionId } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }
 }
 
-/** Atualiza dados (não muda status). */
+/** Atualiza dados (substitui cohorts, não muda status). */
 export async function updateLiveSessionAction(
   id: string,
   _prev: ActionResult | null,
@@ -106,42 +179,46 @@ export async function updateLiveSessionAction(
     await assertAdmin();
     const sb = createAdminClient();
 
-    const cohortId = strField(formData, "cohort_id");
+    const cohortIds = parseCohortIds(formData);
     const title = strField(formData, "title");
     const description = nullableStr(formData, "description");
-    const scheduledAtRaw = nullableStr(formData, "scheduled_at");
+    const scheduledAt = parseFormDateTime(nullableStr(formData, "scheduled_at"));
     const zoomMeetingId = strField(formData, "zoom_meeting_id");
     const zoomPassword = nullableStr(formData, "zoom_password");
+    const recurrence = parseRecurrence(formData);
 
-    if (!cohortId) return { ok: false, error: "Turma é obrigatória." };
+    if (cohortIds.length === 0)
+      return { ok: false, error: "Selecione pelo menos uma turma." };
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (!zoomMeetingId)
       return { ok: false, error: "Meeting ID do Zoom é obrigatório." };
-
-    let scheduledAt: string | null = null;
-    if (scheduledAtRaw) {
-      const withTz =
-        /[Zz]$|[+-]\d{2}:?\d{2}$/.test(scheduledAtRaw)
-          ? scheduledAtRaw
-          : scheduledAtRaw + "-03:00";
-      const d = new Date(withTz);
-      if (!Number.isNaN(d.getTime())) scheduledAt = d.toISOString();
-    }
 
     const { error } = await sb
       .schema("membros")
       .from("live_sessions")
       .update({
-        cohort_id: cohortId,
         title,
         description,
         scheduled_at: scheduledAt,
         zoom_meeting_id: zoomMeetingId.replace(/\s/g, ""),
         zoom_password: zoomPassword,
+        recurrence,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
+
+    // Substitui as cohorts (delete tudo + reinsere)
+    await sb
+      .schema("membros")
+      .from("live_session_cohorts")
+      .delete()
+      .eq("session_id", id);
+    const { error: linkErr } = await sb
+      .schema("membros")
+      .from("live_session_cohorts")
+      .insert(cohortIds.map((cid) => ({ session_id: id, cohort_id: cid })));
+    if (linkErr) return { ok: false, error: linkErr.message };
 
     revalidatePath("/admin/live-sessions");
     revalidatePath("/monitorias", "layout");
@@ -152,8 +229,8 @@ export async function updateLiveSessionAction(
 }
 
 /**
- * Inicia a monitoria → status='live' + notifica push pra todos os alunos
- * com matrícula ativa na cohort.
+ * Inicia → status='live' + notifica push pra TODOS alunos das cohorts
+ * associadas (com matrícula ativa).
  */
 export async function startLiveSessionAction(
   id: string,
@@ -165,21 +242,28 @@ export async function startLiveSessionAction(
     const { data: sessionRow } = await sb
       .schema("membros")
       .from("live_sessions")
-      .select("id, cohort_id, title, status")
+      .select("id, title, status")
       .eq("id", id)
       .maybeSingle();
     const session = sessionRow as
-      | { id: string; cohort_id: string; title: string; status: string }
+      | { id: string; title: string; status: string }
       | null;
     if (!session) return { ok: false, error: "Monitoria não encontrada." };
     if (session.status === "ended" || session.status === "cancelled") {
-      return {
-        ok: false,
-        error: "Monitoria já encerrada — crie uma nova.",
-      };
+      return { ok: false, error: "Monitoria já encerrada — crie uma nova." };
     }
-    if (session.status === "live") {
-      return { ok: true }; // idempotente
+    if (session.status === "live") return { ok: true }; // idempotente
+
+    // Pega cohorts associadas
+    const { data: linkRows } = await sb
+      .schema("membros")
+      .from("live_session_cohorts")
+      .select("cohort_id")
+      .eq("session_id", id);
+    const cohortIds = ((linkRows ?? []) as Array<{ cohort_id: string }>)
+      .map((r) => r.cohort_id);
+    if (cohortIds.length === 0) {
+      return { ok: false, error: "Monitoria sem turmas associadas." };
     }
 
     const nowIso = new Date().toISOString();
@@ -194,24 +278,23 @@ export async function startLiveSessionAction(
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
 
-    // Notifica alunos com matrícula ativa na cohort
+    // Notifica alunos de TODAS as cohorts (deduplica por user)
     const { data: enrollments } = await sb
       .schema("membros")
       .from("enrollments")
       .select("user_id, expires_at")
-      .eq("cohort_id", session.cohort_id)
+      .in("cohort_id", cohortIds)
       .eq("is_active", true);
-    const userIds = (
-      (enrollments ?? []) as Array<{
-        user_id: string;
-        expires_at: string | null;
-      }>
-    )
-      .filter(
-        (e) =>
-          e.expires_at === null || new Date(e.expires_at) > new Date(),
-      )
-      .map((e) => e.user_id);
+    const userIdsSet = new Set<string>();
+    for (const e of (enrollments ?? []) as Array<{
+      user_id: string;
+      expires_at: string | null;
+    }>) {
+      if (e.expires_at === null || new Date(e.expires_at) > new Date()) {
+        userIdsSet.add(e.user_id);
+      }
+    }
+    const userIds = Array.from(userIdsSet);
 
     if (userIds.length > 0) {
       await tryNotifyMany(userIds, {
@@ -231,13 +314,39 @@ export async function startLiveSessionAction(
   }
 }
 
-/** Encerra → status='ended'. Aluno deixa de ver na lista. */
+/**
+ * Encerra → status='ended'. Se tinha recurrence != none, gera próxima
+ * ocorrência (mesmas cohorts, mesmo zoom, scheduled_at += intervalo).
+ */
 export async function endLiveSessionAction(
   id: string,
-): Promise<ActionResult> {
+): Promise<ActionResult<{ nextSessionId: string | null }>> {
   try {
-    await assertAdmin();
+    const adminId = await assertAdmin();
     const sb = createAdminClient();
+
+    const { data: sessionRow } = await sb
+      .schema("membros")
+      .from("live_sessions")
+      .select(
+        "id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, recurrence",
+      )
+      .eq("id", id)
+      .maybeSingle();
+    const session = sessionRow as
+      | {
+          id: string;
+          title: string;
+          description: string | null;
+          scheduled_at: string | null;
+          zoom_meeting_id: string;
+          zoom_password: string | null;
+          status: string;
+          recurrence: Recurrence;
+        }
+      | null;
+    if (!session) return { ok: false, error: "Monitoria não encontrada." };
+
     const nowIso = new Date().toISOString();
     const { error } = await sb
       .schema("membros")
@@ -250,9 +359,59 @@ export async function endLiveSessionAction(
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
 
+    // Gera próxima ocorrência se for recorrente E tem horário previsto
+    let nextSessionId: string | null = null;
+    if (session.recurrence !== "none" && session.scheduled_at) {
+      const nextScheduled = nextOccurrence(
+        session.scheduled_at,
+        session.recurrence,
+      );
+      if (nextScheduled) {
+        // Pega cohorts da session original
+        const { data: linkRows } = await sb
+          .schema("membros")
+          .from("live_session_cohorts")
+          .select("cohort_id")
+          .eq("session_id", id);
+        const cohortIds = (
+          (linkRows ?? []) as Array<{ cohort_id: string }>
+        ).map((r) => r.cohort_id);
+
+        if (cohortIds.length > 0) {
+          const { data: nextRow, error: insErr } = await sb
+            .schema("membros")
+            .from("live_sessions")
+            .insert({
+              title: session.title,
+              description: session.description,
+              scheduled_at: nextScheduled,
+              zoom_meeting_id: session.zoom_meeting_id,
+              zoom_password: session.zoom_password,
+              status: "scheduled",
+              recurrence: session.recurrence,
+              created_by: adminId,
+            })
+            .select("id")
+            .single();
+          if (!insErr && nextRow) {
+            nextSessionId = (nextRow as { id: string }).id;
+            await sb
+              .schema("membros")
+              .from("live_session_cohorts")
+              .insert(
+                cohortIds.map((cid) => ({
+                  session_id: nextSessionId,
+                  cohort_id: cid,
+                })),
+              );
+          }
+        }
+      }
+    }
+
     revalidatePath("/admin/live-sessions");
     revalidatePath("/monitorias", "layout");
-    return { ok: true };
+    return { ok: true, data: { nextSessionId } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }

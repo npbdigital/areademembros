@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 24: Monitorias ao vivo (Zoom Web SDK embed)
-**Último commit no main:** `1fcd850` — docs(handoff): registra Etapa 24
+**Última atualização:** 2026-05-03 — Etapa 24.1: Monitorias com múltiplas turmas + recorrência
+**Último commit no main:** atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,43 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 24.1 — Monitorias com múltiplas turmas + recorrência (2026-05-03)
+
+Pequeno follow-up à Etapa 24 com 2 features pedidas pelo Felipe.
+
+**1. Múltiplas turmas por monitoria (M:N)**
+- Migration: criada `membros.live_session_cohorts(session_id, cohort_id)` PK
+  composta. `live_sessions.cohort_id` (singular) foi DROPPED.
+- RLS atualizado pra usar JOIN com a junção (aluno vê monitoria se tem
+  matrícula ativa em **alguma** das turmas associadas).
+- Form admin: substituiu `<select>` única por **checkboxes múltiplas** das
+  turmas dentro de container scrollable.
+- Listagem admin: cada monitoria mostra **um badge dourado por turma**
+  associada.
+- `startLiveSessionAction`: notifica push pra TODOS alunos de TODAS as
+  cohorts associadas (deduplica por user).
+- `signature endpoint`: valida acesso checando `IN (cohort_ids)` em vez
+  de `eq cohort_id`.
+
+**2. Recorrência (diária / semanal / quinzenal / mensal)**
+- Migration: `live_sessions.recurrence text DEFAULT 'none' CHECK IN
+  ('none','daily','weekly','biweekly','monthly')`
+- Form admin ganha `<select>` "Repetir": Não / Diariamente / Semanalmente /
+  Quinzenalmente / Mensalmente
+- Listagem mostra badge azul "Diariamente / etc" quando aplicável
+- `endLiveSessionAction` agora retorna `nextSessionId | null` — quando a
+  monitoria encerrada tinha `recurrence != none` E `scheduled_at`
+  preenchido, gera **automaticamente a próxima ocorrência** (mesmas
+  cohorts via insert na junção, mesmo título/descrição/zoom, novo
+  scheduled_at calculado por `nextOccurrence(date, recurrence)`)
+- Helper `nextOccurrence`: daily=+1d, weekly=+7d, biweekly=+14d,
+  monthly=+1mês (Date.setMonth cuida de meses curtos automático)
+
+**Validação:** se admin marcar recorrência sem preencher horário, action
+retorna erro pedindo o horário (necessário pra calcular próxima).
+
+**Migration aplicada:** `live_sessions_multi_cohort_and_recurrence_v2`
 
 ### Etapa 24 — Monitorias ao vivo via Zoom Web SDK (2026-05-03)
 
