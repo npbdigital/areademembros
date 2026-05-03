@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto";
-import { backfillOrphanSales, processSalesRaw } from "@/lib/affiliates/process";
+import {
+  backfillOrphanSales,
+  evaluateKiwifyAchievements,
+  processSalesRaw,
+} from "@/lib/affiliates/process";
 import { normalizeEmail } from "@/lib/affiliates/normalize";
 import { awardXp, bumpMinLevel } from "@/lib/gamification";
 import { evaluateAvatarDecorations } from "@/lib/decorations";
@@ -190,7 +194,10 @@ export async function reprocessAllPendingAction(): Promise<
  *
  * Filtros: só users ativos com role student/ficticio.
  */
-export async function searchStudentsAction(query: string): Promise<
+export async function searchStudentsAction(
+  query: string,
+  options?: { onlyFicticio?: boolean },
+): Promise<
   ActionResult<
     Array<{
       id: string;
@@ -211,11 +218,14 @@ export async function searchStudentsAction(query: string): Promise<
 
     const supabase = createAdminClient();
     const pattern = `%${q.replace(/[%_]/g, "\\$&")}%`;
+    const roles = options?.onlyFicticio
+      ? ["ficticio"]
+      : ["student", "ficticio"];
     const { data, error } = await supabase
       .schema("membros")
       .from("users")
       .select("id, full_name, email, avatar_url, role")
-      .in("role", ["student", "ficticio"])
+      .in("role", roles)
       .or(`full_name.ilike.${pattern},email.ilike.${pattern}`)
       .order("full_name", { ascending: true })
       .limit(12);
@@ -373,13 +383,22 @@ export async function attachOrphanByStudentEmailAction(
 }
 
 /**
- * Adiciona venda manual pra um aluno (útil pra fictícios populando dados de
- * teste, ou pra compensar vendas que não chegaram pelo webhook). Insere em
- * `afiliados.sales` com `source='manual'`, dispara XP, bumpa min_level, e
- * reavalia conquistas. Status sempre 'paid'.
+ * Cria uma "venda fictícia" pra um aluno fictício, com o único objetivo de
+ * popular o perfil dele com XP, conquistas, decorações e nível — pra ele
+ * aparecer como um vendedor estabelecido pros alunos reais e moderadores.
+ *
+ * Importante: NÃO é uma venda real. Persiste em `afiliados.sales` com
+ * `source='manual'` (todas as views de receita filtram por
+ * `source='kiwify'`, então esses registros não entram em dashboard,
+ * exportação CSV, leaderboards de comissão, etc). Único uso do registro é
+ * servir de referenceId pro awardXp e fonte de contagem pra decorações/
+ * conquistas de venda.
+ *
+ * Restrição: aluno destino precisa ter role='ficticio'. Bloqueia uso em
+ * conta real pra evitar vazamento de dados falsos em métricas de produção.
  */
 export async function addManualSaleAction(
-  studentEmail: string,
+  studentUserId: string,
   productName: string,
   commissionReais: number,
 ): Promise<ActionResult<{ saleId: string; xpAwarded: number }>> {
@@ -387,9 +406,8 @@ export async function addManualSaleAction(
     await assertAdmin();
     const sb = createAdminClient();
 
-    const emailLookup = studentEmail.trim().toLowerCase();
-    if (!emailLookup || !emailLookup.includes("@")) {
-      return { ok: false, error: "E-mail do aluno inválido." };
+    if (!studentUserId) {
+      return { ok: false, error: "Selecione o aluno fictício." };
     }
     if (!productName.trim()) {
       return { ok: false, error: "Informe o nome do produto." };
@@ -401,13 +419,19 @@ export async function addManualSaleAction(
     const { data: user } = await sb
       .schema("membros")
       .from("users")
-      .select("id, email, full_name")
-      .ilike("email", emailLookup)
+      .select("id, email, full_name, role")
+      .eq("id", studentUserId)
       .maybeSingle();
     const u = user as
-      | { id: string; email: string; full_name: string | null }
+      | { id: string; email: string; full_name: string | null; role: string }
       | null;
-    if (!u) return { ok: false, error: `Aluno ${emailLookup} não encontrado.` };
+    if (!u) return { ok: false, error: "Aluno não encontrado." };
+    if (u.role !== "ficticio") {
+      return {
+        ok: false,
+        error: "Venda manual só pode ser atribuída a alunos fictícios.",
+      };
+    }
 
     const commissionCents = Math.round(commissionReais * 100);
     const xpAmount = Math.floor(commissionCents / 100) + 10;
@@ -442,7 +466,7 @@ export async function addManualSaleAction(
     }
     const sale = saleRow as { id: string };
 
-    // Concede XP
+    // Concede XP + bump nível + avalia decoração + avalia conquistas de venda
     try {
       await awardXp(sb, {
         userId: u.id,
@@ -455,16 +479,14 @@ export async function addManualSaleAction(
         .from("sales")
         .update({ xp_awarded: xpAmount })
         .eq("id", sale.id);
-      // 1ª venda = Nível II garantido
       await bumpMinLevel(sb, u.id, 2);
-      // Avalia decorações (auto-equipa novo marco se desbloqueou)
       await evaluateAvatarDecorations(sb, u.id);
+      await evaluateKiwifyAchievements(sb, u.id);
     } catch (e) {
       console.error("[addManualSale] erro awardXp:", e);
     }
 
     revalidatePath("/admin/affiliates");
-    revalidatePath("/admin/dashboard");
     return { ok: true, data: { saleId: sale.id, xpAwarded: xpAmount } };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };

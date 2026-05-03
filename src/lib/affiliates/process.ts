@@ -375,7 +375,7 @@ async function processReversal(
   }
 }
 
-async function evaluateKiwifyAchievements(
+export async function evaluateKiwifyAchievements(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<void> {

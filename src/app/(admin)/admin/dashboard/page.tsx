@@ -114,6 +114,7 @@ export default async function AdminDashboardPage({
         .schema("afiliados")
         .from("sales")
         .select("approved_at, commission_value_cents, status, member_user_id")
+        .eq("source", "kiwify")
         .eq("status", "paid")
         .gte("approved_at", since12m.toISOString());
     })(),
