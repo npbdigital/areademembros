@@ -329,35 +329,35 @@ function CommentItem({
   if (hidden) return null;
 
   return (
-    <div className="flex items-start gap-2.5">
+    <div
+      className={`flex items-start gap-2.5 ${
+        isOptimistic ? "opacity-70" : ""
+      }`}
+    >
       <DecoratedAvatar
         src={node.authorAvatarUrl}
         decorationUrl={node.authorDecorationUrl}
         name={node.authorName}
-        size={28}
+        size={32}
       />
       <div className="min-w-0 flex-1">
-        <div
-          className={`rounded-lg bg-npb-bg3 p-3 ${
-            isOptimistic ? "opacity-70" : ""
-          }`}
-        >
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span className="text-sm font-semibold text-npb-text">
-              {node.authorName}
-            </span>
-            <LevelBadge level={node.authorLevel} size={14} />
-            <span className="text-[10px] text-npb-text-muted">
-              {isOptimistic ? "enviando…" : timeAgoPtBr(node.createdAt)}
-            </span>
-          </div>
-          <div
-            className="community-html mt-1 text-sm text-npb-text"
-            dangerouslySetInnerHTML={{ __html: safeHtml }}
-          />
+        {/* Estilo Twitter: avatar à esquerda, título e tempo na MESMA linha
+            do avatar (sem card cinza ao redor). Conteúdo logo abaixo. */}
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0 leading-tight">
+          <span className="text-sm font-semibold text-npb-text">
+            {node.authorName}
+          </span>
+          <LevelBadge level={node.authorLevel} size={14} />
+          <span className="text-[10px] text-npb-text-muted">
+            {isOptimistic ? "enviando…" : timeAgoPtBr(node.createdAt)}
+          </span>
         </div>
+        <div
+          className="community-html mt-0.5 text-sm text-npb-text"
+          dangerouslySetInnerHTML={{ __html: safeHtml }}
+        />
 
-        <div className="mt-1.5 flex items-center gap-3 px-1 text-[11px]">
+        <div className="mt-1.5 flex items-center gap-3 text-[11px]">
           <button
             type="button"
             onClick={handleLike}

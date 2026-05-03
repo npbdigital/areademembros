@@ -23,17 +23,23 @@ export async function GET(request: Request) {
   }
 
   const origin = new URL(request.url).origin;
-  // Prefere a logo customizada do admin; senão usa o SVG default dourado.
-  const iconSrc = logoUrl ?? `${origin}/pwa-icon.svg`;
-  const iconType = logoUrl
-    ? guessImageType(logoUrl)
-    : "image/svg+xml";
+
+  // Estratégia de ícones:
+  //  - Se admin setou logo customizada (PNG/JPEG): usa ela (assumindo que é
+  //    raster). Cobre a maioria dos clients OK.
+  //  - Senão: usa nossos endpoints PNG dinâmicos /icons/pwa-{192,512}.png.
+  //    Chrome Android REJEITA ícone SVG pra PWA install — por isso PNG é
+  //    obrigatório pelo menos como fallback.
+  const customIsRaster =
+    logoUrl !== null && !logoUrl.toLowerCase().split("?")[0].endsWith(".svg");
+  const icon192 = customIsRaster ? logoUrl! : `${origin}/icons/pwa-192.png`;
+  const icon512 = customIsRaster ? logoUrl! : `${origin}/icons/pwa-512.png`;
+  const iconType = customIsRaster ? guessImageType(logoUrl!) : "image/png";
 
   const manifest = {
     name: platformName,
-    short_name: platformName.length > 12
-      ? platformName.slice(0, 12)
-      : platformName,
+    short_name:
+      platformName.length > 12 ? platformName.slice(0, 12) : platformName,
     description: `${platformName} — Área de Membros`,
     start_url: "/dashboard",
     scope: "/",
@@ -45,19 +51,19 @@ export async function GET(request: Request) {
     dir: "ltr",
     icons: [
       {
-        src: iconSrc,
+        src: icon192,
         sizes: "192x192",
         type: iconType,
         purpose: "any",
       },
       {
-        src: iconSrc,
+        src: icon512,
         sizes: "512x512",
         type: iconType,
         purpose: "any",
       },
       {
-        src: iconSrc,
+        src: icon512,
         sizes: "512x512",
         type: iconType,
         purpose: "maskable",

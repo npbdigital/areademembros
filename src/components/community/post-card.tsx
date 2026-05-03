@@ -56,6 +56,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
 
   const embed = videoEmbedUrl(post.videoUrl);
   const preview = stripHtml(post.contentHtml ?? "").slice(0, 240);
+  const firstImageUrl = extractFirstImage(post.contentHtml);
   const detailUrl = `/community/${post.pageSlug}/post/${post.id}`;
 
   function handleLike() {
@@ -182,13 +183,26 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         )}
       </div>
 
-      {preview && (
+      {(preview || firstImageUrl) && (
         <Link
           href={detailUrl}
-          className="mt-3 block text-sm leading-relaxed text-npb-text-muted hover:text-npb-text"
+          className="mt-3 flex items-start gap-3 text-sm leading-relaxed text-npb-text-muted hover:text-npb-text"
         >
-          {preview}
-          {(post.contentHtml?.length ?? 0) > 240 && "…"}
+          {preview && (
+            <span className="min-w-0 flex-1">
+              {preview}
+              {(post.contentHtml?.length ?? 0) > 240 && "…"}
+            </span>
+          )}
+          {firstImageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={firstImageUrl}
+              alt=""
+              aria-hidden
+              className="h-20 w-20 flex-shrink-0 rounded-lg border border-npb-border bg-npb-bg3 object-cover"
+            />
+          )}
         </Link>
       )}
 
@@ -264,4 +278,14 @@ function stripHtml(html: string): string {
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Extrai a 1ª `<img src="...">` do conteúdo HTML do post pra usar como
+ * thumb na descrição curta. Ignora iframes (vídeos vão embaixo).
+ */
+function extractFirstImage(html: string | null | undefined): string | null {
+  if (!html) return null;
+  const m = html.match(/<img[^>]+src=["']([^"']+)["']/i);
+  return m?.[1] ?? null;
 }

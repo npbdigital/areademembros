@@ -135,7 +135,9 @@ export default async function CommunityLayout({
     <div className="-mx-4 -my-4 flex min-h-[calc(100vh-3.5rem)] flex-col md:-mx-8 md:-my-8 md:flex-row">
       {/* Sidebar fixa em desktop */}
       <div className="hidden md:flex">{sidebarEl}</div>
-      {/* Barra mobile com botão hamburger pra abrir sidebar */}
+      {/* Mobile: o título "Comunidade · {página}" + hamburger são portados
+          pra dentro da Topbar (slot #topbar-mobile-slot). Não cria barra
+          empilhada — UI fica mais enxuta. */}
       <CommunityMobileBar pages={pages}>{sidebarEl}</CommunityMobileBar>
       <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
         {children}

@@ -42,6 +42,12 @@ export function Topbar({
   return (
     <header className="sticky top-0 z-30 flex h-14 flex-shrink-0 items-center gap-3 border-b border-[#222] bg-npb-bg2 px-4 md:px-6">
       {mobileNav}
+      {/* Slot dinâmico — sub-layouts (ex: /community) injetam título/menu
+          contextual aqui via Portal client-side. Visível só no mobile. */}
+      <div
+        id="topbar-mobile-slot"
+        className="flex min-w-0 flex-1 items-center md:hidden"
+      />
       <div className="ml-auto flex items-center gap-3.5">
         {xp && <XpPill {...xp} />}
         {showSearch && (

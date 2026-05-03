@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 24.2: combobox turmas + ritmo recorrência + decoração no topbar/profile
-**Último commit no main:** `13a6e70` — feat: combobox turmas + ritmo recorrência + decoração no topbar/profile
+**Última atualização:** 2026-05-03 — Etapa 25: 5 ajustes UX (mobile profile, PWA Android, topbar comunidade, thumb post, comentários estilo Twitter)
+**Último commit no main:** atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,70 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 25 — 5 ajustes UX (2026-05-03)
+
+Bateria de polimentos baseados em uso real.
+
+**1. Profile mobile — Conquistas pro fim**
+- `(student)/profile/page.tsx`: container virou `flex flex-col` em vez de
+  `space-y` puro
+- `<GamificationSection>` envelopado em `<div className="order-last
+  md:order-none">` — no mobile vai pro fim, em desktop mantém a
+  ordem original (logo após o profile)
+- Justificativa: conquistas tomam muito espaço vertical — empurrava
+  decoração/afiliado/push pra rolagem profunda no mobile
+
+**2. PWA install no Chrome Android — fix dos ícones PNG**
+- Causa: Chrome Android **rejeita SVG como ícone PWA** pra qualificar
+  como "instalável" (iOS e Desktop toleram). Manifest tava só com
+  `pwa-icon.svg` no fallback.
+- Fix: 2 endpoints novos `/icons/pwa-192.png` e `/icons/pwa-512.png`
+  via `next/og` ImageResponse (escudo dourado com "A", `runtime: edge`)
+- `manifest.webmanifest/route.ts` agora:
+  - Se admin setou logo customizada **PNG/JPEG/WebP**: usa ela
+  - Se setou SVG OU não setou: usa nossos endpoints PNG dinâmicos
+- Removido entry de SVG do manifest — só PNGs
+
+**3. Comunidade mobile — barra integrada à topbar**
+- Antes: 2 barras empilhadas no mobile (Topbar do student + CommunityMobileBar)
+- Agora: a comunidade injeta o "Comunidade · Feed" + hamburger DENTRO da
+  Topbar via portal client-side. UI fica em **uma única faixa de altura**.
+- Implementação:
+  - `<Topbar>` renderiza `<div id="topbar-mobile-slot" className="md:hidden flex flex-1" />`
+  - Novo helper [`<TopbarMobileSlot>`](src/components/topbar-mobile-slot.tsx)
+    portala children pra esse div via `createPortal`
+  - `CommunityMobileBar` reescrito pra usar o helper — visual fica
+    embebido na Topbar
+  - `StudentMobileNav` continua com lógica antiga (esconde quando em
+    /community pra não duplicar hamburger)
+- SSR: portal só monta após client mount (1 frame de delay aceitável,
+  só visível em rota que precisa do portal)
+
+**4. PostCard — thumb da 1ª imagem do conteúdo**
+- Antes: descrição curta era só preview de texto puro (`stripHtml().slice(240)`)
+- Agora: extrai a 1ª `<img src="">` do `contentHtml` via regex e mostra
+  como thumb 80×80 ao lado do preview de texto (estilo Twitter/Instagram)
+- Helper `extractFirstImage(html)` em [post-card.tsx](src/components/community/post-card.tsx)
+- Layout: `flex items-start gap-3` — texto à esquerda, thumb à direita.
+  Sem thumb: texto ocupa 100%
+
+**5. Comentários — alinhamento estilo Twitter**
+- Antes: avatar (28px) à esquerda + bloco com **fundo cinza** que continha
+  título + tempo + conteúdo. Avatar parecia "desencaixado" do título.
+- Agora: avatar (32px) na MESMA linha do título, **sem card cinza**:
+  - Linha 1: avatar + nome + level badge + tempo
+  - Linha 2: conteúdo do comentário (texto direto, sem container colorido)
+  - Linha 3: like + responder
+- Igual layout do Twitter/X — bem mais "limpo", densidade de leitura
+  melhor
+
+**Migrations aplicadas:** nenhuma nesta etapa.
+
+**Arquivos novos:**
+- `src/app/icons/pwa-192.png/route.tsx` (ImageResponse PWA icon)
+- `src/app/icons/pwa-512.png/route.tsx` (ImageResponse PWA icon)
+- `src/components/topbar-mobile-slot.tsx` (portal client pra slot da topbar)
 
 ### Etapa 24.2 — Combobox de turmas + ritmo recorrência + decoração no topbar/profile (2026-05-03)
 

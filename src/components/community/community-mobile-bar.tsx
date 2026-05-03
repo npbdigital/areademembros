@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { Smile } from "lucide-react";
 import { MobileNavToggle } from "@/components/mobile-nav-toggle";
+import { TopbarMobileSlot } from "@/components/topbar-mobile-slot";
 import type { CommunityPageRow } from "@/lib/community";
 
 interface Props {
@@ -11,45 +12,42 @@ interface Props {
 }
 
 /**
- * Barra superior mobile-only da comunidade. Mostra "Comunidade · {página}" —
- * descobre a página pelo `usePathname` (`/community/[slug]`). O hamburger
- * abre a sidebar inteira (espaços + páginas + links + admin inline).
- *
- * Sumiço em md+ porque a sidebar fica fixa lá.
+ * Mobile-only — injeta o "Comunidade · {página}" + botão hamburger pra
+ * abrir a sidebar inteira DENTRO da Topbar (via portal pro slot
+ * `#topbar-mobile-slot`). Resultado: 1 barra única no mobile em vez de 2
+ * empilhadas.
  */
 export function CommunityMobileBar({ children, pages }: Props) {
   const pathname = usePathname() ?? "";
   let pageLabel = "";
 
-  if (pathname === "/community" || pathname === "/community/") {
-    pageLabel = "";
-  } else if (pathname.startsWith("/community/feed")) {
+  if (pathname.startsWith("/community/feed")) {
     pageLabel = "Feed";
-  } else {
-    // /community/{slug} ou /community/{slug}/post/{id}
+  } else if (pathname !== "/community" && pathname !== "/community/") {
     const m = pathname.match(/^\/community\/([^/]+)/);
     if (m) {
-      const slug = m[1];
-      const page = pages.find((p) => p.slug === slug);
+      const page = pages.find((p) => p.slug === m[1]);
       pageLabel = page?.title ?? "";
     }
   }
 
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-npb-border bg-npb-bg2 px-3 py-1.5 md:hidden">
-      <MobileNavToggle ariaLabel="Abrir comunidade">{children}</MobileNavToggle>
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-semibold text-npb-text">
-        <Smile className="h-4 w-4 flex-shrink-0 text-npb-gold" />
-        <span className="truncate">
-          Comunidade
-          {pageLabel && (
-            <>
-              <span className="px-1.5 text-npb-text-muted">·</span>
-              <span className="text-npb-gold">{pageLabel}</span>
-            </>
-          )}
-        </span>
+    <TopbarMobileSlot>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <MobileNavToggle ariaLabel="Abrir comunidade">{children}</MobileNavToggle>
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-semibold text-npb-text">
+          <Smile className="h-4 w-4 flex-shrink-0 text-npb-gold" />
+          <span className="truncate">
+            Comunidade
+            {pageLabel && (
+              <>
+                <span className="px-1.5 text-npb-text-muted">·</span>
+                <span className="text-npb-gold">{pageLabel}</span>
+              </>
+            )}
+          </span>
+        </div>
       </div>
-    </div>
+    </TopbarMobileSlot>
   );
 }

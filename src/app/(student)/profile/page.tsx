@@ -285,7 +285,7 @@ export default async function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8">
+    <div className="mx-auto flex max-w-4xl flex-col gap-8">
       <header>
         <div className="mb-2 inline-flex items-center gap-2 text-xs uppercase tracking-wide text-npb-gold">
           <UserIcon className="h-3.5 w-3.5" />
@@ -315,7 +315,13 @@ export default async function ProfilePage() {
         </div>
       </section>
 
-      {gamification && <GamificationSection {...gamification} />}
+      {/* No mobile, conquistas vão pro fim (order-last). Em md+, mantém a
+          posição original logo após o profile. */}
+      {gamification && (
+        <div className="order-last md:order-none">
+          <GamificationSection {...gamification} />
+        </div>
+      )}
 
       {!isAdminUser && (
         <DecorationSection
