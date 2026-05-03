@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import NextTopLoader from "nextjs-toploader";
 import { createClient } from "@/lib/supabase/server";
 import { getPlatformSettings } from "@/lib/settings";
 import "./globals.css";
@@ -52,7 +53,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        {/*
+          Top loader bar — feedback visual durante navegações entre páginas.
+          Linha branca fina no topo da tela; sem spinner pra não poluir.
+        */}
+        <NextTopLoader
+          color="#ffffff"
+          height={2}
+          showSpinner={false}
+          shadow="0 0 8px rgba(255,255,255,0.6)"
+          easing="ease"
+          speed={300}
+        />
+        {children}
+      </body>
     </html>
   );
 }
