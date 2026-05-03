@@ -12,7 +12,7 @@ export default async function AdminAchievementsPage() {
     .schema("membros")
     .from("achievements")
     .select(
-      "id, code, name, description, icon, category, required_value, xp_reward, celebrate, shareable, sort_order, is_active",
+      "id, code, name, description, icon, category, required_value, xp_reward, celebrate, shareable, celebration_image_url, sort_order, is_active",
     )
     .order("sort_order", { ascending: true });
 
@@ -27,6 +27,7 @@ export default async function AdminAchievementsPage() {
     xp_reward: number;
     celebrate: boolean;
     shareable: boolean;
+    celebration_image_url: string | null;
     sort_order: number;
     is_active: boolean;
   }>;
@@ -81,12 +82,14 @@ export default async function AdminAchievementsPage() {
                 key={a.id}
                 achievement={{
                   id: a.id,
+                  code: a.code,
                   name: a.name,
                   description: a.description,
                   icon: a.icon,
                   xpReward: a.xp_reward,
                   celebrate: a.celebrate,
                   shareable: a.shareable,
+                  imageUrl: a.celebration_image_url,
                 }}
               />
             ))}

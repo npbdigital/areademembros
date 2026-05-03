@@ -61,7 +61,9 @@ export async function shareAchievementAction(params: {
     const { data: ach } = await admin
       .schema("membros")
       .from("achievements")
-      .select("id, code, name, description, icon, shareable")
+      .select(
+        "id, code, name, description, icon, shareable, celebration_image_url",
+      )
       .eq("id", params.achievementId)
       .maybeSingle();
     const a = ach as
@@ -72,6 +74,7 @@ export async function shareAchievementAction(params: {
           description: string | null;
           icon: string;
           shareable: boolean;
+          celebration_image_url: string | null;
         }
       | null;
     if (!a) return { ok: false, error: "Conquista não encontrada." };
@@ -102,8 +105,13 @@ export async function shareAchievementAction(params: {
       userMessage.replace(/\n/g, "<br>"),
     );
 
+    // Badge: imagem custom ou emoji em gradient
+    const badgeHtml = a.celebration_image_url
+      ? `<img src="${a.celebration_image_url}" alt="${escapeHtml(a.name)}" style="display:block;margin:0 auto 12px;width:200px;height:200px;border-radius:16px;object-fit:cover;" />`
+      : `<div style="font-size:64px;line-height:1;margin-bottom:8px;">${a.icon}</div>`;
+
     const bodyHtml = `<div style="text-align:center;padding:24px 16px;background:linear-gradient(135deg,rgba(201,146,42,0.15),rgba(122,86,24,0.15));border-radius:12px;border:1px solid rgba(201,146,42,0.4);margin-bottom:16px;">
-  <div style="font-size:64px;line-height:1;margin-bottom:8px;">${a.icon}</div>
+  ${badgeHtml}
   <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9922a;">Conquista desbloqueada</p>
   <h2 style="margin:8px 0 4px;font-size:24px;font-weight:800;color:#f0f0f0;">${escapeHtml(a.name)}</h2>
   ${a.description ? `<p style="margin:0;font-size:14px;color:#b8b8b8;">${escapeHtml(a.description)}</p>` : ""}

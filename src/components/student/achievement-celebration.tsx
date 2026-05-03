@@ -9,27 +9,28 @@ import { useRouter } from "next/navigation";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { shareAchievementAction } from "@/app/(student)/achievements/actions";
 
-interface CelebratableAchievement {
+export interface CelebratableAchievement {
   id: string;
   code: string;
   name: string;
   description: string | null;
   icon: string;
   shareable: boolean;
+  /** URL da imagem custom (substitui o badge emoji quando setada). */
+  imageUrl?: string | null;
 }
 
-interface Props {
+interface ListenerProps {
   userId: string;
 }
 
 /**
  * Listener Realtime que escuta INSERTs em user_achievements pra esse user
- * e dispara um popup celebrativo (com confetti + opção de compartilhar)
- * quando a conquista tem `celebrate=true`.
+ * e dispara o popup celebrativo quando a conquista tem `celebrate=true`.
  *
  * Roda no student layout — sempre disponível enquanto aluno tá no app.
  */
-export function AchievementCelebrationListener({ userId }: Props) {
+export function AchievementCelebrationListener({ userId }: ListenerProps) {
   const [queue, setQueue] = useState<CelebratableAchievement[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
 
@@ -53,19 +54,27 @@ export function AchievementCelebrationListener({ userId }: Props) {
           if (!achievementId || seenRef.current.has(achievementId)) return;
           seenRef.current.add(achievementId);
 
-          // Busca dados completos da conquista — só celebra se celebrate=true
+          // Busca dados completos — só celebra se celebrate=true
           const { data } = await supabase
             .schema("membros")
             .from("achievements")
-            .select("id, code, name, description, icon, shareable, celebrate")
+            .select(
+              "id, code, name, description, icon, shareable, celebrate, celebration_image_url",
+            )
             .eq("id", achievementId)
             .maybeSingle();
           const a = data as
-            | (CelebratableAchievement & { celebrate: boolean })
+            | (CelebratableAchievement & {
+                celebrate: boolean;
+                celebration_image_url: string | null;
+              })
             | null;
           if (!a || !a.celebrate) return;
 
-          setQueue((q) => [...q, a]);
+          setQueue((q) => [
+            ...q,
+            { ...a, imageUrl: a.celebration_image_url ?? null },
+          ]);
         },
       )
       .subscribe();
@@ -92,13 +101,28 @@ export function AchievementCelebrationListener({ userId }: Props) {
   );
 }
 
-function AchievementCelebrationModal({
-  achievement,
-  onClose,
-}: {
+interface ModalProps {
   achievement: CelebratableAchievement;
   onClose: () => void;
-}) {
+  /**
+   * Modo preview (admin): não permite compartilhar e mostra label
+   * "Pré-visualização" no topo.
+   */
+  previewMode?: boolean;
+}
+
+/**
+ * Modal de celebração. Pode ser usado pelo listener (aluno desbloqueando)
+ * OU pelo admin em modo preview pra ver como vai ficar.
+ *
+ * Quando `imageUrl` está setado, substitui o badge emoji por uma imagem
+ * grande (ratio 1:1, max 320px). Senão renderiza o badge gradient gold.
+ */
+export function AchievementCelebrationModal({
+  achievement,
+  onClose,
+  previewMode = false,
+}: ModalProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [shareMode, setShareMode] = useState(false);
@@ -145,7 +169,6 @@ function AchievementCelebrationModal({
       if (Date.now() < end) requestAnimationFrame(frame);
     })();
 
-    // Boom inicial mais forte
     confetti({
       particleCount: 100,
       spread: 80,
@@ -155,7 +178,7 @@ function AchievementCelebrationModal({
   }, [mounted]);
 
   function handleShare() {
-    if (!achievement.shareable) return;
+    if (!achievement.shareable || previewMode) return;
     startTransition(async () => {
       const res = await shareAchievementAction({
         achievementId: achievement.id,
@@ -172,6 +195,33 @@ function AchievementCelebrationModal({
   }
 
   if (!mounted) return null;
+
+  // Decide o que renderizar como "badge" — imagem custom OU emoji em
+  // gradient gold. Imagem fica quadrada com border-radius pra combinar
+  // com o estilo do app.
+  const badge = achievement.imageUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={achievement.imageUrl}
+      alt={achievement.name}
+      className="h-48 w-48 rounded-2xl object-cover shadow-2xl shadow-npb-gold/40 animate-in zoom-in duration-500 sm:h-56 sm:w-56"
+    />
+  ) : (
+    <div className="flex h-32 w-32 items-center justify-center rounded-3xl bg-gradient-to-br from-npb-gold to-npb-gold-dim text-7xl shadow-2xl shadow-npb-gold/40 animate-in zoom-in duration-500">
+      {achievement.icon}
+    </div>
+  );
+
+  const previewBadge = achievement.imageUrl ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={achievement.imageUrl}
+      alt={achievement.name}
+      className="mx-auto h-32 w-32 rounded-xl object-cover"
+    />
+  ) : (
+    <div className="text-5xl leading-none">{achievement.icon}</div>
+  );
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -191,6 +241,12 @@ function AchievementCelebrationModal({
           <X className="h-4 w-4" />
         </button>
 
+        {previewMode && (
+          <div className="border-b border-npb-border bg-npb-bg3 px-4 py-2 text-center text-[10px] font-bold uppercase tracking-widest text-npb-text-muted">
+            Pré-visualização (admin)
+          </div>
+        )}
+
         {!shareMode ? (
           <div className="space-y-4 p-8 text-center">
             <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-npb-gold">
@@ -198,12 +254,7 @@ function AchievementCelebrationModal({
               Conquista desbloqueada
             </div>
 
-            {/* Badge */}
-            <div className="flex justify-center">
-              <div className="flex h-32 w-32 items-center justify-center rounded-3xl bg-gradient-to-br from-npb-gold to-npb-gold-dim text-7xl shadow-2xl shadow-npb-gold/40 animate-in zoom-in duration-500">
-                {achievement.icon}
-              </div>
-            </div>
+            <div className="flex justify-center">{badge}</div>
 
             <div>
               <h2 className="text-2xl font-extrabold text-npb-text md:text-3xl">
@@ -216,12 +267,10 @@ function AchievementCelebrationModal({
               )}
             </div>
 
-            <p className="text-sm font-semibold text-npb-gold">
-              Parabéns! 🎉
-            </p>
+            <p className="text-sm font-semibold text-npb-gold">Parabéns! 🎉</p>
 
             <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-center">
-              {achievement.shareable && (
+              {!previewMode && achievement.shareable && (
                 <button
                   type="button"
                   onClick={() => setShareMode(true)}
@@ -254,7 +303,7 @@ function AchievementCelebrationModal({
 
             {/* Preview do card */}
             <div className="rounded-xl border border-npb-gold/40 bg-gradient-to-br from-npb-gold/10 to-transparent p-5 text-center">
-              <div className="text-5xl leading-none">{achievement.icon}</div>
+              {previewBadge}
               <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-npb-gold">
                 Conquista desbloqueada
               </p>
