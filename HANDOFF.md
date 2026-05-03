@@ -2,9 +2,10 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 26: Broadcast com 3 canais (Push, In-app, Barra fixa)
-**Último commit no main:** `f4911ab` — feat(broadcast): 3º canal Barra fixa
-**Vercel:** https://npb-area-de-membros.vercel.app
+**Última atualização:** 2026-05-03 — Etapa 27: Encurtador de URLs + Player YouTube limpo + Lesson mobile fixes
+**Último commit no main:** `8de4ac0` — feat: encurtador de URLs (manual + auto) + esconder título YouTube
+**Domínio custom (prod):** https://membros.felipesempe.com.br ✅
+**Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
 
@@ -44,6 +45,144 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 27 — Encurtador de URLs + Player YouTube limpo + Lesson mobile fixes (2026-05-03)
+
+**Commits:** `da4dc3d` (lesson mobile), `8de4ac0` (encurtador + player)
+
+Sequência de polimentos centrada na experiência do aluno na página de aula
+e na criação de uma feature reutilizável (encurtador) que vai além da
+descrição da aula.
+
+**1. Player YouTube — esconde título/canal/watermark**
+- YouTube ignora `showinfo=0` desde 2018 e não dá pra esconder título/canal
+  via parâmetro. Solução: 2 overlays CSS por cima do iframe.
+- Top mask `h-14` cobre faixa onde YouTube renderiza título + nome do canal
+  quando pausado/loading. `pointer-events-none` (clique do botão play passa).
+  Toggle via `onStateChange`: states 1 (playing) e 3 (buffering) escondem
+  o overlay com `transition-opacity duration-300`. Outros estados mostram.
+- Bottom-right mask `h-7 w-20` permanente cobre o watermark "▶ YouTube"
+  que `modestbranding=1` não remove. Posicionado pra não invadir botões
+  de configuração/fullscreen.
+
+**2. Encurtador de URLs (`membros.short_links`)**
+- Migration `short_links`:
+  - Tabela: `slug TEXT PK`, `target_url TEXT`, `created_by UUID FK users`,
+    `click_count INT DEFAULT 0`, `created_at TIMESTAMPTZ`
+  - Index hash em `target_url` (idempotência por URL)
+  - RLS: só admin/moderator gerencia. GRANT SELECT/INSERT/UPDATE/DELETE
+    pra `authenticated` (a policy filtra)
+  - RPC `incr_short_link_click(p_slug)` SECURITY DEFINER pro endpoint
+    incrementar contador sem precisar permissão
+- `lib/short-links.ts`:
+  - `getOrCreateShortLink(url, userId)`: idempotente — mesma URL sempre
+    devolve o mesmo slug. Slug 6 chars base62, retry com slug maior se
+    colidir (até 6 tentativas).
+  - `autoShortenHtml(html, userId)`: regex `<a href="...">text</a>`,
+    URLs `>= 40 chars` viram `/l/{slug}`. Preserva texto custom do admin
+    mas reescreve quando texto === href (autolink do Tiptap).
+- Rota `/l/[slug]/route.ts`: lookup + 302 redirect + RPC counter em
+  background (fire-and-forget, não trava o redirect). Slug inválido cai
+  em `/dashboard` em vez de 404.
+- Hook em `updateLessonAction`: chama `autoShortenHtml(rawDescription)`
+  antes de salvar `description_html`. Falha silenciosa (não bloqueia save).
+- Admin page `/admin/links`:
+  - Form de criar manual (validação http/https + max 4000 chars)
+  - Tabela com slug, destino truncado, contador de cliques, ações
+    copiar/abrir/apagar
+  - Empty state explica que "edição de aula encurta sozinho"
+- Sidebar admin ganhou item "Encurtador" (ícone Link2) no grupo Sistema.
+
+**3. Lesson page mobile — fix overflow horizontal**
+- Sintoma: aula com URL gigante no description (ex: `wa.me/...?text=...`)
+  estourava o card e jogava todo conteúdo pra direita no mobile.
+- Fixes:
+  - `LessonTabs`: tab "Anexos" só renderiza quando `attachments.length > 0`
+  - Tabs row vira scroll horizontal no mobile (`overflow-x-auto`,
+    scrollbar oculta) com `flex-shrink-0 whitespace-nowrap` em cada
+    botão pra não quebrar texto
+  - `DescriptionTab`: `[overflow-wrap:anywhere]` + `[&_a]:break-all` no
+    container do prose — URLs longas agora quebram
+  - Page `lessons/[lessonId]`: grid passa de `1fr` pra `minmax(0,1fr)`,
+    item interno ganha `min-w-0`. Card tabs com `p-4 md:p-6` +
+    `overflow-hidden` de segurança
+- O encurtador resolve o root cause (URLs ficam curtas), mas o break-all
+  é safety net pra URLs já existentes ou novas que escapem do auto-shorten.
+
+**Migrations aplicadas:** `short_links` (cria tabela + RLS + RPC).
+
+**Arquivos novos:**
+- `src/lib/short-links.ts`
+- `src/app/l/[slug]/route.ts`
+- `src/app/(admin)/admin/links/page.tsx`
+- `src/app/(admin)/admin/links/actions.ts`
+- `src/components/admin/short-link-create-form.tsx`
+- `src/components/admin/short-links-table.tsx`
+
+### Etapa 26.1 — Polimentos broadcast banner + Favicon custom + PWA install fix (2026-05-03)
+
+**Commit:** `feeb7d4`
+
+Sessão de polimentos pós-Etapa 26 baseada em feedback de uso real.
+
+**1. Banner broadcast — fix do X dispensar**
+- Sintoma: clicar X no banner não removia (continuava aparecendo no refresh)
+- Causa raiz: tabela `membros.user_dismissed_broadcasts` tinha RLS ligado
+  mas **zero policies** + faltava `GRANT UPDATE` (upsert exige UPDATE).
+  Tinha INSERT/SELECT/DELETE só.
+- Fix migration `user_dismissed_broadcasts_rls_fix`:
+  - 4 policies (SELECT/INSERT/UPDATE/DELETE) filtradas por
+    `auth.uid() = user_id`
+  - GRANT UPDATE pra `authenticated`
+
+**2. Banner broadcast — visual mais grosso + CTA button**
+- Card desktop: `py-4` mais grosso, margem lateral `md:px-6`, cantos
+  `md:rounded-2xl` (mesmo padrão do resto do app), gap-2 entre banners
+  empilhados
+- Ícone megafone num círculo dourado de fundo (visual "bubble", não solto)
+- Mobile: continua edge-to-edge slim, `py-3`
+- Coluna nova no admin: **"Texto do botão"** (max 30 chars, disabled
+  quando link vazio). Quando link preenchido + label preenchido → renderiza
+  pill dourado no canto direito com seta `→`. Sem label mas com link →
+  botão usa default "Saiba mais". Mobile esconde botão mas área inteira
+  vira clicável (`<Link>` envolve título+body)
+- Migration `broadcast_link_label`: adiciona coluna `link_label TEXT` em
+  `push_broadcasts`
+
+**3. Favicon customizável (inclusive notificação Chrome)**
+- Sintoma: favicon era SVG estático em `/pwa-icon.svg`, sem opção de
+  customizar. Ícone das push notifications no Chrome/Android usava o
+  mesmo SVG default.
+- Novo setting `platform_favicon_url` (separado do `platform_logo_url` —
+  logo é horizontal, favicon é quadrado 512×512)
+- Endpoints `/icons/pwa-{192,512}.png`:
+  - Marcados `runtime: nodejs` + `dynamic: force-dynamic`
+  - Quando admin setou `platform_favicon_url`: redirect 302 pra essa URL
+  - Senão: gera default gold "A" via `next/og` ImageResponse
+  - Cache 5min browser / 1h edge
+- SW `/sw.js` troca defaults de `/pwa-icon.svg` pra `/icons/pwa-192.png`
+  → ícone das push notifications passa a refletir o favicon custom
+  automaticamente. VERSION bumped pra `v3-favicon`
+- Layout root `metadata.icons` aponta pra `/icons/pwa-192.png`
+- **Removido** `src/app/favicon.ico` estático (Next.js servia automático
+  como `<link rel="icon">` e sobreporia o dinâmico)
+- Form admin `platform-settings-form.tsx` ganhou seção "Favicon / Ícone
+  do app" com `<CoverUpload>` separado do logo
+
+**4. PWA install button no Android Chrome**
+- Sintoma: botão "Instalar aplicativo" sumia após 3s no mobile
+- Causa: timeout `setTimeout(..., 3000)` marcava como `unsupported` se
+  `beforeinstallprompt` não tivesse disparado. Chrome Android exige
+  engagement (~30s + visita prévia) e pode demorar bem mais
+- Fix:
+  - Detecta plataforma (Android vs Desktop)
+  - Após 1.5s sem evento, marca como `android-manual` ou `desktop-manual`
+    (não esconde o botão)
+  - Click abre modal com instruções: "menu Chrome ⋮ → Instalar app"
+  - Funciona como fallback universal — usuário sempre tem um caminho
+    pra instalar, mesmo que o browser não dispare o evento
+
+**Migrations aplicadas:** `user_dismissed_broadcasts_rls_fix`, `broadcast_link_label`
 
 ### Etapa 26 — Broadcast com 3 canais (Push / In-app / Barra fixa) (2026-05-03)
 
@@ -1701,6 +1840,10 @@ Cole essa mensagem inicial:
 | `07b9e78` | **Etapa 18 — Correções UX comunidade** (sidebar aluno com nomes + drawer mobile, sidebar comunidade no mobile, EmojiPicker com busca, fonte do espaço maior, espaçamento parágrafos, imagens inline no editor TipTap, editar/excluir próprio post) |
 | `08b890f` | docs: HANDOFF marca Etapa 18 |
 | `2b0d875` | fix(player): video YT ocupa container inteiro no mobile + borda menos arredondada (rounded-md) |
+| `f4911ab` | **Etapa 26** — Broadcast com 3 canais (Push / In-app / Barra fixa) |
+| `feeb7d4` | **Etapa 26.1** — Polimentos broadcast banner + Favicon custom + PWA install fix |
+| `da4dc3d` | fix(lesson-mobile): tabs scroll horizontal + URL longa não estoura layout |
+| `8de4ac0` | **Etapa 27** — Encurtador de URLs (manual + auto) + Player YouTube limpo |
 
 ---
 
