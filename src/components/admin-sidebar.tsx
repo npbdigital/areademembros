@@ -9,6 +9,7 @@ import {
   GalleryHorizontal,
   LayoutDashboard,
   Layers,
+  Megaphone,
   MessageCircle,
   PlaySquare,
   Settings,
@@ -31,6 +32,11 @@ const groups = [
       { href: "/admin/courses", label: "Cursos", icon: BookOpen },
       { href: "/admin/banners", label: "Banners", icon: GalleryHorizontal },
       { href: "/admin/community", label: "Comunidade", icon: MessageCircle },
+      {
+        href: "/admin/notifications/broadcast",
+        label: "Anúncios",
+        icon: Megaphone,
+      },
     ],
   },
   {
