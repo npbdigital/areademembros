@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-02 — Etapa 22: Push notifications + Broadcast admin
-**Último commit no main:** `9434a01` — feat(push): web push notifications + broadcast admin
+**Última atualização:** 2026-05-03 — Etapa 23: decorações de avatar + badges de nível + admin sem XP + fixes
+**Último commit no main:** atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,142 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 23 — Decorações de avatar + Badges de nível + Admin sem XP (2026-05-03)
+
+Sessão grande focada em **identidade visual** dos alunos na comunidade
+(decorações estilo Discord + badges de nível estilo Twitter ✓), além de
+limpar o admin do sistema de gamification e corrigir bugs descobertos.
+
+**1. Bug fix — RLS notifications (GRANT faltando):**
+- "Marcar todas como lidas" dava `permission denied for table notifications`
+- Causa: na Etapa 19 criei policies UPDATE/DELETE mas role `authenticated`
+  só tinha SELECT no GRANT. Postgres checa GRANT antes de RLS.
+- Fix: migration `grant_notifications_update_delete_to_authenticated`
+
+**2. Bug fix — Kiwify parser timezone (commit `eb91ca0`):**
+- Kiwify envia timestamps SEM timezone (`"2026-05-03 10:11"`) → parser
+  `new Date(s)` interpreta como UTC → vendas apareciam 3h antes do real
+- Fix em `parseKiwifyDate`: append `-03:00` quando string não tem TZ.
+  Detecta TZ explícito (`Z`, `+XX:XX`, `-XX:XX`) pra não duplicar.
+- Migration `fix_kiwify_approved_at_timezone` corrigiu sales antigas
+  (condicional: só atualiza quando `approved_at` salvo bate com a
+  interpretação errada UTC)
+
+**3. Sidebar admin — link "Anúncios" (commit `7dbca28`):**
+- `/admin/notifications/broadcast` (criado na Etapa 22) só era acessível
+  pelo card no `/admin/community`. Agora tem link direto na sidebar
+  admin (grupo Conteúdo, ícone Megaphone)
+
+**4. Admin sem gamification (commit `87cbf26`):**
+- Profile page pula seção `<GamificationSection>` quando `role=admin`
+- Topbar pula cálculo + render de `xpInfo` (badge XP/streak some)
+- `tryAwardXp` checa role e skipa pra admin (defesa em profundidade)
+- Migration `clear_admin_gamification_data` apagou XP/conquistas/user_xp
+  existentes de todos admins
+- Bonus: conquistas no mobile passam de `grid-cols-2` (apertado) pra
+  `grid-cols-1` (uma coluna full-width). sm: 2 cols, lg: 3 cols.
+
+**5. Sistema de decorações de avatar — estilo Discord (commit `7006841`):**
+
+*Schema (2 migrations):*
+- `membros.avatar_decorations` (code, name, image_url, required_sales,
+  sort_order, is_active) com 4 marcos pré-criados: 1 / 10 / 50 / 100
+  vendas pagas atribuídas (regra **secreta** pro aluno — só admin sabe)
+- `users.equipped_decoration_id` (FK opcional, ON DELETE SET NULL)
+- Bucket Storage `avatar-decorations` (público, 5MB max, png/webp/gif)
+- RLS catálogo: SELECT pra authenticated quando `is_active=true`
+
+*Lib (`src/lib/decorations.ts`):*
+- `listActiveDecorations` / `countPaidSales`
+- `evaluateAvatarDecorations(supabase, userId)` — descobre maior decoração
+  que o aluno se qualifica e equipa automaticamente. Idempotente: não
+  substitui se aluno trocou voluntariamente pra menor. Notifica push
+  com categoria `achievement_unlocked`.
+
+*Hook automático em 3 fluxos:*
+- `processApproved` (webhook Kiwify) após cada venda paga atribuída
+- `backfillOrphanSales` quando atribui em massa
+- `addManualSaleAction` quando admin insere venda manual
+
+*UI admin (`/admin/decorations`):*
+- Item "Decorações" na sidebar (grupo Sistema)
+- Lista os 4 slots: preview, nome editável inline, marco visível
+  (requirement_sales), contagem de equipados, upload de PNG/WebP/GIF,
+  toggle ativa/desativada
+- Helpers: `uploadDecorationImageAction`, `updateDecorationNameAction`,
+  `toggleDecorationActiveAction`
+
+*UI aluno (`/profile`):*
+- `<DecorationSection>` entre Gamification e Afiliado
+- Avatar atual com decoração equipada + botão "Mudar"
+- Modal: "Nenhuma" + opções desbloqueadas + bloqueadas (greyscale +
+  🔒, **sem revelar quantas vendas precisa**)
+- `equipDecorationAction` valida server-side antes de equipar
+- Esconde a section inteira pra admin
+
+*Componente `<DecoratedAvatar>`:*
+- Server-friendly (img tags puras, sem hooks)
+- Container relativo: avatar abaixo (z-0), decoração absoluta sobreposta
+  (z-1, ~30% maior pra abraçar a borda do avatar)
+
+*Aplicado em:*
+- PostCard (todos os feeds da comunidade)
+- Header do `/community/[slug]/post/[postId]`
+- CommentItem (todos os comentários e replies, incluindo otimistas)
+- DecorationSection (preview no perfil)
+
+*Backfill aplicado:* migration equipou automaticamente quem já tinha
+vendas pagas atribuídas com a decoração mais alta que se qualifica
+(silenciosamente, sem notificação spam).
+
+**6. Badges de nível ao lado do nome — estilo Twitter ✓ (commit `7b486ff`):**
+
+*Assets:* 5 SVGs hexagonais em `public/imagens/levels/badge-mini-{1..5}.svg`
+- I: cinza/slate (Recruta)
+- II: verde (Estrategista)
+- III: azul (Especialista)
+- IV: roxo (Autoridade)
+- V: dourado (Elite)
+
+*Componente `<LevelBadge level={n} size={16} />`:* server-friendly,
+title `"Nível X — Recruta/etc"` no hover.
+
+*Hidratação centralizada (`src/lib/author-meta.ts`):*
+- `fetchAuthorMeta(adminSb, userIds[])` retorna
+  `Map<userId, { decorationUrl, level }>`
+- `fetchSingleAuthorMeta` pra um único user
+- Centralizou toda a lógica que estava duplicada nas 3 community pages
+- Admin: força `level=null` (não mostra badge porque não tem XP)
+
+*Renderização:*
+- PostCard, post detail header, CommentItem (16px no post, 14px no comment)
+- Comentários otimistas herdam `currentUserLevel` do user logado
+
+**Migrations aplicadas:**
+- `grant_notifications_update_delete_to_authenticated`
+- `fix_kiwify_approved_at_timezone`
+- `clear_admin_gamification_data`
+- `avatar_decorations_schema`
+- `avatar_decorations_storage_bucket`
+- `backfill_equipped_decoration_for_existing_sellers`
+
+**Arquivos novos:**
+- `src/lib/decorations.ts`
+- `src/lib/author-meta.ts`
+- `src/components/decorated-avatar.tsx`
+- `src/components/level-badge.tsx`
+- `src/components/student/decoration-section.tsx`
+- `src/components/admin/decoration-row-editor.tsx`
+- `src/app/(admin)/admin/decorations/page.tsx` + `actions.ts`
+- `src/app/(student)/decorations/actions.ts`
+- `public/imagens/levels/badge-mini-{1..5}.svg`
+
+**Pra Felipe agora:**
+- Subir os 4 PNGs em `/admin/decorations` (recomendo 512×512, transparente,
+  centro vazio, decoração nas bordas — mesmo estilo do Discord)
+- Pode renomear os slots ("Iniciante" / "Consistente" / "Profissional"
+  / "Elite" são placeholders)
 
 ### Etapa 22 — Push Notifications + Broadcast admin (sessão Maio 2026)
 
