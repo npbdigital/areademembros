@@ -15,8 +15,10 @@ export async function generateMetadata(): Promise<Metadata> {
     // segue com defaults
   }
 
-  // Apple touch icon: prefere logo customizado, senão SVG default.
-  const appleIcon = logoUrl ?? "/pwa-icon.svg";
+  // Apple touch icon e favicon: usam o endpoint dinâmico /icons/pwa-192.png
+  // que redireciona pro favicon customizado quando admin setou. logoUrl não
+  // é referenciado aqui — logo é horizontal pra topbar/sidebar.
+  void logoUrl;
 
   return {
     title: `${platformName} — Área de Membros`,
@@ -28,8 +30,11 @@ export async function generateMetadata(): Promise<Metadata> {
       statusBarStyle: "black-translucent",
     },
     icons: {
-      icon: "/pwa-icon.svg",
-      apple: appleIcon,
+      icon: [
+        { url: "/icons/pwa-192.png", sizes: "192x192", type: "image/png" },
+        { url: "/icons/pwa-512.png", sizes: "512x512", type: "image/png" },
+      ],
+      apple: "/icons/pwa-192.png",
     },
   };
 }

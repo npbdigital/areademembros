@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const SETTINGS_KEYS = {
   PLATFORM_NAME: "platform_name",
   PLATFORM_LOGO_URL: "platform_logo_url",
+  PLATFORM_FAVICON_URL: "platform_favicon_url",
   EMAIL_FROM_ADDRESS: "email_from_address",
   EMAIL_FROM_NAME: "email_from_name",
   PRIMARY_COLOR: "primary_color",
@@ -46,6 +47,7 @@ export type SettingKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
 export interface PlatformSettings {
   platformName: string;
   platformLogoUrl: string | null;
+  platformFaviconUrl: string | null;
   emailFromAddress: string | null;
   emailFromName: string | null;
   primaryColor: string | null;
@@ -80,6 +82,7 @@ export interface PlatformSettings {
 export const SETTINGS_DEFAULTS: PlatformSettings = {
   platformName: "Academia NPB",
   platformLogoUrl: null,
+  platformFaviconUrl: null,
   emailFromAddress: null,
   emailFromName: null,
   primaryColor: null,
@@ -129,6 +132,8 @@ export async function getPlatformSettings(
       map.get(SETTINGS_KEYS.PLATFORM_NAME)?.trim() ||
       SETTINGS_DEFAULTS.platformName,
     platformLogoUrl: map.get(SETTINGS_KEYS.PLATFORM_LOGO_URL)?.trim() || null,
+    platformFaviconUrl:
+      map.get(SETTINGS_KEYS.PLATFORM_FAVICON_URL)?.trim() || null,
     emailFromAddress:
       map.get(SETTINGS_KEYS.EMAIL_FROM_ADDRESS)?.trim() || null,
     emailFromName: map.get(SETTINGS_KEYS.EMAIL_FROM_NAME)?.trim() || null,

@@ -1,9 +1,30 @@
 import { ImageResponse } from "next/og";
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
 
-/** Ícone PWA 512x512 PNG (mesma identidade do 192). */
-export const runtime = "edge";
+/** Ícone PWA 512x512 — mesma identidade do 192. Redirect pro favicon
+ *  customizado quando setado, senão gera default gold "A". */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
+  let faviconUrl: string | null = null;
+  try {
+    const supabase = createClient();
+    const settings = await getPlatformSettings(supabase);
+    faviconUrl = settings.platformFaviconUrl;
+  } catch {
+    // segue com default
+  }
+
+  if (faviconUrl) {
+    return NextResponse.redirect(faviconUrl, {
+      status: 302,
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=3600" },
+    });
+  }
+
   return new ImageResponse(
     (
       <div
@@ -24,6 +45,10 @@ export async function GET() {
         A
       </div>
     ),
-    { width: 512, height: 512 },
+    {
+      width: 512,
+      height: 512,
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=3600" },
+    },
   );
 }

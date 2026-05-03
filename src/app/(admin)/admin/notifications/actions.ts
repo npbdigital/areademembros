@@ -39,6 +39,8 @@ export async function sendBroadcastAction(
     const title = String(formData.get("title") ?? "").trim();
     const body = String(formData.get("body") ?? "").trim() || null;
     const link = String(formData.get("link") ?? "").trim() || null;
+    const linkLabelRaw = String(formData.get("link_label") ?? "").trim();
+    const linkLabel = link && linkLabelRaw ? linkLabelRaw.slice(0, 30) : null;
 
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (title.length > 80) {
@@ -89,6 +91,7 @@ export async function sendBroadcastAction(
       title,
       body,
       link,
+      linkLabel,
       audience,
       deliverPush,
       deliverInapp,

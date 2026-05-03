@@ -1,16 +1,38 @@
 import { ImageResponse } from "next/og";
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { getPlatformSettings } from "@/lib/settings";
 
 /**
- * Ícone PWA 192x192 PNG gerado dinamicamente. Necessário porque Chrome
- * Android rejeita ícones SVG no manifest pra qualificar como PWA
- * instalável (iOS/Desktop toleram SVG, Android exige PNG).
+ * Ícone PWA 192x192. Quando admin setou `platform_favicon_url`, faz redirect
+ * pra essa URL (browser/SW seguem o redirect transparentemente). Caso
+ * contrário, gera default gold "A" via ImageResponse.
  *
- * Renderiza um escudo arredondado dourado com a letra "A" (Academia) no
- * meio — fallback quando admin não setou logo customizada.
+ * Necessário porque Chrome Android rejeita SVG no manifest pra qualificar
+ * como PWA instalável (iOS/Desktop toleram, Android exige raster).
+ *
+ * Cache curto pra refletir troca rápida do favicon pelo admin.
  */
-export const runtime = "edge";
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
+  let faviconUrl: string | null = null;
+  try {
+    const supabase = createClient();
+    const settings = await getPlatformSettings(supabase);
+    faviconUrl = settings.platformFaviconUrl;
+  } catch {
+    // segue com default
+  }
+
+  if (faviconUrl) {
+    return NextResponse.redirect(faviconUrl, {
+      status: 302,
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=3600" },
+    });
+  }
+
   return new ImageResponse(
     (
       <div
@@ -31,6 +53,10 @@ export async function GET() {
         A
       </div>
     ),
-    { width: 192, height: 192 },
+    {
+      width: 192,
+      height: 192,
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=3600" },
+    },
   );
 }

@@ -22,6 +22,7 @@ export function BroadcastForm({ cohorts }: Props) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [link, setLink] = useState("");
+  const [linkLabel, setLinkLabel] = useState("");
   const [picks, setPicks] = useState<Map<string, CohortPick>>(new Map());
   const [roles, setRoles] = useState<Set<string>>(
     new Set(["student", "ficticio"]),
@@ -86,6 +87,7 @@ export function BroadcastForm({ cohorts }: Props) {
       fd.set("title", title.trim());
       fd.set("body", body.trim());
       fd.set("link", link.trim());
+      fd.set("link_label", linkLabel.trim());
       includes.forEach((cid) => fd.append("include_cohort_ids", cid));
       excludes.forEach((cid) => fd.append("exclude_cohort_ids", cid));
       roles.forEach((r) => fd.append("roles", r));
@@ -104,6 +106,7 @@ export function BroadcastForm({ cohorts }: Props) {
         setTitle("");
         setBody("");
         setLink("");
+        setLinkLabel("");
         setPicks(new Map());
         setBannerExpiresAt("");
         setConfirmOpen(false);
@@ -150,18 +153,34 @@ export function BroadcastForm({ cohorts }: Props) {
           />
         </div>
 
-        {/* Link */}
-        <div>
-          <label className="mb-1 block text-xs font-semibold text-npb-text-muted">
-            Link ao clicar (opcional)
-          </label>
-          <input
-            type="text"
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="/lessons/abc-123 ou https://exemplo.com"
-            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-          />
+        {/* Link + label do botão */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_180px]">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-npb-text-muted">
+              Link ao clicar (opcional)
+            </label>
+            <input
+              type="text"
+              value={link}
+              onChange={(e) => setLink(e.target.value)}
+              placeholder="/lessons/abc-123 ou https://exemplo.com"
+              className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-npb-text-muted">
+              Texto do botão{" "}
+              <span className="text-[10px]">({linkLabel.length}/30)</span>
+            </label>
+            <input
+              type="text"
+              value={linkLabel}
+              onChange={(e) => setLinkLabel(e.target.value.slice(0, 30))}
+              placeholder="Saiba mais"
+              disabled={!link}
+              className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim disabled:opacity-40"
+            />
+          </div>
         </div>
 
         {/* Roles */}

@@ -11,7 +11,7 @@
  * popular CACHE_ASSETS e implementar stale-while-revalidate.
  */
 
-const VERSION = "v2-push";
+const VERSION = "v3-favicon";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -33,8 +33,8 @@ self.addEventListener("push", (event) => {
     title: "Nova notificação",
     body: "",
     link: "/notifications",
-    icon: "/pwa-icon.svg",
-    badge: "/pwa-icon.svg",
+    icon: "/icons/pwa-192.png",
+    badge: "/icons/pwa-192.png",
     tag: undefined,
   };
 
@@ -51,8 +51,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title;
   const options = {
     body: payload.body,
-    icon: payload.icon || "/pwa-icon.svg",
-    badge: payload.badge || "/pwa-icon.svg",
+    icon: payload.icon || "/icons/pwa-192.png",
+    badge: payload.badge || "/icons/pwa-192.png",
     // Tag: notificações com mesma tag se substituem (evita spam)
     tag: payload.tag,
     // Renotify true faz vibrar mesmo se substituiu uma anterior

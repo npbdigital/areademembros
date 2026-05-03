@@ -268,6 +268,8 @@ export interface SendBroadcastParams {
   title: string;
   body: string | null;
   link: string | null;
+  /** Texto do botão CTA quando há link (default "Saiba mais"). */
+  linkLabel?: string | null;
   audience: BroadcastAudience;
   /** Canais de entrega — pelo menos 1 deve ser true. */
   deliverPush?: boolean;
@@ -303,6 +305,7 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
       title: params.title,
       body: params.body,
       link: params.link,
+      link_label: params.linkLabel ?? null,
       audience: params.audience,
       recipients_count: userIds.length,
       deliver_push: deliverPush,
@@ -384,6 +387,7 @@ export interface ActiveBanner {
   title: string;
   body: string | null;
   link: string | null;
+  linkLabel: string | null;
   bannerExpiresAt: string | null;
 }
 
@@ -412,7 +416,7 @@ export async function getActiveBannersForUser(
     .schema("membros")
     .from("push_broadcasts")
     .select(
-      "id, title, body, link, audience, banner_expires_at, created_at",
+      "id, title, body, link, link_label, audience, banner_expires_at, created_at",
     )
     .eq("deliver_banner", true)
     .or(`banner_expires_at.is.null,banner_expires_at.gt.${nowIso}`)
@@ -424,6 +428,7 @@ export async function getActiveBannersForUser(
     title: string;
     body: string | null;
     link: string | null;
+    link_label: string | null;
     audience: BroadcastAudience;
     banner_expires_at: string | null;
   }>;
@@ -453,6 +458,7 @@ export async function getActiveBannersForUser(
       title: bc.title,
       body: bc.body,
       link: bc.link,
+      linkLabel: bc.link_label,
       bannerExpiresAt: bc.banner_expires_at,
     });
   }

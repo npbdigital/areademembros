@@ -16,6 +16,7 @@ import {
 export interface PlatformSettingsFormValues {
   platformName: string;
   platformLogoUrl: string | null;
+  platformFaviconUrl: string | null;
   emailFromAddress: string | null;
   emailFromName: string | null;
   primaryColor: string | null;
@@ -137,8 +138,22 @@ export function PlatformSettingsForm({
             label="Logo da plataforma"
           />
           <p className="text-xs text-npb-text-muted">
-            Formato horizontal, ~400×120 px. Aplicado automaticamente quando
-            preenchido (em breve).
+            Formato horizontal, ~400×120 px. Usada na sidebar/topbar.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-npb-text">Favicon / Ícone do app</Label>
+          <CoverUpload
+            name="platform_favicon_url"
+            defaultValue={init.platformFaviconUrl}
+            recommendedWidth={512}
+            recommendedHeight={512}
+            label="Ícone quadrado"
+          />
+          <p className="text-xs text-npb-text-muted">
+            Formato quadrado, ~512×512 px (PNG). Aparece como favicon da aba,
+            ícone do PWA instalado e ícone das notificações Chrome/Android.
           </p>
         </div>
 

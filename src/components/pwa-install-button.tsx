@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, Download, Share, X } from "lucide-react";
+import { CheckCircle2, Download, MoreVertical, Share, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -16,7 +16,14 @@ declare global {
   }
 }
 
-type InstallState = "loading" | "installed" | "promptable" | "ios" | "unsupported";
+type InstallState =
+  | "loading"
+  | "installed"
+  | "promptable"
+  | "ios"
+  | "android-manual"
+  | "desktop-manual"
+  | "unsupported";
 
 /**
  * Botão de instalar PWA. Comportamento:
@@ -32,6 +39,8 @@ export function PwaInstallButton({ className }: { className?: string }) {
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [iosModalOpen, setIosModalOpen] = useState(false);
+  const [androidModalOpen, setAndroidModalOpen] = useState(false);
+  const [desktopModalOpen, setDesktopModalOpen] = useState(false);
 
   // Registra SW (idempotente — browser ignora se já registrado)
   useEffect(() => {
@@ -70,7 +79,8 @@ export function PwaInstallButton({ className }: { className?: string }) {
       return;
     }
 
-    // Chrome/Edge/Android — escuta o evento. Pode demorar alguns segundos.
+    // Chrome/Edge/Android — escuta o evento. Pode demorar (Chrome exige
+    // critérios de engagement antes de disparar — ~30s + visita prévia).
     const onBeforeInstall = (e: BeforeInstallPromptEvent) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -84,22 +94,38 @@ export function PwaInstallButton({ className }: { className?: string }) {
     window.addEventListener("beforeinstallprompt", onBeforeInstall);
     window.addEventListener("appinstalled", onInstalled);
 
-    // Fallback: se em 3s o browser não disparou, marca como "unsupported"
-    // (ex: Firefox desktop, ou app já em estado não-instalável)
-    const timer = window.setTimeout(() => {
-      setState((s) => (s === "loading" ? "unsupported" : s));
-    }, 3000);
+    // Fallback: detecta plataforma pra mostrar instruções manuais quando o
+    // browser não dispara o evento. Antes a gente escondia após 3s — Chrome
+    // pode demorar muito mais e o user perdia o acesso ao botão.
+    const isAndroid = /Android/i.test(ua);
+    const isMobile = /Mobi|Android/i.test(ua);
+    const fallbackTimer = window.setTimeout(() => {
+      setState((s) => {
+        if (s !== "loading") return s;
+        if (isAndroid) return "android-manual";
+        if (isMobile) return "unsupported"; // outros mobiles sem suporte
+        return "desktop-manual";
+      });
+    }, 1500);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       window.removeEventListener("appinstalled", onInstalled);
-      window.clearTimeout(timer);
+      window.clearTimeout(fallbackTimer);
     };
   }, []);
 
   async function handleClick() {
     if (state === "ios") {
       setIosModalOpen(true);
+      return;
+    }
+    if (state === "android-manual") {
+      setAndroidModalOpen(true);
+      return;
+    }
+    if (state === "desktop-manual") {
+      setDesktopModalOpen(true);
       return;
     }
     if (state === "promptable" && deferredPrompt) {
@@ -145,6 +171,12 @@ export function PwaInstallButton({ className }: { className?: string }) {
       </button>
 
       {iosModalOpen && <IosInstructionsModal onClose={() => setIosModalOpen(false)} />}
+      {androidModalOpen && (
+        <AndroidInstructionsModal onClose={() => setAndroidModalOpen(false)} />
+      )}
+      {desktopModalOpen && (
+        <DesktopInstructionsModal onClose={() => setDesktopModalOpen(false)} />
+      )}
     </>
   );
 }
@@ -228,5 +260,127 @@ function IosInstructionsModal({ onClose }: { onClose: () => void }) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+function ManualInstallModal({
+  title,
+  steps,
+  footer,
+  onClose,
+}: {
+  title: string;
+  steps: React.ReactNode[];
+  footer: string;
+  onClose: () => void;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+      <button
+        type="button"
+        aria-label="Fechar"
+        onClick={onClose}
+        className="absolute inset-0 bg-black/70"
+      />
+      <div className="relative z-10 w-full max-w-sm overflow-hidden rounded-2xl border border-npb-border bg-npb-bg2 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-npb-border px-5 py-3">
+          <h2 className="text-base font-bold text-npb-text">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-md p-1 text-npb-text-muted hover:bg-npb-bg3"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <ol className="space-y-4 p-5 text-sm text-npb-text">
+          {steps.map((step, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-npb-gold/20 text-xs font-bold text-npb-gold">
+                {i + 1}
+              </span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+        <div className="border-t border-npb-border bg-npb-bg3 px-5 py-3 text-[11px] text-npb-text-muted">
+          {footer}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function AndroidInstructionsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ManualInstallModal
+      onClose={onClose}
+      title="Instalar no Android"
+      footer="Funciona melhor no Chrome. Se nada aparecer, navegue um pouco pela plataforma e tente de novo — Chrome libera a opção após você usar o site."
+      steps={[
+        <span key="1">
+          Toque no botão{" "}
+          <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-1.5 py-0.5 text-npb-text">
+            <MoreVertical className="h-3 w-3" /> menu
+          </span>{" "}
+          (3 pontinhos no canto superior direito do Chrome).
+        </span>,
+        <span key="2">
+          Selecione{" "}
+          <strong className="text-npb-gold">Instalar app</strong> ou{" "}
+          <strong className="text-npb-gold">Adicionar à tela inicial</strong>.
+        </span>,
+        <span key="3">
+          Confirme em <strong className="text-npb-gold">Instalar</strong>. O
+          atalho aparece na sua tela como um app.
+        </span>,
+      ]}
+    />
+  );
+}
+
+function DesktopInstructionsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <ManualInstallModal
+      onClose={onClose}
+      title="Instalar no computador"
+      footer="Disponível em Chrome, Edge e Brave. Firefox não tem instalação de PWA."
+      steps={[
+        <span key="1">
+          Procure o ícone <strong className="text-npb-gold">⊕</strong> ou{" "}
+          <strong className="text-npb-gold">monitor com seta</strong> no canto
+          direito da barra de endereço.
+        </span>,
+        <span key="2">
+          Se não aparecer, abra o menu{" "}
+          <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-1.5 py-0.5 text-npb-text">
+            <MoreVertical className="h-3 w-3" /> ⋮
+          </span>{" "}
+          e procure{" "}
+          <strong className="text-npb-gold">Instalar Academia NPB…</strong>
+        </span>,
+        <span key="3">
+          Clique em <strong className="text-npb-gold">Instalar</strong> e o
+          app abre numa janela própria, separada do navegador.
+        </span>,
+      ]}
+    />
   );
 }
