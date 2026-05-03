@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-03 — Etapa 28.5: Frame unlock + busca alunos + email Kiwify único
-**Último commit no main:** `aac8589` — docs(handoff): atualiza ultimo commit pra 5da1721 (próximo: Etapa 28.5)
+**Último commit no main:** `e89febf` — feat(etapa28.5): frame unlock + busca alunos + email kiwify unico
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
