@@ -277,6 +277,10 @@ export interface SendBroadcastParams {
   deliverBanner?: boolean;
   /** Quando setado, banner some pra todos depois desta data. */
   bannerExpiresAt?: string | null;
+  /** Popup full-screen no próximo acesso (1× por aluno via broadcast_popup_seen). */
+  deliverPopup?: boolean;
+  /** URL da imagem que aparece no topo do popup (opcional). */
+  popupImageUrl?: string | null;
 }
 
 export async function sendBroadcast(params: SendBroadcastParams): Promise<{
@@ -291,8 +295,9 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
   const deliverPush = params.deliverPush !== false;
   const deliverInapp = params.deliverInapp !== false;
   const deliverBanner = params.deliverBanner === true;
+  const deliverPopup = params.deliverPopup === true;
 
-  if (!deliverPush && !deliverInapp && !deliverBanner) {
+  if (!deliverPush && !deliverInapp && !deliverBanner && !deliverPopup) {
     throw new Error("Selecione pelo menos um canal de entrega.");
   }
 
@@ -312,6 +317,8 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
       deliver_inapp: deliverInapp,
       deliver_banner: deliverBanner,
       banner_expires_at: params.bannerExpiresAt ?? null,
+      deliver_popup: deliverPopup,
+      image_url: params.popupImageUrl ?? null,
     })
     .select("id")
     .single();
@@ -463,4 +470,77 @@ export async function getActiveBannersForUser(
     });
   }
   return out;
+}
+
+export interface PendingPopup {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  linkLabel: string | null;
+  imageUrl: string | null;
+}
+
+/**
+ * Retorna o próximo broadcast popup que o user ainda não viu, ou null.
+ * Pega o mais antigo primeiro (fila FIFO) — assim popups antigos não
+ * ficam pulando ordem.
+ *
+ * Filtros:
+ *   - deliver_popup = true
+ *   - user é elegível pela audiência
+ *   - user_id+broadcast_id NÃO está em broadcast_popup_seen
+ *
+ * Usado pelo `<BroadcastPopupGate>` no student layout.
+ */
+export async function getNextPopupForUser(
+  userId: string,
+): Promise<PendingPopup | null> {
+  const admin = createAdminClient();
+
+  const { data: rows } = await admin
+    .schema("membros")
+    .from("push_broadcasts")
+    .select(
+      "id, title, body, link, link_label, image_url, audience, created_at",
+    )
+    .eq("deliver_popup", true)
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  const candidates = (rows ?? []) as Array<{
+    id: string;
+    title: string;
+    body: string | null;
+    link: string | null;
+    link_label: string | null;
+    image_url: string | null;
+    audience: BroadcastAudience;
+  }>;
+
+  if (candidates.length === 0) return null;
+
+  const { data: seen } = await admin
+    .schema("membros")
+    .from("broadcast_popup_seen")
+    .select("broadcast_id")
+    .eq("user_id", userId);
+  const seenSet = new Set(
+    ((seen ?? []) as Array<{ broadcast_id: string }>).map((s) => s.broadcast_id),
+  );
+
+  for (const bc of candidates) {
+    if (seenSet.has(bc.id)) continue;
+    const eligibleIds = await resolveBroadcastAudience(bc.audience);
+    if (!eligibleIds.includes(userId)) continue;
+    return {
+      id: bc.id,
+      title: bc.title,
+      body: bc.body,
+      link: bc.link,
+      linkLabel: bc.link_label,
+      imageUrl: bc.image_url,
+    };
+  }
+  return null;
 }

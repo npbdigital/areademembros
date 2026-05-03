@@ -43,3 +43,31 @@ export async function dismissBroadcastBannerAction(
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }
 }
+
+/**
+ * Marca um popup como visto pelo user — não aparece mais. Idempotente.
+ */
+export async function markBroadcastPopupSeenAction(
+  broadcastId: string,
+): Promise<ActionResult> {
+  try {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { ok: false, error: "Não autenticado." };
+    if (!broadcastId) return { ok: false, error: "ID inválido." };
+
+    const { error } = await supabase
+      .schema("membros")
+      .from("broadcast_popup_seen")
+      .upsert(
+        { user_id: user.id, broadcast_id: broadcastId },
+        { onConflict: "user_id,broadcast_id", ignoreDuplicates: true },
+      );
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}

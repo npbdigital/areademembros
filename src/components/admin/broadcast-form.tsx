@@ -30,7 +30,9 @@ export function BroadcastForm({ cohorts }: Props) {
   const [deliverPush, setDeliverPush] = useState(true);
   const [deliverInapp, setDeliverInapp] = useState(true);
   const [deliverBanner, setDeliverBanner] = useState(false);
+  const [deliverPopup, setDeliverPopup] = useState(false);
   const [bannerExpiresAt, setBannerExpiresAt] = useState("");
+  const [popupImageUrl, setPopupImageUrl] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -75,7 +77,7 @@ export function BroadcastForm({ cohorts }: Props) {
       return toast.error("Link inválido.");
     }
     if (roles.size === 0) return toast.error("Selecione ao menos um perfil.");
-    if (!deliverPush && !deliverInapp && !deliverBanner) {
+    if (!deliverPush && !deliverInapp && !deliverBanner && !deliverPopup) {
       return toast.error("Selecione pelo menos um canal de entrega.");
     }
     setConfirmOpen(true);
@@ -97,6 +99,10 @@ export function BroadcastForm({ cohorts }: Props) {
         fd.set("deliver_banner", "on");
         if (bannerExpiresAt) fd.set("banner_expires_at", bannerExpiresAt);
       }
+      if (deliverPopup) {
+        fd.set("deliver_popup", "on");
+        if (popupImageUrl.trim()) fd.set("popup_image_url", popupImageUrl.trim());
+      }
 
       const res = await sendBroadcastAction(null, fd);
       if (res.ok) {
@@ -109,6 +115,7 @@ export function BroadcastForm({ cohorts }: Props) {
         setLinkLabel("");
         setPicks(new Map());
         setBannerExpiresAt("");
+        setPopupImageUrl("");
         setConfirmOpen(false);
         router.refresh();
       } else {
@@ -263,7 +270,7 @@ export function BroadcastForm({ cohorts }: Props) {
           <label className="mb-2 block text-xs font-semibold text-npb-text-muted">
             Enviar via (pelo menos 1)
           </label>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <ChannelToggle
               label="Push notification"
               hint="Notificação no celular/desktop (precisa ter aceitado push)"
@@ -282,6 +289,12 @@ export function BroadcastForm({ cohorts }: Props) {
               checked={deliverBanner}
               onChange={setDeliverBanner}
             />
+            <ChannelToggle
+              label="Popup grande"
+              hint="Modal full-screen no próximo acesso (1× só)"
+              checked={deliverPopup}
+              onChange={setDeliverPopup}
+            />
           </div>
           {deliverBanner && (
             <div className="mt-3 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
@@ -295,6 +308,24 @@ export function BroadcastForm({ cohorts }: Props) {
                 onChange={(e) => setBannerExpiresAt(e.target.value)}
                 className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
               />
+            </div>
+          )}
+          {deliverPopup && (
+            <div className="mt-3 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
+              <label className="mb-1 block text-[11px] font-semibold text-npb-text-muted">
+                URL da imagem do popup (opcional) — fica no topo do modal
+              </label>
+              <input
+                type="url"
+                value={popupImageUrl}
+                onChange={(e) => setPopupImageUrl(e.target.value)}
+                placeholder="https://... (ideal 1200×600 ou similar)"
+                className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+              />
+              <p className="mt-1 text-[10px] text-npb-text-muted">
+                Cada aluno vê o popup só uma vez (registrado em
+                broadcast_popup_seen). Se fechar, não aparece de novo.
+              </p>
             </div>
           )}
         </div>

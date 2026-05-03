@@ -68,7 +68,8 @@ export async function sendBroadcastAction(
     const deliverPush = formData.get("deliver_push") === "on";
     const deliverInapp = formData.get("deliver_inapp") === "on";
     const deliverBanner = formData.get("deliver_banner") === "on";
-    if (!deliverPush && !deliverInapp && !deliverBanner) {
+    const deliverPopup = formData.get("deliver_popup") === "on";
+    if (!deliverPush && !deliverInapp && !deliverBanner && !deliverPopup) {
       return {
         ok: false,
         error: "Selecione pelo menos um canal de entrega.",
@@ -86,6 +87,10 @@ export async function sendBroadcastAction(
       if (!Number.isNaN(d.getTime())) bannerExpiresAt = d.toISOString();
     }
 
+    // Popup — image_url opcional (URL completa)
+    const popupImageUrl =
+      String(formData.get("popup_image_url") ?? "").trim() || null;
+
     const result = await sendBroadcast({
       sentBy: userId,
       title,
@@ -97,6 +102,8 @@ export async function sendBroadcastAction(
       deliverInapp,
       deliverBanner,
       bannerExpiresAt,
+      deliverPopup,
+      popupImageUrl,
     });
 
     revalidatePath("/admin/notifications/broadcast");

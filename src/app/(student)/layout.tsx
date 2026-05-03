@@ -11,6 +11,7 @@ import { StudentChromeWrapper } from "@/components/student-chrome-wrapper";
 import { PushPermissionPrompt } from "@/components/push-permission-prompt";
 import { BroadcastBanners } from "@/components/student/broadcast-banners";
 import { AchievementCelebrationListener } from "@/components/student/achievement-celebration";
+import { BroadcastPopupGate } from "@/components/student/broadcast-popup-gate";
 
 export default async function StudentLayout({
   children,
@@ -182,6 +183,7 @@ export default async function StudentLayout({
       {settings.gamificationEnabled && (
         <AchievementCelebrationListener userId={user.id} />
       )}
+      <BroadcastPopupGate userId={user.id} />
       <Toaster
         theme="dark"
         position="top-right"

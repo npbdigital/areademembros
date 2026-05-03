@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StudentEditForm } from "@/components/admin/student-edit-form";
 import { ResendInviteButton } from "@/components/admin/resend-invite-button";
 import { SetPasswordForm } from "@/components/admin/set-password-form";
+import { DeleteStudentButton } from "@/components/admin/delete-student-button";
 import { AddEnrollmentsForm } from "@/components/admin/add-enrollments-form";
 import { updateStudentAction } from "../actions";
 import { formatDateBrt } from "@/lib/format-date";
@@ -243,6 +244,22 @@ export default async function EditStudentPage({
           )}
         </div>
       </section>
+
+      {/* Zona de perigo — fica no fim da página, separada visualmente */}
+      {student.role !== "admin" && student.role !== "moderator" && (
+        <section className="mt-12 rounded-2xl border border-red-500/30 bg-red-500/5 p-5">
+          <h2 className="mb-1 text-sm font-bold text-red-400">Zona de perigo</h2>
+          <p className="mb-3 text-xs text-npb-text-muted">
+            A exclusão é definitiva e remove tudo: matrículas, progresso,
+            posts, conquistas. Use só quando tiver certeza.
+          </p>
+          <DeleteStudentButton
+            studentId={userId}
+            studentName={student.full_name ?? ""}
+            studentEmail={student.email}
+          />
+        </section>
+      )}
     </div>
   );
 }

@@ -186,7 +186,8 @@ export function CoverUpload({
 
           <p className="mt-1.5 text-xs text-npb-text-muted">
             Recomendado: <strong className="text-npb-text">{recommendedWidth}×{recommendedHeight}px</strong>{" "}
-            (proporção 5:7). JPG, PNG ou WebP até 5MB.
+            (proporção {ratioLabel(recommendedWidth, recommendedHeight)}). JPG,
+            PNG ou WebP até 5MB.
           </p>
 
           {error && (
@@ -199,6 +200,17 @@ export function CoverUpload({
       </div>
     </div>
   );
+}
+
+/**
+ * Devolve label da proporção a partir de width × height.
+ * Quadrado: "1:1 (quadrada)". Retangular: ex "5:7", "16:9", "4:3".
+ */
+function ratioLabel(w: number, h: number): string {
+  if (w === h) return "1:1, quadrada";
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const g = gcd(w, h);
+  return `${w / g}:${h / g}`;
 }
 
 function getImageDimensions(

@@ -440,6 +440,60 @@ export async function setStudentActiveAction(
   revalidatePath(`/admin/students/${id}`);
 }
 
+/**
+ * Exclui aluno permanentemente — remove do auth.users (cascade limpa
+ * profile em membros.users + matrículas + progresso + tudo via FKs).
+ *
+ * Bloqueios:
+ *   - Admin não pode deletar a si mesmo
+ *   - Não permite deletar admin/moderator (segurança extra)
+ */
+export async function deleteStudentAction(
+  id: string,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+
+    // Não deletar a si mesmo
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user?.id === id) {
+      return { ok: false, error: "Você não pode excluir sua própria conta." };
+    }
+
+    // Não deletar admin/moderator (proteção)
+    const adminSb = admin();
+    const { data: target } = await adminSb
+      .schema("membros")
+      .from("users")
+      .select("role, full_name, email")
+      .eq("id", id)
+      .single();
+    const t = target as
+      | { role: string; full_name: string | null; email: string }
+      | null;
+    if (!t) return { ok: false, error: "Aluno não encontrado." };
+    if (t.role === "admin" || t.role === "moderator") {
+      return {
+        ok: false,
+        error: "Não é possível excluir admin/moderador por aqui.",
+      };
+    }
+
+    // auth.admin.deleteUser CASCADE limpa membros.users (FK), enrollments,
+    // lesson_progress, etc — tudo que tem ON DELETE CASCADE
+    const { error: delErr } = await adminSb.auth.admin.deleteUser(id);
+    if (delErr) return { ok: false, error: delErr.message };
+
+    revalidatePath("/admin/students");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
 // ============================================================
 // RESEND INVITE
 // ============================================================

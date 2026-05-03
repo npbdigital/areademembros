@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 28.2: Fix one-click hash callback + link encurtado
-**Último commit no main:** `b8e7e04` — fix(one-click): hash callback + URL encurtada via /l/{slug}
+**Última atualização:** 2026-05-03 — Etapa 28.4: Excluir aluno + fix favicon + popup broadcast
+**Último commit no main:** (a vir)
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -45,6 +45,61 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 28.4 — Excluir aluno + fix favicon + popup broadcast (2026-05-03)
+
+**3 melhorias entregues juntas:**
+
+**A. Excluir aluno** (botão definitivo em `/admin/students/[id]`)
+- Action `deleteStudentAction(id)` em `students/actions.ts`:
+  - Bloqueia: admin não pode deletar a si mesmo, não permite deletar admin/moderator
+  - Usa `auth.admin.deleteUser` — CASCADE limpa `membros.users` (FK), enrollments, lesson_progress, achievements, posts, etc
+- Componente `DeleteStudentButton` com confirmação dupla:
+  - Modal com lista do que vai ser apagado
+  - Aluno precisa digitar o e-mail exato pra liberar o botão
+- Renderizado em "Zona de perigo" no fim de `/admin/students/[id]`, só pra `role=student/ficticio`
+
+**B. Fix orientação favicon (5:7 → 1:1)**
+- `cover-upload.tsx` tinha texto hardcoded "proporção 5:7" mesmo quando o uso era quadrado (favicon 512×512)
+- Adicionada função `ratioLabel(w, h)` que calcula proporção dinamicamente via GCD: `1:1, quadrada` quando w=h, senão `${w/g}:${h/g}` (ex: `5:7`, `16:9`, `4:3`)
+
+**C. Popup grande como 4º canal de broadcast** (próximo acesso, 1× por aluno)
+- Migration: `push_broadcasts.deliver_popup BOOLEAN` + `image_url TEXT`. Tabela `broadcast_popup_seen(user_id, broadcast_id, seen_at)` PK composta com RLS própria
+- `BroadcastForm` ganhou 4ª coluna "Popup grande" + campo de URL de imagem opcional (renderiza no topo do modal full-screen)
+- `sendBroadcast` em `lib/push.ts` aceita `deliverPopup` + `popupImageUrl`, persiste em `push_broadcasts`
+- `getNextPopupForUser(userId)` busca o próximo broadcast com `deliver_popup=true` que o user é elegível e ainda não viu (FIFO por created_at)
+- `<BroadcastPopupGate>` (server component no student layout) busca o popup pendente e renderiza `<BroadcastPopup>` (client) quando há
+- Modal full-screen: imagem (max 50vh) + título + body + CTA opcional (link + linkLabel) + botão fechar. Click em fechar/CTA chama `markBroadcastPopupSeenAction` que insere em `broadcast_popup_seen`
+- Aparece **uma vez** no próximo acesso de cada aluno elegível; depois nunca mais
+
+### Etapa 28.3 — Imagem custom por conquista + preview admin (2026-05-03)
+
+**Commit:** `0daac52`
+
+**Schema:** coluna `celebration_image_url TEXT` em `membros.achievements`. Bucket `achievement-images` (público, 5MB max, jpg/png/webp). Policies: admin escreve via `membros.is_admin()`, leitura pública.
+
+**Actions** (`/admin/achievements/actions.ts`):
+- `uploadAchievementImageAction(achievementId, formData)` — upload pra `achievement-images/{id}/{uuid}.{ext}` + atualiza coluna
+- `clearAchievementImageAction(achievementId)` — volta pra null (usa emoji default)
+
+**Refator `AchievementCelebrationModal`:**
+- Tipo `CelebratableAchievement` ganhou `imageUrl?: string | null`
+- Quando setado, renderiza `<img>` 192–224px quadrada com border-radius em vez do badge gradient gold
+- Preview do card de share também usa imagem
+- Nova prop `previewMode`: esconde "Compartilhar" + faixa "Pré-visualização (admin)" no topo
+- Componente exportado pra reuso fora do listener
+
+**Listener** passa `celebration_image_url` ao buscar achievement no Realtime.
+
+**`shareAchievementAction`** (post em `/community/resultados`): HTML usa `<img>` 200×200 quando tem custom; senão mantém o emoji em gradient.
+
+**UI admin** (`/admin/achievements`):
+- Mostra imagem custom (thumb 9×9) em vez do emoji se houver
+- 4 botões inline por conquista: **Celebra** (toggle) · **Compartilha** (toggle) · **Imagem** (abre dialog, fica dourado se já tem) · **Preview** (abre modal completo com confetti em modo preview)
+
+**`AchievementImageDialog` (novo):** layout 2 colunas
+- Esquerda: orientação de tamanho (quadrada 1:1, 800-1200px ideal, JPG/PNG/WebP, 5MB) + botão upload com preview imediato via `URL.createObjectURL` + botão remover
+- Direita: preview ao vivo do template como vai aparecer pro aluno (sem confetti — confetti só no botão "Preview" da row)
 
 ### Etapa 28.2 — Fix one-click hash callback + link encurtado (2026-05-03)
 
