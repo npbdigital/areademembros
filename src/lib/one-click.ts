@@ -14,6 +14,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/server";
+import { getOrCreateShortLink } from "@/lib/short-links";
 
 const TOKEN_TTL_DAYS = 7;
 
@@ -151,4 +152,24 @@ export function buildOneClickUrl(token: string): string {
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
     "http://localhost:3000";
   return `${origin}/api/auth/one-click?token=${token}`;
+}
+
+/**
+ * Versão encurtada via /l/{slug} — passa o link comprido pelo encurtador
+ * interno, fica algo tipo `https://membros.felipesempe.com.br/l/aBc123`.
+ *
+ * Silent-fallback: se algo falhar, retorna a URL original. Quem chama
+ * pode confiar que sempre tem URL válida.
+ */
+export async function buildShortOneClickUrl(token: string): Promise<string> {
+  const longUrl = buildOneClickUrl(token);
+  try {
+    const slug = await getOrCreateShortLink(longUrl, null);
+    const origin =
+      process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+      "http://localhost:3000";
+    return `${origin}/l/${slug}`;
+  } catch {
+    return longUrl;
+  }
 }

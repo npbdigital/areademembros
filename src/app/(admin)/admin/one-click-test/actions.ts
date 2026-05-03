@@ -2,7 +2,7 @@
 
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import {
-  buildOneClickUrl,
+  buildShortOneClickUrl,
   generateMagicToken,
   markUserNeedsOnboarding,
 } from "@/lib/one-click";
@@ -122,7 +122,7 @@ export async function generateTestOneClickAction(params: {
     return {
       ok: true,
       data: {
-        url: buildOneClickUrl(magic.token),
+        url: await buildShortOneClickUrl(magic.token),
         expiresAt: magic.expiresAt,
         userId,
         email,

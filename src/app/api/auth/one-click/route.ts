@@ -68,7 +68,10 @@ export async function GET(request: NextRequest) {
       ? `/onboarding?next=${encodeURIComponent(next)}`
       : next;
 
-    // Gera magic link nativo Supabase
+    // Gera magic link nativo Supabase. Magic link usa fluxo IMPLICIT
+    // (devolve tokens no #hash da URL), por isso redireciona pra
+    // /auth/hash-callback (client-side, lê o hash + setSession) em vez
+    // de /auth/callback (server-side, espera ?code= do PKCE).
     const callbackBase =
       process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? url.origin;
     const { data: linkData, error: linkErr } =
@@ -76,7 +79,7 @@ export async function GET(request: NextRequest) {
         type: "magiclink",
         email,
         options: {
-          redirectTo: `${callbackBase}/auth/callback?next=${encodeURIComponent(finalNext)}`,
+          redirectTo: `${callbackBase}/auth/hash-callback?next=${encodeURIComponent(finalNext)}`,
         },
       });
 

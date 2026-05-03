@@ -5,7 +5,7 @@ import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
 import { expiresAtFromDuration } from "@/lib/enrollment";
 import { getPlatformSettings } from "@/lib/settings";
 import {
-  buildOneClickUrl,
+  buildShortOneClickUrl,
   generateMagicToken,
   markUserNeedsOnboarding,
 } from "@/lib/one-click";
@@ -214,9 +214,11 @@ export async function POST(request: Request) {
 
     // Gera (ou reaproveita) magic token pra one-click login. Sempre retorna,
     // até pra users existentes — Unnichat pode mandar pra alunos que renovaram
-    // matrícula etc.
+    // matrícula etc. Versão encurtada via /l/{slug} pra ficar bonito no WhatsApp.
     const magic = await generateMagicToken(userId.id, "webhook");
-    const oneClickUrl = magic ? buildOneClickUrl(magic.token) : undefined;
+    const oneClickUrl = magic
+      ? await buildShortOneClickUrl(magic.token)
+      : undefined;
 
     await logSuccess(supabase, payload, userId.id, startedAt);
 

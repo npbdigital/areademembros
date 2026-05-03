@@ -48,12 +48,20 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/auth/callback");
 
   // Rotas que sempre permitem acesso, com ou sem sessão.
+  // /auth/hash-callback é pública E não redireciona user logado pra fora
+  // (precisa rodar o JS que troca a sessão antes).
   const isPublicAuthRoute =
-    isAuthRoute || pathname.startsWith("/reset-password");
+    isAuthRoute ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/auth/hash-callback");
 
   const isPublicApi =
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/auth/one-click");
+  // Encurtador: /l/{slug} é público — link vem pelo WhatsApp/Unnichat
+  // antes do user ter sessão. O route handler faz o redirect 302 e o
+  // middleware do destino (ex: /api/auth/one-click) cuida da auth.
+  const isShortLink = pathname.startsWith("/l/");
   const isPwaAsset =
     pathname === "/manifest.webmanifest" ||
     pathname === "/sw.js" ||
@@ -68,6 +76,7 @@ export async function updateSession(request: NextRequest) {
     !user &&
     !isPublicAuthRoute &&
     !isPublicApi &&
+    !isShortLink &&
     !isStaticOrNext &&
     !isPwaAsset
   ) {
