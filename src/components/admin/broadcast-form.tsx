@@ -26,6 +26,10 @@ export function BroadcastForm({ cohorts }: Props) {
   const [roles, setRoles] = useState<Set<string>>(
     new Set(["student", "ficticio"]),
   );
+  const [deliverPush, setDeliverPush] = useState(true);
+  const [deliverInapp, setDeliverInapp] = useState(true);
+  const [deliverBanner, setDeliverBanner] = useState(false);
+  const [bannerExpiresAt, setBannerExpiresAt] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -70,6 +74,9 @@ export function BroadcastForm({ cohorts }: Props) {
       return toast.error("Link inválido.");
     }
     if (roles.size === 0) return toast.error("Selecione ao menos um perfil.");
+    if (!deliverPush && !deliverInapp && !deliverBanner) {
+      return toast.error("Selecione pelo menos um canal de entrega.");
+    }
     setConfirmOpen(true);
   }
 
@@ -82,6 +89,12 @@ export function BroadcastForm({ cohorts }: Props) {
       includes.forEach((cid) => fd.append("include_cohort_ids", cid));
       excludes.forEach((cid) => fd.append("exclude_cohort_ids", cid));
       roles.forEach((r) => fd.append("roles", r));
+      if (deliverPush) fd.set("deliver_push", "on");
+      if (deliverInapp) fd.set("deliver_inapp", "on");
+      if (deliverBanner) {
+        fd.set("deliver_banner", "on");
+        if (bannerExpiresAt) fd.set("banner_expires_at", bannerExpiresAt);
+      }
 
       const res = await sendBroadcastAction(null, fd);
       if (res.ok) {
@@ -92,6 +105,7 @@ export function BroadcastForm({ cohorts }: Props) {
         setBody("");
         setLink("");
         setPicks(new Map());
+        setBannerExpiresAt("");
         setConfirmOpen(false);
         router.refresh();
       } else {
@@ -225,6 +239,47 @@ export function BroadcastForm({ cohorts }: Props) {
           )}
         </div>
 
+        {/* Canais de entrega */}
+        <div>
+          <label className="mb-2 block text-xs font-semibold text-npb-text-muted">
+            Enviar via (pelo menos 1)
+          </label>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <ChannelToggle
+              label="Push notification"
+              hint="Notificação no celular/desktop (precisa ter aceitado push)"
+              checked={deliverPush}
+              onChange={setDeliverPush}
+            />
+            <ChannelToggle
+              label="In-app (sino)"
+              hint="Aparece no sino do topbar"
+              checked={deliverInapp}
+              onChange={setDeliverInapp}
+            />
+            <ChannelToggle
+              label="Barra fixa nas telas"
+              hint="Banner dourado no topo até o aluno dispensar"
+              checked={deliverBanner}
+              onChange={setDeliverBanner}
+            />
+          </div>
+          {deliverBanner && (
+            <div className="mt-3 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
+              <label className="mb-1 block text-[11px] font-semibold text-npb-text-muted">
+                Barra expira em (BRT) — opcional, vazio = só some quando
+                aluno dispensar
+              </label>
+              <input
+                type="datetime-local"
+                value={bannerExpiresAt}
+                onChange={(e) => setBannerExpiresAt(e.target.value)}
+                className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+              />
+            </div>
+          )}
+        </div>
+
         <div className="flex justify-end pt-2">
           <button
             type="submit"
@@ -322,5 +377,45 @@ export function BroadcastForm({ cohorts }: Props) {
         </div>
       )}
     </>
+  );
+}
+
+function ChannelToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className={`flex flex-col items-start gap-1 rounded-md border px-3 py-2 text-left transition ${
+        checked
+          ? "border-npb-gold bg-npb-gold/10 text-npb-gold"
+          : "border-npb-border bg-npb-bg3 text-npb-text-muted hover:text-npb-text"
+      }`}
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold">
+        <span
+          className={`flex h-4 w-4 items-center justify-center rounded border ${
+            checked
+              ? "border-npb-gold bg-npb-gold text-black"
+              : "border-npb-border"
+          }`}
+        >
+          {checked && "✓"}
+        </span>
+        {label}
+      </div>
+      <span className="text-[10px] leading-snug text-npb-text-muted">
+        {hint}
+      </span>
+    </button>
   );
 }

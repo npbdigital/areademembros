@@ -9,6 +9,7 @@ import { WelcomeModal } from "@/components/student/welcome-modal";
 import { StudentMobileNav } from "@/components/student-mobile-nav";
 import { StudentChromeWrapper } from "@/components/student-chrome-wrapper";
 import { PushPermissionPrompt } from "@/components/push-permission-prompt";
+import { BroadcastBanners } from "@/components/student/broadcast-banners";
 
 export default async function StudentLayout({
   children,
@@ -156,6 +157,8 @@ export default async function StudentLayout({
                 </StudentMobileNav>
               }
             />
+            {/* Banners fixos de broadcast (admin pode disparar via /admin/notifications/broadcast). Cada um tem X pra dispensar — somem só pra esse user. */}
+            <BroadcastBanners userId={user.id} />
             <main className="flex-1 overflow-y-auto npb-scrollbar p-4 md:p-8">
               {children}
             </main>

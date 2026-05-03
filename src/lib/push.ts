@@ -263,13 +263,21 @@ export async function resolveBroadcastAudience(
  * Cria também notificação in-app pra cada destinatário (categoria 'broadcast'
  * sempre dispara — user não pode optar fora).
  */
-export async function sendBroadcast(params: {
+export interface SendBroadcastParams {
   sentBy: string;
   title: string;
   body: string | null;
   link: string | null;
   audience: BroadcastAudience;
-}): Promise<{
+  /** Canais de entrega — pelo menos 1 deve ser true. */
+  deliverPush?: boolean;
+  deliverInapp?: boolean;
+  deliverBanner?: boolean;
+  /** Quando setado, banner some pra todos depois desta data. */
+  bannerExpiresAt?: string | null;
+}
+
+export async function sendBroadcast(params: SendBroadcastParams): Promise<{
   broadcastId: string;
   recipientsCount: number;
   delivered: number;
@@ -277,6 +285,14 @@ export async function sendBroadcast(params: {
 }> {
   const admin = createAdminClient();
   const userIds = await resolveBroadcastAudience(params.audience);
+
+  const deliverPush = params.deliverPush !== false;
+  const deliverInapp = params.deliverInapp !== false;
+  const deliverBanner = params.deliverBanner === true;
+
+  if (!deliverPush && !deliverInapp && !deliverBanner) {
+    throw new Error("Selecione pelo menos um canal de entrega.");
+  }
 
   // Cria registro de broadcast
   const { data: bc, error: bcErr } = await admin
@@ -289,6 +305,10 @@ export async function sendBroadcast(params: {
       link: params.link,
       audience: params.audience,
       recipients_count: userIds.length,
+      deliver_push: deliverPush,
+      deliver_inapp: deliverInapp,
+      deliver_banner: deliverBanner,
+      banner_expires_at: params.bannerExpiresAt ?? null,
     })
     .select("id")
     .single();
@@ -302,40 +322,47 @@ export async function sendBroadcast(params: {
     return { broadcastId, recipientsCount: 0, delivered: 0, failed: 0 };
   }
 
-  // Cria notificações in-app pra todos
-  const notifications = userIds.map((uid) => ({
-    user_id: uid,
-    title: params.title,
-    body: params.body,
-    link: params.link,
-  }));
-  await admin.schema("membros").from("notifications").insert(notifications);
+  // In-app: cria notif (sino do topbar)
+  if (deliverInapp) {
+    const notifications = userIds.map((uid) => ({
+      user_id: uid,
+      title: params.title,
+      body: params.body,
+      link: params.link,
+    }));
+    await admin.schema("membros").from("notifications").insert(notifications);
+  }
 
-  // Dispara push em batches pra não estourar mem
-  const BATCH = 50;
+  // Push: dispara em batches pra não estourar mem
   let delivered = 0;
   let failed = 0;
-  for (let i = 0; i < userIds.length; i += BATCH) {
-    const batch = userIds.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map((uid) =>
-        sendPushToUser({
-          userId: uid,
-          category: "broadcast",
-          payload: {
-            title: params.title,
-            body: params.body ?? undefined,
-            link: params.link ?? undefined,
-            tag: `broadcast-${broadcastId}`,
-          },
-        }).catch(() => ({ delivered: 0, failed: 1 })),
-      ),
-    );
-    for (const r of results) {
-      delivered += r.delivered;
-      failed += r.failed;
+  if (deliverPush) {
+    const BATCH = 50;
+    for (let i = 0; i < userIds.length; i += BATCH) {
+      const batch = userIds.slice(i, i + BATCH);
+      const results = await Promise.all(
+        batch.map((uid) =>
+          sendPushToUser({
+            userId: uid,
+            category: "broadcast",
+            payload: {
+              title: params.title,
+              body: params.body ?? undefined,
+              link: params.link ?? undefined,
+              tag: `broadcast-${broadcastId}`,
+            },
+          }).catch(() => ({ delivered: 0, failed: 1 })),
+        ),
+      );
+      for (const r of results) {
+        delivered += r.delivered;
+        failed += r.failed;
+      }
     }
   }
+
+  // Banner: nada a fazer aqui — a row já foi criada com deliver_banner=true.
+  // Cada page-load do aluno consulta active banners e renderiza no layout.
 
   // Atualiza contadores
   await admin
@@ -350,4 +377,84 @@ export async function sendBroadcast(params: {
     delivered,
     failed,
   };
+}
+
+export interface ActiveBanner {
+  id: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  bannerExpiresAt: string | null;
+}
+
+/**
+ * Retorna broadcasts ativos com `deliver_banner=true` que esse user é
+ * elegível E ainda NÃO dispensou. Usado pelo `<BroadcastBanners>` no
+ * student layout pra renderizar a barra fixa no topo.
+ *
+ * Filtros:
+ *   - deliver_banner = true
+ *   - banner_expires_at IS NULL OR banner_expires_at > now()
+ *   - user_id NÃO está em user_dismissed_broadcasts(broadcast_id)
+ *   - user é elegível pela audiência (resolve via resolveBroadcastAudience)
+ *
+ * Performance: pra MVP roda 1 query simples e filtra em memory. Quando
+ * tiver volume, dá pra otimizar com view materializada por user.
+ */
+export async function getActiveBannersForUser(
+  userId: string,
+): Promise<ActiveBanner[]> {
+  const admin = createAdminClient();
+  const nowIso = new Date().toISOString();
+
+  // Banners ativos (não expiraram E não dispensados pelo user)
+  const { data: rows } = await admin
+    .schema("membros")
+    .from("push_broadcasts")
+    .select(
+      "id, title, body, link, audience, banner_expires_at, created_at",
+    )
+    .eq("deliver_banner", true)
+    .or(`banner_expires_at.is.null,banner_expires_at.gt.${nowIso}`)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  const candidates = (rows ?? []) as Array<{
+    id: string;
+    title: string;
+    body: string | null;
+    link: string | null;
+    audience: BroadcastAudience;
+    banner_expires_at: string | null;
+  }>;
+
+  if (candidates.length === 0) return [];
+
+  // IDs dispensados pelo user
+  const { data: dismissed } = await admin
+    .schema("membros")
+    .from("user_dismissed_broadcasts")
+    .select("broadcast_id")
+    .eq("user_id", userId);
+  const dismissedSet = new Set(
+    ((dismissed ?? []) as Array<{ broadcast_id: string }>).map(
+      (d) => d.broadcast_id,
+    ),
+  );
+
+  // Filtra: não dispensados E user na audiência
+  const out: ActiveBanner[] = [];
+  for (const bc of candidates) {
+    if (dismissedSet.has(bc.id)) continue;
+    const eligibleIds = await resolveBroadcastAudience(bc.audience);
+    if (!eligibleIds.includes(userId)) continue;
+    out.push({
+      id: bc.id,
+      title: bc.title,
+      body: bc.body,
+      link: bc.link,
+      bannerExpiresAt: bc.banner_expires_at,
+    });
+  }
+  return out;
 }

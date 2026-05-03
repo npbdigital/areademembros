@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 25: 5 ajustes UX (mobile profile, PWA Android, topbar comunidade, thumb post, comentários estilo Twitter)
-**Último commit no main:** `1204738` — feat: 5 ajustes UX (mobile profile, PWA Android, topbar comunidade, thumb post, comentários Twitter)
+**Última atualização:** 2026-05-03 — Etapa 26: Broadcast com 3 canais (Push, In-app, Barra fixa)
+**Último commit no main:** atualizado neste push
 **Vercel:** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
 **Supabase project:** `hblyregbowxaxzpnerhf` (org "No Plan B", região sa-east-1)
@@ -44,6 +44,72 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 26 — Broadcast com 3 canais (Push / In-app / Barra fixa) (2026-05-03)
+
+Estende o sistema de broadcast da Etapa 22 com **barra fixa no topo das
+telas** como 3º canal de delivery, independente.
+
+**Schema (migration `broadcast_banner_channel`):**
+- `push_broadcasts` ganha `deliver_push`, `deliver_inapp`, `deliver_banner`
+  (booleans), `banner_expires_at` (timestamptz opcional)
+- Nova tabela `user_dismissed_broadcasts(user_id, broadcast_id, dismissed_at)`
+  PK composta — quando aluno dispensa o banner, vira row aqui
+- RLS: aluno só lê/escreve as próprias linhas (auth.uid() = user_id)
+- GRANT SELECT/INSERT/DELETE pra `authenticated`
+
+**Backend (`lib/push.ts`):**
+- `sendBroadcast` aceita `deliverPush/deliverInapp/deliverBanner` +
+  `bannerExpiresAt`. Validação: pelo menos 1 canal obrigatório
+- Push e in-app só disparam se canal correspondente está `true`. Banner é
+  só "criar a row" — page-loads do aluno consultam ativos
+- Novo helper `getActiveBannersForUser(userId)`:
+  - Filtra broadcasts com `deliver_banner=true` E `banner_expires_at IS
+    NULL OR > now()` E user NÃO dispensou
+  - Resolve audiência via `resolveBroadcastAudience(audience)` — aluno
+    só vê banners destinados ao perfil dele
+  - Retorna até 20 mais recentes
+
+**Server action aluno (`(student)/broadcasts/actions.ts`):**
+- `dismissBroadcastBannerAction(broadcastId)`: insere row em
+  `user_dismissed_broadcasts` (idempotente via UPSERT). Revalida layout
+  pra remover o banner em todas as páginas.
+
+**UI aluno:**
+- `<BroadcastBanners userId={user.id}>` (server component) carrega
+  banners ativos via helper e renderiza um por linha no topo do main do
+  `(student)/layout.tsx`
+- Cada banner: ícone megafone + título + body + botão X
+- Se `link` setado, título vira `<Link>` clicável
+- `<DismissBannerButton>` (client) faz optimistic hide + chama action
+- Visual: gradiente dourado horizontal, borda inferior, sticky depois
+  do topbar
+
+**Form admin atualizado (`components/admin/broadcast-form.tsx`):**
+- Nova seção "Enviar via" com 3 toggles `<ChannelToggle>`:
+  - Push notification (default ON)
+  - In-app (sino) (default ON)
+  - Barra fixa nas telas (default OFF)
+- Quando "Barra fixa" marcado, expande input opcional "Barra expira em"
+  (datetime-local BRT). Vazio = só some quando aluno dispensar.
+- Action `sendBroadcastAction` lê os 3 toggles + parsea data como BRT
+  (mesmo padrão dos outros forms)
+- Validação: pelo menos 1 canal selecionado
+
+**Casos de uso:**
+- Lembrete urgente — só barra fixa: aluno vê quando entra na plataforma
+  (não recebe push intrusivo)
+- Live agora — todos os 3: push pro celular, sino, e barra pra quem
+  abrir depois
+- Aviso permanente — barra fixa sem `expires_at`: fica até cada aluno
+  dispensar individualmente
+
+**Migrations aplicadas:** `broadcast_banner_channel`
+
+**Arquivos novos:**
+- `src/app/(student)/broadcasts/actions.ts`
+- `src/components/student/broadcast-banners.tsx`
+- `src/components/student/dismiss-banner-button.tsx`
 
 ### Etapa 25 — 5 ajustes UX (2026-05-03)
 

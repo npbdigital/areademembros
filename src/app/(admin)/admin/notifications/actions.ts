@@ -62,12 +62,38 @@ export async function sendBroadcastAction(
       roles: rolesRaw.filter(Boolean).length > 0 ? rolesRaw.filter(Boolean) : undefined,
     };
 
+    // Canais de entrega — pelo menos 1 obrigatório
+    const deliverPush = formData.get("deliver_push") === "on";
+    const deliverInapp = formData.get("deliver_inapp") === "on";
+    const deliverBanner = formData.get("deliver_banner") === "on";
+    if (!deliverPush && !deliverInapp && !deliverBanner) {
+      return {
+        ok: false,
+        error: "Selecione pelo menos um canal de entrega.",
+      };
+    }
+
+    // Banner — expira em (opcional, datetime-local em BRT)
+    let bannerExpiresAt: string | null = null;
+    const expRaw = String(formData.get("banner_expires_at") ?? "").trim();
+    if (deliverBanner && expRaw) {
+      const withTz = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(expRaw)
+        ? expRaw
+        : expRaw + "-03:00";
+      const d = new Date(withTz);
+      if (!Number.isNaN(d.getTime())) bannerExpiresAt = d.toISOString();
+    }
+
     const result = await sendBroadcast({
       sentBy: userId,
       title,
       body,
       link,
       audience,
+      deliverPush,
+      deliverInapp,
+      deliverBanner,
+      bannerExpiresAt,
     });
 
     revalidatePath("/admin/notifications/broadcast");
