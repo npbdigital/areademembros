@@ -339,9 +339,9 @@ export function AchievementCelebrationModal({
     <div className="text-5xl leading-none">{achievement.icon}</div>
   );
 
-  // Quando há frame, o título muda: "Você desbloqueou um novo frame!"
+  // Header diferente quando é frame vs conquista comum.
   const headerLabel = hasFrame
-    ? "Novo frame desbloqueado"
+    ? "Você conquistou um marco importante!"
     : "Conquista desbloqueada";
 
   return createPortal(
@@ -377,7 +377,7 @@ export function AchievementCelebrationModal({
 
             <div className="flex justify-center">{badge}</div>
 
-            <div>
+            <div className="pt-3">
               <h2 className="text-2xl font-extrabold text-npb-text md:text-3xl">
                 {achievement.name}
               </h2>
@@ -509,18 +509,15 @@ function FrameBadge({
   size: "sm" | "lg";
 }) {
   const dim = size === "lg" ? "h-48 w-48 sm:h-56 sm:w-56" : "h-28 w-28";
-  // Avatar interno tem ~70% do tamanho do frame (resto é o decorative ring)
-  const innerDim =
-    size === "lg" ? "h-36 w-36 sm:h-40 sm:w-40" : "h-20 w-20";
 
   return (
     <div
       className={`relative animate-in zoom-in duration-500 ${dim} mx-auto`}
     >
-      {/* Avatar centralizado */}
-      <div
-        className={`absolute left-1/2 top-1/2 ${innerDim} -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full bg-npb-bg3`}
-      >
+      {/* Avatar centralizado — ocupa 88% do container, ligeiramente
+          maior que a abertura do anel do frame, pra que a borda do
+          avatar fique escondida embaixo do anel dourado (encaixe). */}
+      <div className="absolute left-1/2 top-1/2 h-[88%] w-[88%] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full bg-npb-bg3">
         {avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
