@@ -62,7 +62,7 @@ export async function shareAchievementAction(params: {
       .schema("membros")
       .from("achievements")
       .select(
-        "id, code, name, description, icon, shareable, celebration_image_url",
+        "id, code, name, description, icon, shareable, celebration_image_url, unlocks_decoration_id, avatar_decorations(name, image_url)",
       )
       .eq("id", params.achievementId)
       .maybeSingle();
@@ -75,6 +75,11 @@ export async function shareAchievementAction(params: {
           icon: string;
           shareable: boolean;
           celebration_image_url: string | null;
+          unlocks_decoration_id: string | null;
+          avatar_decorations:
+            | { name: string; image_url: string | null }
+            | { name: string; image_url: string | null }[]
+            | null;
         }
       | null;
     if (!a) return { ok: false, error: "Conquista não encontrada." };
@@ -105,14 +110,50 @@ export async function shareAchievementAction(params: {
       userMessage.replace(/\n/g, "<br>"),
     );
 
-    // Badge: imagem custom ou emoji em gradient
-    const badgeHtml = a.celebration_image_url
-      ? `<img src="${a.celebration_image_url}" alt="${escapeHtml(a.name)}" style="display:block;margin:0 auto 12px;width:200px;height:200px;border-radius:16px;object-fit:cover;" />`
-      : `<div style="font-size:64px;line-height:1;margin-bottom:8px;">${a.icon}</div>`;
+    // Pega avatar do user pra montar a composição com frame
+    const deco = Array.isArray(a.avatar_decorations)
+      ? a.avatar_decorations[0]
+      : a.avatar_decorations;
+    const decoImageUrl = deco?.image_url ?? null;
+    const decoName = deco?.name ?? null;
+
+    let userAvatarUrl: string | null = null;
+    if (decoImageUrl) {
+      const { data: profileRow } = await admin
+        .schema("membros")
+        .from("users")
+        .select("avatar_url")
+        .eq("id", user.id)
+        .maybeSingle();
+      userAvatarUrl =
+        (profileRow as { avatar_url: string | null } | null)?.avatar_url ??
+        null;
+    }
+
+    // Badge: prioridade frame (avatar+decoração) > imagem custom > emoji
+    let badgeHtml: string;
+    let labelHtml: string;
+    if (decoImageUrl) {
+      // Composição avatar (circular) + frame em PNG por cima
+      const avatarSrc =
+        userAvatarUrl ??
+        "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+      badgeHtml = `<div style="position:relative;width:200px;height:200px;margin:0 auto 12px;">
+  <img src="${avatarSrc}" alt="" style="position:absolute;top:14%;left:14%;width:72%;height:72%;border-radius:50%;object-fit:cover;background:#1e1e1e;" />
+  <img src="${decoImageUrl}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;" />
+</div>`;
+      labelHtml = `<p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9922a;">Novo frame desbloqueado${decoName ? ` — ${escapeHtml(decoName)}` : ""}</p>`;
+    } else if (a.celebration_image_url) {
+      badgeHtml = `<img src="${a.celebration_image_url}" alt="${escapeHtml(a.name)}" style="display:block;margin:0 auto 12px;width:200px;height:200px;border-radius:16px;object-fit:cover;" />`;
+      labelHtml = `<p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9922a;">Conquista desbloqueada</p>`;
+    } else {
+      badgeHtml = `<div style="font-size:64px;line-height:1;margin-bottom:8px;">${a.icon}</div>`;
+      labelHtml = `<p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9922a;">Conquista desbloqueada</p>`;
+    }
 
     const bodyHtml = `<div style="text-align:center;padding:24px 16px;background:linear-gradient(135deg,rgba(201,146,42,0.15),rgba(122,86,24,0.15));border-radius:12px;border:1px solid rgba(201,146,42,0.4);margin-bottom:16px;">
   ${badgeHtml}
-  <p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9922a;">Conquista desbloqueada</p>
+  ${labelHtml}
   <h2 style="margin:8px 0 4px;font-size:24px;font-weight:800;color:#f0f0f0;">${escapeHtml(a.name)}</h2>
   ${a.description ? `<p style="margin:0;font-size:14px;color:#b8b8b8;">${escapeHtml(a.description)}</p>` : ""}
 </div>${userMessage ? `<p>${safeMessage}</p>` : ""}`;

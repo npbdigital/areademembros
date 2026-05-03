@@ -123,3 +123,30 @@ export async function clearAchievementImageAction(
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };
   }
 }
+
+/**
+ * Linka conquista a uma decoração de avatar — quando o aluno desbloqueia,
+ * o popup celebrativo mostra avatar + frame + "você desbloqueou esse frame"
+ * em vez da imagem genérica.
+ *
+ * Passar decorationId=null pra desfazer o link.
+ */
+export async function setAchievementDecorationAction(params: {
+  achievementId: string;
+  decorationId: string | null;
+}): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const admin = createAdminClient();
+    const { error } = await admin
+      .schema("membros")
+      .from("achievements")
+      .update({ unlocks_decoration_id: params.decorationId })
+      .eq("id", params.achievementId);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/admin/achievements");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}

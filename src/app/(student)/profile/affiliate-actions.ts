@@ -89,6 +89,25 @@ export async function linkKiwifyAffiliateAction(
       .eq("member_user_id", userId)
       .maybeSingle();
 
+    // Pré-check: outro aluno já vinculou esse email? (case-insensitive,
+    // mesma lógica do índice UNIQUE em (source, lower(kiwify_email)))
+    const { data: conflictRow } = await supabase
+      .schema("afiliados")
+      .from("affiliate_links")
+      .select("id, member_user_id")
+      .eq("source", "kiwify")
+      .ilike("kiwify_email", kiwifyEmail)
+      .neq("member_user_id", userId)
+      .maybeSingle();
+
+    if (conflictRow) {
+      return {
+        ok: false,
+        error:
+          "Esse e-mail Kiwify já está vinculado a outro aluno. Se for um engano, fala com o suporte.",
+      };
+    }
+
     if (ownLink) {
       const o = ownLink as { id: string };
       const { error: updErr } = await supabase
@@ -102,34 +121,17 @@ export async function linkKiwifyAffiliateAction(
         })
         .eq("id", o.id);
       if (updErr) {
-        // Trata possível erro de unique violation no email
         if (updErr.message.includes("affiliate_links_unique_email")) {
           return {
             ok: false,
-            error: "Esse e-mail Kiwify já está vinculado a outro aluno.",
+            error:
+              "Esse e-mail Kiwify já está vinculado a outro aluno. Se for um engano, fala com o suporte.",
           };
         }
         return { ok: false, error: updErr.message };
       }
       revalidatePath("/profile");
       return { ok: true, data: { attached: 0 } };
-    }
-
-    // Verifica conflito: outro aluno já vinculou esse email?
-    const { data: conflictRow } = await supabase
-      .schema("afiliados")
-      .from("affiliate_links")
-      .select("id, member_user_id")
-      .eq("source", "kiwify")
-      .ilike("kiwify_email", kiwifyEmail)
-      .maybeSingle();
-
-    if (conflictRow) {
-      return {
-        ok: false,
-        error:
-          "Esse e-mail Kiwify já está vinculado a outro aluno. Se for um engano, fala com o suporte.",
-      };
     }
 
     const registeredAt = new Date().toISOString();

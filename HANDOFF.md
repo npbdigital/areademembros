@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 28.4: Excluir aluno + fix favicon + popup broadcast
-**Último commit no main:** `5da1721` — feat(etapa28.4): excluir aluno + fix favicon + popup broadcast
+**Última atualização:** 2026-05-03 — Etapa 28.5: Frame unlock + busca alunos + email Kiwify único
+**Último commit no main:** `aac8589` — docs(handoff): atualiza ultimo commit pra 5da1721 (próximo: Etapa 28.5)
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -45,6 +45,34 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 28.5 — Frame unlock + busca alunos + email Kiwify único (2026-05-03)
+
+**3 melhorias entregues juntas:**
+
+**A. Conquistas que desbloqueiam frame de avatar**
+- Migration: `membros.achievements.unlocks_decoration_id UUID REFERENCES membros.avatar_decorations(id)`
+  - Auto-link das 3 conquistas de venda (`sales_kiwify_1`, `sales_kiwify_10`, `sales_kiwify_50`) com as decorações `sales_1/10/50`
+- Admin pode marcar manualmente quaisquer outras conquistas como "trocas de frame" via novo botão "Frame" em `/admin/achievements` — dropdown lista as decorações disponíveis, permite vincular/desvincular
+- Action `setAchievementDecorationAction({achievementId, decorationId})` em `admin/achievements/actions.ts`
+- `AchievementCelebrationModal` agora renderiza:
+  - **Quando tem `decorationImageUrl`:** componente `FrameBadge` que compõe avatar real do user (circular) + frame em PNG por cima → header label muda pra "Novo frame desbloqueado — {decoração}"
+  - Realtime listener faz JOIN em `avatar_decorations(name, image_url)` + busca avatar do user em `membros.users` antes de disparar o modal
+- `shareAchievementAction` (post na `/community/resultados`) também usa avatar+frame composição quando a conquista linka decoração
+- Item "Conquistas" movido da sidebar admin (Análise → Sistema)
+
+**B. Busca de alunos pra atribuir venda órfã**
+- Antes: o admin só podia colar email exato pra atribuir uma venda Kiwify órfã, sem feedback
+- Agora: novo botão "Atribuir" abre modal com input que faz busca debounced (300ms) por nome **ou** email
+- Action `searchStudentsAction(query)` em `affiliates/actions.ts`:
+  - Mín. 2 caracteres, escapa `%`/`_`, ilike em `full_name` ou `email`, limita a 12 resultados
+  - Inclui `role=student` E `role=ficticio`, retorna avatar pra UI
+- `AttachOrphanButton` reescrito completo: input com loading spinner, lista de resultados com avatar+nome+email (badge "Fictício" pros perfis fictícios), card de selecionado com botão pra trocar, validação antes de confirmar
+
+**C. Validação email Kiwify único no afiliado**
+- Em `linkKiwifyAffiliateAction` (profile/affiliate-actions.ts), pré-check antes de INSERT/UPDATE: busca `affiliate_links` com `kiwify_email ilike $email AND member_user_id != $userId`
+- Se outro aluno já vinculou aquele email, retorna erro: "Esse e-mail Kiwify já está vinculado a outro aluno. Se for um engano, fala com o suporte."
+- Defesa em profundidade: índice UNIQUE `affiliate_links_unique_email_idx` em `(source, lower(kiwify_email))` continua sendo o último guard; o catch do erro também redireciona pra mesma mensagem amigável caso a corrida vença o pré-check
 
 ### Etapa 28.4 — Excluir aluno + fix favicon + popup broadcast (2026-05-03)
 

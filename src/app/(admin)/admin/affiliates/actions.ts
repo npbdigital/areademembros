@@ -185,6 +185,64 @@ export async function reprocessAllPendingAction(): Promise<
 }
 
 /**
+ * Busca alunos por nome OU e-mail (substring case-insensitive). Usado pra
+ * o autocomplete do "Atribuir venda órfã". Retorna até 12 resultados.
+ *
+ * Filtros: só users ativos com role student/ficticio.
+ */
+export async function searchStudentsAction(query: string): Promise<
+  ActionResult<
+    Array<{
+      id: string;
+      fullName: string | null;
+      email: string;
+      avatarUrl: string | null;
+      role: string;
+    }>
+  >
+> {
+  try {
+    await assertAdmin();
+    const q = query.trim();
+    if (q.length < 2) {
+      return { ok: true, data: [] };
+    }
+
+    const supabase = createAdminClient();
+    const pattern = `%${q.replace(/[%_]/g, "\\$&")}%`;
+    const { data, error } = await supabase
+      .schema("membros")
+      .from("users")
+      .select("id, full_name, email, avatar_url, role")
+      .in("role", ["student", "ficticio"])
+      .or(`full_name.ilike.${pattern},email.ilike.${pattern}`)
+      .order("full_name", { ascending: true })
+      .limit(12);
+    if (error) return { ok: false, error: error.message };
+
+    const rows = (data ?? []) as Array<{
+      id: string;
+      full_name: string | null;
+      email: string;
+      avatar_url: string | null;
+      role: string;
+    }>;
+    return {
+      ok: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        fullName: r.full_name,
+        email: r.email,
+        avatarUrl: r.avatar_url,
+        role: r.role,
+      })),
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/**
  * Atribui manualmente uma venda órfã a um aluno (busca por e-mail do aluno
  * em membros.users). Se o aluno ainda não tiver vinculação Kiwify pra esse
  * email, cria uma já verificada (admin assume risco) e roda o backfill —

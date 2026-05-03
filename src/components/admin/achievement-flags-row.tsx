@@ -1,10 +1,20 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Eye, ImagePlus, Loader2, Share2, Sparkles } from "lucide-react";
+import {
+  Eye,
+  ImagePlus,
+  Loader2,
+  Share2,
+  Sparkles,
+  UserCircle2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-import { setAchievementFlagsAction } from "@/app/(admin)/admin/achievements/actions";
+import {
+  setAchievementDecorationAction,
+  setAchievementFlagsAction,
+} from "@/app/(admin)/admin/achievements/actions";
 import { AchievementImageDialog } from "@/components/admin/achievement-image-dialog";
 import { AchievementCelebrationModal } from "@/components/student/achievement-celebration";
 
@@ -18,12 +28,23 @@ interface Achievement {
   celebrate: boolean;
   shareable: boolean;
   imageUrl: string | null;
+  unlocksDecorationId: string | null;
+}
+
+interface DecorationOption {
+  id: string;
+  code: string;
+  name: string;
+  image_url: string | null;
+  required_sales: number;
 }
 
 export function AchievementFlagsRow({
   achievement,
+  decorationOptions,
 }: {
   achievement: Achievement;
+  decorationOptions: DecorationOption[];
 }) {
   const router = useRouter();
   const [celebrate, setCelebrate] = useState(achievement.celebrate);
@@ -31,6 +52,29 @@ export function AchievementFlagsRow({
   const [pending, startTransition] = useTransition();
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [decoMenuOpen, setDecoMenuOpen] = useState(false);
+  const [pendingDeco, startDeco] = useTransition();
+  const linkedDeco = achievement.unlocksDecorationId
+    ? decorationOptions.find((d) => d.id === achievement.unlocksDecorationId)
+    : null;
+
+  function handleSetDeco(decorationId: string | null) {
+    setDecoMenuOpen(false);
+    startDeco(async () => {
+      const res = await setAchievementDecorationAction({
+        achievementId: achievement.id,
+        decorationId,
+      });
+      if (res.ok) {
+        router.refresh();
+        toast.success(
+          decorationId ? "Frame linkado." : "Frame desvinculado.",
+        );
+      } else {
+        toast.error(res.error ?? "Falha.");
+      }
+    });
+  }
 
   function handleToggle(field: "celebrate" | "shareable", next: boolean) {
     if (field === "celebrate") setCelebrate(next);
@@ -97,6 +141,88 @@ export function AchievementFlagsRow({
           title="Permitir compartilhar em /community/resultados"
         />
 
+        {/* Frame — quando linkado, popup mostra avatar+frame em vez de imagem */}
+        {decorationOptions.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setDecoMenuOpen((v) => !v)}
+              title={
+                linkedDeco
+                  ? `Linkado ao frame "${linkedDeco.name}"`
+                  : "Linkar a um frame de avatar"
+              }
+              disabled={pendingDeco}
+              className={`flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-[11px] font-semibold transition ${
+                linkedDeco
+                  ? "border-npb-gold bg-npb-gold/10 text-npb-gold"
+                  : "border-npb-border bg-npb-bg3 text-npb-text-muted hover:border-npb-gold-dim hover:text-npb-text"
+              }`}
+            >
+              {pendingDeco ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <UserCircle2 className="h-3 w-3" />
+              )}
+              <span className="hidden sm:inline">
+                {linkedDeco ? "Frame ✓" : "Frame"}
+              </span>
+            </button>
+            {decoMenuOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Fechar menu"
+                  onClick={() => setDecoMenuOpen(false)}
+                  className="fixed inset-0 z-40"
+                />
+                <div className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-md border border-npb-border bg-npb-bg2 p-1 shadow-xl">
+                  <button
+                    type="button"
+                    onClick={() => handleSetDeco(null)}
+                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-npb-bg3 ${
+                      !linkedDeco ? "font-bold text-npb-gold" : "text-npb-text"
+                    }`}
+                  >
+                    Sem frame
+                  </button>
+                  <div className="my-1 border-t border-npb-border" />
+                  {decorationOptions.map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      onClick={() => handleSetDeco(d.id)}
+                      className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-npb-bg3 ${
+                        linkedDeco?.id === d.id
+                          ? "font-bold text-npb-gold"
+                          : "text-npb-text"
+                      }`}
+                    >
+                      {d.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={d.image_url}
+                          alt=""
+                          className="h-6 w-6 rounded object-contain"
+                        />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-npb-bg3" />
+                      )}
+                      <div className="flex-1 text-left">
+                        <div>{d.name}</div>
+                        <div className="text-[10px] text-npb-text-muted">
+                          {d.required_sales} venda
+                          {d.required_sales > 1 ? "s" : ""}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Imagem custom — toggle visual: dourado quando tem imagem setada */}
         <button
           type="button"
@@ -151,9 +277,13 @@ export function AchievementFlagsRow({
             icon: achievement.icon,
             shareable: achievement.shareable,
             imageUrl: achievement.imageUrl,
+            decorationName: linkedDeco?.name ?? null,
+            decorationImageUrl: linkedDeco?.image_url ?? null,
           }}
           onClose={() => setPreviewOpen(false)}
           previewMode
+          // No preview, sem avatar real — usa placeholder genérico
+          previewAvatarUrl={null}
         />
       )}
     </>

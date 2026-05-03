@@ -8,13 +8,21 @@ export const dynamic = "force-dynamic";
 export default async function AdminAchievementsPage() {
   const supabase = createAdminClient();
 
-  const { data: achievements } = await supabase
-    .schema("membros")
-    .from("achievements")
-    .select(
-      "id, code, name, description, icon, category, required_value, xp_reward, celebrate, shareable, celebration_image_url, sort_order, is_active",
-    )
-    .order("sort_order", { ascending: true });
+  const [{ data: achievements }, { data: decorations }] = await Promise.all([
+    supabase
+      .schema("membros")
+      .from("achievements")
+      .select(
+        "id, code, name, description, icon, category, required_value, xp_reward, celebrate, shareable, celebration_image_url, unlocks_decoration_id, sort_order, is_active",
+      )
+      .order("sort_order", { ascending: true }),
+    supabase
+      .schema("membros")
+      .from("avatar_decorations")
+      .select("id, code, name, image_url, required_sales")
+      .eq("is_active", true)
+      .order("required_sales", { ascending: true }),
+  ]);
 
   const items = (achievements ?? []) as Array<{
     id: string;
@@ -28,8 +36,16 @@ export default async function AdminAchievementsPage() {
     celebrate: boolean;
     shareable: boolean;
     celebration_image_url: string | null;
+    unlocks_decoration_id: string | null;
     sort_order: number;
     is_active: boolean;
+  }>;
+  const decoOptions = (decorations ?? []) as Array<{
+    id: string;
+    code: string;
+    name: string;
+    image_url: string | null;
+    required_sales: number;
   }>;
 
   // Agrupa por categoria
@@ -90,7 +106,9 @@ export default async function AdminAchievementsPage() {
                   celebrate: a.celebrate,
                   shareable: a.shareable,
                   imageUrl: a.celebration_image_url,
+                  unlocksDecorationId: a.unlocks_decoration_id,
                 }}
+                decorationOptions={decoOptions}
               />
             ))}
           </ul>

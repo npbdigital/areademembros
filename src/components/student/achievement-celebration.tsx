@@ -18,6 +18,10 @@ export interface CelebratableAchievement {
   shareable: boolean;
   /** URL da imagem custom (substitui o badge emoji quando setada). */
   imageUrl?: string | null;
+  /** Nome da decoração linkada (quando achievement desbloqueia frame). */
+  decorationName?: string | null;
+  /** URL PNG do frame (renderizado por cima do avatar). */
+  decorationImageUrl?: string | null;
 }
 
 interface ListenerProps {
@@ -59,21 +63,58 @@ export function AchievementCelebrationListener({ userId }: ListenerProps) {
             .schema("membros")
             .from("achievements")
             .select(
-              "id, code, name, description, icon, shareable, celebrate, celebration_image_url",
+              "id, code, name, description, icon, shareable, celebrate, celebration_image_url, unlocks_decoration_id, avatar_decorations(name, image_url)",
             )
             .eq("id", achievementId)
             .maybeSingle();
           const a = data as
-            | (CelebratableAchievement & {
+            | {
+                id: string;
+                code: string;
+                name: string;
+                description: string | null;
+                icon: string;
+                shareable: boolean;
                 celebrate: boolean;
                 celebration_image_url: string | null;
-              })
+                unlocks_decoration_id: string | null;
+                avatar_decorations:
+                  | { name: string; image_url: string | null }
+                  | { name: string; image_url: string | null }[]
+                  | null;
+              }
             | null;
           if (!a || !a.celebrate) return;
 
+          // Pega avatar atual do user pra montar o card de frame
+          const { data: userRow } = await supabase
+            .schema("membros")
+            .from("users")
+            .select("avatar_url")
+            .eq("id", userId)
+            .maybeSingle();
+          const avatarUrl =
+            (userRow as { avatar_url: string | null } | null)?.avatar_url ??
+            null;
+
+          const deco = Array.isArray(a.avatar_decorations)
+            ? a.avatar_decorations[0]
+            : a.avatar_decorations;
+
           setQueue((q) => [
             ...q,
-            { ...a, imageUrl: a.celebration_image_url ?? null },
+            {
+              id: a.id,
+              code: a.code,
+              name: a.name,
+              description: a.description,
+              icon: a.icon,
+              shareable: a.shareable,
+              imageUrl: a.celebration_image_url ?? null,
+              decorationName: deco?.name ?? null,
+              decorationImageUrl: deco?.image_url ?? null,
+              avatarUrl,
+            } as CelebratableAchievement & { avatarUrl: string | null },
           ]);
         },
       )
@@ -97,6 +138,10 @@ export function AchievementCelebrationListener({ userId }: ListenerProps) {
       key={current.id}
       achievement={current}
       onClose={handleClose}
+      previewAvatarUrl={
+        (current as CelebratableAchievement & { avatarUrl?: string | null })
+          .avatarUrl ?? null
+      }
     />
   );
 }
@@ -109,6 +154,8 @@ interface ModalProps {
    * "Pré-visualização" no topo.
    */
   previewMode?: boolean;
+  /** Avatar do aluno pra renderizar dentro do frame quando há decoração linkada. */
+  previewAvatarUrl?: string | null;
 }
 
 /**
@@ -122,6 +169,7 @@ export function AchievementCelebrationModal({
   achievement,
   onClose,
   previewMode = false,
+  previewAvatarUrl = null,
 }: ModalProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
@@ -196,10 +244,16 @@ export function AchievementCelebrationModal({
 
   if (!mounted) return null;
 
-  // Decide o que renderizar como "badge" — imagem custom OU emoji em
-  // gradient gold. Imagem fica quadrada com border-radius pra combinar
-  // com o estilo do app.
-  const badge = achievement.imageUrl ? (
+  const hasFrame = Boolean(achievement.decorationImageUrl);
+
+  // Prioridade: decoração (avatar+frame) → imagem custom → emoji gradient
+  const badge = hasFrame ? (
+    <FrameBadge
+      avatarUrl={previewAvatarUrl}
+      frameUrl={achievement.decorationImageUrl!}
+      size="lg"
+    />
+  ) : achievement.imageUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={achievement.imageUrl}
@@ -212,7 +266,13 @@ export function AchievementCelebrationModal({
     </div>
   );
 
-  const previewBadge = achievement.imageUrl ? (
+  const previewBadge = hasFrame ? (
+    <FrameBadge
+      avatarUrl={previewAvatarUrl}
+      frameUrl={achievement.decorationImageUrl!}
+      size="sm"
+    />
+  ) : achievement.imageUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={achievement.imageUrl}
@@ -222,6 +282,11 @@ export function AchievementCelebrationModal({
   ) : (
     <div className="text-5xl leading-none">{achievement.icon}</div>
   );
+
+  // Quando há frame, o título muda: "Você desbloqueou um novo frame!"
+  const headerLabel = hasFrame
+    ? "Novo frame desbloqueado"
+    : "Conquista desbloqueada";
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -251,7 +316,7 @@ export function AchievementCelebrationModal({
           <div className="space-y-4 p-8 text-center">
             <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-npb-gold">
               <Sparkles className="h-3.5 w-3.5" />
-              Conquista desbloqueada
+              {headerLabel}
             </div>
 
             <div className="flex justify-center">{badge}</div>
@@ -305,7 +370,7 @@ export function AchievementCelebrationModal({
             <div className="rounded-xl border border-npb-gold/40 bg-gradient-to-br from-npb-gold/10 to-transparent p-5 text-center">
               {previewBadge}
               <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-npb-gold">
-                Conquista desbloqueada
+                {headerLabel}
               </p>
               <p className="mt-1 text-lg font-extrabold text-npb-text">
                 {achievement.name}
@@ -365,5 +430,67 @@ export function AchievementCelebrationModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * Avatar do aluno renderizado COM o frame por cima — visual final da
+ * decoração equipada. Usado no modal de celebração quando a conquista
+ * desbloqueia uma decoração.
+ *
+ * Estrutura: container quadrado, avatar circular dentro, frame em PNG
+ * por cima (object-contain pra preservar a transparência).
+ *
+ * Sem avatar do user, mostra um placeholder cinza com user icon.
+ */
+function FrameBadge({
+  avatarUrl,
+  frameUrl,
+  size,
+}: {
+  avatarUrl: string | null;
+  frameUrl: string;
+  size: "sm" | "lg";
+}) {
+  const dim = size === "lg" ? "h-48 w-48 sm:h-56 sm:w-56" : "h-28 w-28";
+  // Avatar interno tem ~70% do tamanho do frame (resto é o decorative ring)
+  const innerDim =
+    size === "lg" ? "h-36 w-36 sm:h-40 sm:w-40" : "h-20 w-20";
+
+  return (
+    <div
+      className={`relative animate-in zoom-in duration-500 ${dim} mx-auto`}
+    >
+      {/* Avatar centralizado */}
+      <div
+        className={`absolute left-1/2 top-1/2 ${innerDim} -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-full bg-npb-bg3`}
+      >
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={avatarUrl}
+            alt=""
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-npb-text-muted">
+            <svg
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              className="h-1/2 w-1/2"
+            >
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+            </svg>
+          </div>
+        )}
+      </div>
+      {/* Frame por cima */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={frameUrl}
+        alt=""
+        className="pointer-events-none absolute inset-0 h-full w-full object-contain"
+      />
+    </div>
   );
 }

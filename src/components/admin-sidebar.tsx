@@ -60,12 +60,12 @@ const groups = [
     items: [
       { href: "/admin/reports", label: "Relatórios", icon: BarChart3 },
       { href: "/admin/affiliates", label: "Afiliados Kiwify", icon: Wallet },
-      { href: "/admin/achievements", label: "Conquistas", icon: Trophy },
     ],
   },
   {
     label: "Sistema",
     items: [
+      { href: "/admin/achievements", label: "Conquistas", icon: Trophy },
       { href: "/admin/decorations", label: "Decorações", icon: Sparkles },
       { href: "/admin/youtube", label: "YouTube", icon: PlaySquare },
       { href: "/admin/links", label: "Encurtador", icon: Link2 },
