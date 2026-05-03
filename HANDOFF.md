@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 28: One-click login + Welcome popup por curso + Celebração de conquistas
-**Último commit no main:** `871a528` — feat(etapa28): one-click login + welcome popup por curso + celebracao de conquistas
+**Última atualização:** 2026-05-03 — Etapa 28.1: Top loader bar (NextTopLoader)
+**Último commit no main:** `3cf453e` — feat(ux): top loader bar branca durante navegacoes (NextTopLoader)
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -45,6 +45,10 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 28.1 — Top loader bar (2026-05-03)
+
+**Commit:** `3cf453e` — `nextjs-toploader` instalado e plugado no root layout. Linha branca de 2px no topo da tela durante navegações client-side (clicks em `<Link>`). Sem spinner, com glow sutil, easing 300ms. Feedback visual pra esconder latência percebida em transições.
 
 ### Etapa 28 — One-click login + Welcome popup por curso + Celebração de conquistas (2026-05-03)
 
