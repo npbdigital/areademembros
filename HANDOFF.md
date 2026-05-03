@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 27: Encurtador de URLs + Player YouTube limpo + Lesson mobile fixes
-**Último commit no main:** `8de4ac0` — feat: encurtador de URLs (manual + auto) + esconder título YouTube
+**Última atualização:** 2026-05-03 — Etapa 28: One-click login + Welcome popup por curso + Celebração de conquistas
+**Último commit no main:** `871a528` — feat(etapa28): one-click login + welcome popup por curso + celebracao de conquistas
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -45,6 +45,91 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 28 — One-click login + Welcome popup por curso + Celebração de conquistas (2026-05-03)
+
+**Commit:** `871a528` (3 melhorias entregues juntas)
+
+#### A. One-click login (via WhatsApp/Unnichat)
+
+**Schema:** `membros.magic_login_tokens` (token UUID PK, user_id, expires_at default 7d, last_used_at, source). RLS bloqueia tudo exceto `service_role`. Coluna `needs_onboarding` em `membros.users` força tela `/onboarding` na 1ª sessão pós-token.
+
+**Lib `src/lib/one-click.ts`:**
+- `generateMagicToken(userId, source)` — idempotente, reaproveita token válido se existir
+- `validateMagicToken(token)` — devolve user_id ou null, atualiza `last_used_at`, deleta expirados
+- `markUserNeedsOnboarding(userId)` — flag (idempotente)
+- `buildOneClickUrl(token)` — usa `NEXT_PUBLIC_APP_URL`
+
+**Endpoint `GET /api/auth/one-click?token=UUID&next=...`:**
+1. Valida token via `validateMagicToken`
+2. Pega email do user via `auth.admin.getUserById`
+3. Decide destino: se `needs_onboarding=true` → `/onboarding?next=...`, senão usa `next` (default `/dashboard`)
+4. Gera magic link nativo Supabase (`auth.admin.generateLink type=magiclink`) com `redirectTo` = `/auth/callback?next=...`
+5. Redireciona pro `action_link` (cookies setados pelo callback)
+
+**Página `/onboarding`** (`src/app/(student)/onboarding/`):
+- Carrega profile + flag, redireciona se já passou
+- Form com avatar (overlay câmera + upload bucket `avatars`), nome, e-mail readonly, fieldset opcional de "nova senha + confirmação" (mín 6 chars)
+- Botão "Concluir" + "Pular essa etapa" (apenas marca flag=false)
+- Actions: `completeOnboardingAction` + `uploadOnboardingAvatarAction`
+
+**Webhook `/api/webhooks/enrollment` estendido:**
+- Sempre gera `one_click_login_url` (user novo OU existente) e retorna no JSON de sucesso
+- User novo ganha `needs_onboarding=true` automaticamente
+- Unnichat consome esse campo e envia o link no WhatsApp
+
+**Página admin de teste:** `/admin/one-click-test` (link na sidebar Sistema → "One-Click (teste)")
+- Form: e-mail + nome opcional + checkbox "Forçar onboarding"
+- Cria user fictício (role=`ficticio`) se e-mail não existe
+- Mostra link gerado com botão Copiar + Abrir
+- Doc embutida explicando o fluxo prod (5 passos)
+
+**Middleware:** liberado `/api/auth/one-click` em `isPublicApi`.
+
+#### B. Welcome popup POR CURSO
+
+**Schema:** 6 colunas em `membros.courses` (`welcome_popup_enabled`, `_title`, `_description`, `_video_id`, `_terms`, `_button_label`). Tabela `membros.course_welcome_accepted (user_id, course_id) PK composta` com RLS própria (aluno lê/insere os próprios).
+
+**Componente `CourseWelcomeModal`** (`src/components/student/course-welcome-modal.tsx`):
+- Similar ao `WelcomeModal` global, mas chama `acceptCourseWelcomeAction(courseId)`
+- Termos opcionais — quando vazios, esconde checkbox e habilita botão direto
+- Layout: header gold + vídeo opcional + scroll de termos + checkbox + CTA
+
+**Form admin de curso** (`course-form.tsx`) ganhou fieldset "Pop-up de boas-vindas (1ª vez no curso)" com 6 campos. Actions create/update extendidas pra persistir.
+
+**`/courses/[courseId]` page:** SELECT estendido. Renderiza `CourseWelcomeModal` quando `welcome_popup_enabled=true && !accepted`.
+
+#### C. Popup de conquista desbloqueada + compartilhamento na comunidade
+
+**Schema:** colunas `celebrate` + `shareable` em `membros.achievements`. Migration marcou todas as `sales_count` e `sales_value` como `celebrate=true, shareable=true`. Inseriu 5 conquistas de comissão que faltavam: R$ 2k (200000 cents), R$ 25k, R$ 150k, R$ 200k, R$ 250k. Junto com as existentes (R$ 100, 500, 1k, 5k, 10k, 50k, 100k, 500k, 1M), agora cobre toda a faixa que Felipe pediu.
+
+**Listener Realtime** `AchievementCelebrationListener` (`src/components/student/achievement-celebration.tsx`):
+- Plugado no student layout (só se `gamificationEnabled`)
+- Subscribe `postgres_changes INSERT` em `membros.user_achievements` filtrado por `user_id`
+- Quando dispara, busca achievement; se `celebrate=true`, enfileira pra mostrar
+- Modal full-screen com **canvas-confetti** (boom inicial 100 partículas + chuva de 3s lateral, cores dourado/branco)
+- Badge gigante 128px com gradient gold + animação `zoom-in`
+- Botão "Compartilhar nos resultados" (só se `shareable=true`) + "Fechar"
+
+**Modo compartilhamento:**
+- Preview do card (igual o que vai pra comunidade)
+- Textarea opcional (max 500 chars) pra mensagem do aluno
+- Botão publica via `shareAchievementAction`
+
+**`shareAchievementAction`** (`src/app/(student)/achievements/actions.ts`):
+- Valida: aluno tem a conquista, `shareable=true`, `userHasCommunityAccess`, página `/community/resultados` existe e ativa
+- Cria post auto-aprovado em `community_topics` com HTML estilizado (badge centralizado, gradient gold, nome+descrição) + texto sanitizado do user
+- `status='approved'`, `approved_by=user.id`, `approved_at=now()`
+- Redireciona pro `/community/resultados/post/{id}` após sucesso
+
+**UI admin:** `/admin/achievements` (link na sidebar Análises → "Conquistas")
+- Lista todas agrupadas por categoria (Primeira vez / Streak / Volume / Comunidade / Vendas qtd / Vendas R$)
+- Cada linha tem 2 toggles inline (Celebra + Compartilha) com optimistic update
+- Action `setAchievementFlagsAction(achievementId, celebrate?, shareable?)`
+
+**INSTALADO:** `canvas-confetti` + `@types/canvas-confetti`
+
+**Pré-requisito operacional:** admin precisa criar uma página `community_pages` com slug `resultados` em `/admin/community/spaces` antes de qualquer aluno conseguir compartilhar conquista.
 
 ### Etapa 27 — Encurtador de URLs + Player YouTube limpo + Lesson mobile fixes (2026-05-03)
 
