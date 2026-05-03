@@ -9,6 +9,7 @@ import {
   GalleryHorizontal,
   LayoutDashboard,
   Layers,
+  Link2,
   Megaphone,
   MessageCircle,
   PlaySquare,
@@ -65,6 +66,7 @@ const groups = [
     items: [
       { href: "/admin/decorations", label: "Decorações", icon: Sparkles },
       { href: "/admin/youtube", label: "YouTube", icon: PlaySquare },
+      { href: "/admin/links", label: "Encurtador", icon: Link2 },
       { href: "/admin/settings", label: "Configurações", icon: Settings },
     ],
   },

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { notifyEnrolledInCourse } from "@/lib/notifications";
+import { autoShortenHtml } from "@/lib/short-links";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -375,7 +376,7 @@ export async function updateLessonAction(
   _prev: ActionResult | null,
   formData: FormData,
 ): Promise<ActionResult> {
-  await assertAdmin();
+  const userId = await assertAdmin();
   const title = str(formData, "title");
   if (!title) return { ok: false, error: "Título é obrigatório." };
 
@@ -390,11 +391,18 @@ export async function updateLessonAction(
     return { ok: false, error: "Tipo de liberação inválido." };
   }
 
+  // Auto-shortener: troca URLs longas no HTML por /l/{slug} antes de salvar.
+  // Idempotente (cada URL gera 1 slug pra sempre). Falha não bloqueia o save.
+  const rawDescription = nullableStr(formData, "description_html");
+  const description_html = await autoShortenHtml(rawDescription, userId).catch(
+    () => rawDescription,
+  );
+
   const { error } = await admin()
     .from("lessons")
     .update({
       title,
-      description_html: nullableStr(formData, "description_html"),
+      description_html,
       youtube_video_id: nullableStr(formData, "youtube_video_id"),
       duration_seconds: nullableInt(formData, "duration_seconds"),
       release_type: releaseType,

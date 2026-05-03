@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   logLessonViewAction,
   pingWatchTimeAction,
@@ -73,6 +73,11 @@ export function YouTubePlayer({
   const mountRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
   const loggedViewRef = useRef(false);
+  // Controla overlay que esconde título/canal — só fica visível quando o
+  // player NÃO está tocando (durante play, o YouTube esconde o título sozinho).
+  // States da YT API: 1=playing, 3=buffering. Outros (-1=unstarted, 0=ended,
+  // 2=paused, 5=cued) = mostra overlay.
+  const [hideTopOverlay, setHideTopOverlay] = useState(false);
   /** Última posição já persistida no servidor — pra evitar payload repetido. */
   const lastSavedToServerRef = useRef<number>(initialPositionSeconds);
   const storageKey = `${POSITION_STORAGE_PREFIX}${lessonId}`;
@@ -127,6 +132,11 @@ export function YouTubePlayer({
         events: {
           onReady: () => {
             // sem auto-play — autoplay policy do navegador decide
+          },
+          onStateChange: (e: { data: number }) => {
+            // 1=playing, 3=buffering → esconde overlay (deixa ver o vídeo)
+            // outros estados → mostra overlay (cobre título/canal)
+            setHideTopOverlay(e.data === 1 || e.data === 3);
           },
         },
       });
@@ -248,6 +258,18 @@ export function YouTubePlayer({
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-md border border-npb-border bg-black [&_iframe]:absolute [&_iframe]:inset-0 [&_iframe]:h-full [&_iframe]:w-full">
       <div ref={mountRef} className="absolute inset-0 h-full w-full" />
+      {/* Top mask: cobre faixa onde YouTube renderiza título + canal quando
+          pausado/loading. pointer-events-none deixa clique passar pro player
+          (botão play continua funcionando). */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-14 bg-black transition-opacity duration-300 ${
+          hideTopOverlay ? "opacity-0" : "opacity-100"
+        }`}
+      />
+      {/* Bottom-right mask: cobre o watermark "▶ YouTube" no canto inferior
+          direito que o modestbranding=1 não remove. Bem pequeno (~80x28) pra
+          não invadir os botões de configuração/fullscreen. */}
+      <div className="pointer-events-none absolute bottom-0 right-0 z-10 h-7 w-20 bg-black" />
     </div>
   );
 }
