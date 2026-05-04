@@ -1,4 +1,5 @@
 import {
+  loadYouTubeMeta,
   loadYouTubeTokens,
   saveYouTubeTokens,
   type YouTubeTokens,
@@ -148,6 +149,13 @@ export async function ytFetch<T = unknown>(
 
   if (!res.ok) {
     const err = await res.text();
+    // Mensagem amigavel pra quota — caso comum, default da API eh
+    // 10k unidades/dia e search.list custa 100 por chamada
+    if (res.status === 403 && err.includes("quotaExceeded")) {
+      throw new Error(
+        "Quota da YouTube API esgotada. Reseta amanhã 04h (BRT) ou peça aumento em console.cloud.google.com/apis/api/youtube.googleapis.com/quotas",
+      );
+    }
     throw new Error(`YouTube API ${endpoint} ${res.status}: ${err}`);
   }
 
@@ -191,18 +199,83 @@ export interface YTSearchResult {
 
 /**
  * Busca vídeos do canal autenticado.
+ *
+ * Quando `query` está vazio, lista os vídeos via `playlistItems.list` na
+ * playlist "uploads" do canal — custo: **1 unidade** por chamada (50 itens
+ * por página). É 100x mais barato que `search.list` (100 unidades), o que
+ * importa porque o quota default da YouTube Data API é só 10k/dia.
+ *
+ * Quando há query, faz busca de verdade via `search.list` (100 un.). É
+ * inevitável pra busca por texto, mas só acontece quando o admin digita.
+ *
+ * O ID da playlist "uploads" é determinístico: pega o channelId e troca
+ * o prefixo `UC` por `UU` (regra documentada do YouTube). Sem chamada
+ * extra pra descobrir.
  */
 export async function searchOwnVideos(
   query: string,
   pageToken?: string,
 ): Promise<{ items: YTSearchResult[]; nextPageToken?: string }> {
+  const trimmed = query.trim();
+
+  if (!trimmed) {
+    // Modo lista: playlistItems da playlist "uploads" — 1 unidade
+    const meta = await loadYouTubeMeta();
+    if (!meta?.channel_id) {
+      throw new Error(
+        "Canal YouTube não identificado. Reconecte em /admin/youtube.",
+      );
+    }
+    const uploadsPlaylistId = meta.channel_id.replace(/^UC/, "UU");
+
+    const params: Record<string, string> = {
+      part: "snippet,contentDetails",
+      playlistId: uploadsPlaylistId,
+      maxResults: "12",
+    };
+    if (pageToken) params.pageToken = pageToken;
+
+    const data = await ytFetch<{
+      items?: Array<{
+        snippet: {
+          title: string;
+          description: string;
+          thumbnails: { medium?: { url: string }; default?: { url: string } };
+          publishedAt: string;
+          resourceId: { videoId: string };
+        };
+        contentDetails: { videoId: string; videoPublishedAt?: string };
+      }>;
+      nextPageToken?: string;
+    }>("playlistItems", params);
+
+    return {
+      items: (data.items ?? []).map((it) => {
+        const videoId = it.contentDetails.videoId ?? it.snippet.resourceId.videoId;
+        return {
+          videoId,
+          title: it.snippet.title,
+          description: it.snippet.description,
+          thumbnail:
+            it.snippet.thumbnails.medium?.url ??
+            it.snippet.thumbnails.default?.url ??
+            `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+          publishedAt:
+            it.contentDetails.videoPublishedAt ?? it.snippet.publishedAt,
+        };
+      }),
+      nextPageToken: data.nextPageToken,
+    };
+  }
+
+  // Modo busca por texto: search.list — 100 unidades. Inevitável.
   const params: Record<string, string> = {
     part: "snippet",
     forMine: "true",
     type: "video",
     maxResults: "12",
     order: "date",
-    q: query,
+    q: trimmed,
   };
   if (pageToken) params.pageToken = pageToken;
 
