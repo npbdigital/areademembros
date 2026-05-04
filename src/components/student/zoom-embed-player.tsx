@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, ExternalLink } from "lucide-react";
 
 interface SignatureResponse {
   ok: boolean;
@@ -13,6 +13,23 @@ interface SignatureResponse {
   userName?: string;
   userEmail?: string;
   role?: number;
+}
+
+interface JoinInfo {
+  meetingNumber: string;
+  password: string;
+}
+
+/**
+ * Constrói a URL universal do Zoom — `zoom.us/j/...` faz o navegador/SO
+ * tentar abrir o app desktop ou mobile via custom protocol; cai no
+ * webclient como fallback. Mais amigável que `zoommtg://` direto, que
+ * só funciona se o app estiver instalado.
+ */
+function buildZoomJoinUrl(info: JoinInfo): string {
+  const base = `https://zoom.us/j/${encodeURIComponent(info.meetingNumber)}`;
+  if (!info.password) return base;
+  return `${base}?pwd=${encodeURIComponent(info.password)}`;
 }
 
 /**
@@ -33,6 +50,7 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "joining" | "joined" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
+  const [joinInfo, setJoinInfo] = useState<JoinInfo | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +71,15 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
           throw new Error(sig.error ?? "Falha ao autenticar no Zoom.");
         }
         if (cancelled) return;
+
+        // Guarda info pro botao "Abrir no app" — mostra ao lado do embed
+        // pra aluno que preferir o cliente nativo
+        if (sig.meetingNumber) {
+          setJoinInfo({
+            meetingNumber: sig.meetingNumber,
+            password: sig.password ?? "",
+          });
+        }
 
         // 2. Carrega SDK dinamicamente (não bloqueia render inicial)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,6 +147,8 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId]);
 
+  const joinUrl = joinInfo ? buildZoomJoinUrl(joinInfo) : null;
+
   return (
     <div className="space-y-3">
       {status === "loading" && (
@@ -138,7 +167,7 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
         <div className="rounded-2xl border border-red-500/40 bg-red-500/5 p-6">
           <div className="flex items-start gap-2 text-sm text-red-400">
             <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
-            <div>
+            <div className="flex-1">
               <p className="font-semibold">Não foi possível entrar na monitoria</p>
               <p className="mt-1 text-xs text-npb-text-muted">{error}</p>
               <p className="mt-3 text-xs text-npb-text-muted">
@@ -147,6 +176,17 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
                 encerrou. Tente em outro navegador (Chrome/Edge funcionam
                 melhor) ou recarregue a página.
               </p>
+              {joinUrl && (
+                <a
+                  href={joinUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex items-center gap-2 rounded-md bg-npb-gold px-4 py-2 text-xs font-bold text-black hover:bg-npb-gold-light"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir no app do Zoom
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -156,8 +196,28 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
         ref={containerRef}
         id="zoom-embed-root"
         className="overflow-hidden rounded-2xl border border-npb-border bg-black"
-        style={{ minHeight: status === "joined" ? "600px" : 0 }}
+        style={{ minHeight: status === "joined" ? "480px" : 0 }}
       />
+
+      {/* Botão pra abrir no cliente nativo — sempre visível quando temos
+          os dados, pro aluno escolher web vs app. URL universal do Zoom
+          tenta o app primeiro, cai no webclient se não tiver instalado. */}
+      {joinUrl && status !== "error" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-npb-border bg-npb-bg2/50 px-4 py-2.5 text-xs text-npb-text-muted">
+          <span>
+            Travou ou não consegue entrar pelo navegador?
+          </span>
+          <a
+            href={joinUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-npb-gold/40 bg-npb-gold/10 px-3 py-1.5 font-semibold text-npb-gold hover:bg-npb-gold/20"
+          >
+            <ExternalLink className="h-3 w-3" />
+            Abrir no app do Zoom
+          </a>
+        </div>
+      )}
     </div>
   );
 }
