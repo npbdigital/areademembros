@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
+  ClipboardPaste,
   ExternalLink,
   Film,
   Loader2,
@@ -46,17 +47,29 @@ interface DetailsResponse {
 
 export function VideoPicker({ currentVideoId, onPick }: VideoPickerProps) {
   const [open, setOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text transition-colors hover:border-npb-gold-dim hover:text-npb-gold"
-      >
-        <Search className="h-3.5 w-3.5" />
-        {currentVideoId ? "Trocar vídeo do YouTube" : "Buscar vídeo no YouTube"}
-      </button>
+      <div className="flex flex-col items-start gap-1.5">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text transition-colors hover:border-npb-gold-dim hover:text-npb-gold"
+        >
+          <Search className="h-3.5 w-3.5" />
+          {currentVideoId ? "Trocar vídeo do YouTube" : "Buscar vídeo no YouTube"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setPasteOpen(true)}
+          title="Cola o código (ex: dQw4w9WgXcQ) ou a URL completa de um vídeo do YouTube"
+          className="inline-flex items-center gap-1.5 text-xs text-npb-text-muted transition-colors hover:text-npb-gold"
+        >
+          <ClipboardPaste className="h-3 w-3" />
+          Colar código do vídeo
+        </button>
+      </div>
 
       {open && (
         <PickerModal
@@ -67,8 +80,180 @@ export function VideoPicker({ currentVideoId, onPick }: VideoPickerProps) {
           }}
         />
       )}
+
+      {pasteOpen && (
+        <PasteCodeModal
+          onClose={() => setPasteOpen(false)}
+          onPick={(v) => {
+            onPick(v);
+            setPasteOpen(false);
+          }}
+        />
+      )}
     </>
   );
+}
+
+/**
+ * Modal alternativo: admin cola só o videoId (ou URL completa) e o sistema
+ * busca os detalhes diretamente — pula a busca/listagem (que custa quota).
+ * Útil pra cadastrar muitas aulas em sequência quando admin já sabe qual
+ * vídeo quer.
+ */
+function PasteCodeModal({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (v: VideoPick) => void;
+}) {
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const id = extractVideoId(input);
+    if (!id) {
+      setError("Não consegui identificar o ID do vídeo. Cola o código (11 chars) ou a URL completa.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/youtube/video-details?videoId=${encodeURIComponent(id)}`,
+      );
+      const data = (await res.json()) as DetailsResponse;
+      if (!data.ok || !data.video) {
+        setError(data.error ?? "Vídeo não encontrado.");
+        return;
+      }
+      onPick(data.video);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erro ao buscar vídeo.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md overflow-hidden rounded-xl border border-npb-border bg-npb-bg2 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 border-b border-npb-border px-5 py-4">
+          <ClipboardPaste className="h-5 w-5 text-npb-gold" />
+          <h2 className="flex-1 text-base font-bold text-npb-text">
+            Colar código do vídeo
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded text-npb-text-muted hover:bg-npb-bg3 hover:text-npb-text"
+            aria-label="Fechar"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3 px-5 py-4">
+          <p className="text-xs text-npb-text-muted">
+            Pode ser só o código (ex: <code className="text-npb-text">dQw4w9WgXcQ</code>) ou a URL completa do YouTube. Sem buscar — gasta apenas 1 unidade da quota.
+          </p>
+          <input
+            ref={inputRef}
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="dQw4w9WgXcQ ou https://youtube.com/watch?v=..."
+            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+          />
+          {error && (
+            <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-2.5 text-xs text-red-400">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-npb-border px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-md px-3 py-1.5 text-xs text-npb-text-muted hover:text-npb-text"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={loading || input.trim().length === 0}
+            className="inline-flex items-center gap-1.5 rounded-md bg-npb-gold px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-npb-gold-light disabled:opacity-50"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Buscando…
+              </>
+            ) : (
+              "Adicionar"
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Aceita várias formas de input: ID puro (11 chars), URL completa
+ * (youtube.com/watch?v=, youtu.be/, youtube.com/embed/, youtube.com/shorts/).
+ */
+function extractVideoId(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  // ID puro: 11 chars alfanuméricos + _ -
+  if (/^[a-zA-Z0-9_-]{11}$/.test(s)) return s;
+  // Tenta extrair de URL
+  try {
+    const url = new URL(s);
+    // youtube.com/watch?v=ID
+    const v = url.searchParams.get("v");
+    if (v && /^[a-zA-Z0-9_-]{11}$/.test(v)) return v;
+    // youtu.be/ID, /embed/ID, /shorts/ID, /v/ID
+    const m = url.pathname.match(/\/(?:embed|shorts|v)\/([a-zA-Z0-9_-]{11})/);
+    if (m) return m[1];
+    if (
+      (url.hostname === "youtu.be" || url.hostname.endsWith(".youtu.be")) &&
+      /^[a-zA-Z0-9_-]{11}$/.test(url.pathname.slice(1))
+    ) {
+      return url.pathname.slice(1);
+    }
+  } catch {
+    // não é URL — tenta extrair com regex direto
+    const m = s.match(/[a-zA-Z0-9_-]{11}/);
+    if (m) return m[0];
+  }
+  return null;
 }
 
 function PickerModal({
