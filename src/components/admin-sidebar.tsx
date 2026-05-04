@@ -12,8 +12,10 @@ import {
   Link2,
   Megaphone,
   MessageCircle,
+  PackageCheck,
   PlaySquare,
   Radio,
+  ScrollText,
   Settings,
   Sparkles,
   Trophy,
@@ -53,6 +55,16 @@ const groups = [
     items: [
       { href: "/admin/students", label: "Alunos", icon: Users },
       { href: "/admin/cohorts", label: "Turmas", icon: Layers },
+      {
+        href: "/admin/products-mapping",
+        label: "Produtos → Turmas",
+        icon: PackageCheck,
+      },
+      {
+        href: "/admin/access-logs",
+        label: "Logs de acesso",
+        icon: ScrollText,
+      },
     ],
   },
   {

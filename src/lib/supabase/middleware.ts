@@ -62,7 +62,10 @@ export async function updateSession(request: NextRequest) {
 
   const isPublicApi =
     pathname.startsWith("/api/webhooks") ||
-    pathname.startsWith("/api/auth/one-click");
+    pathname.startsWith("/api/auth/one-click") ||
+    pathname.startsWith("/api/internal") ||
+    pathname.startsWith("/api/unnichat") ||
+    pathname.startsWith("/api/cron");
   // Encurtador: /l/{slug} é público — link vem pelo WhatsApp/Unnichat
   // antes do user ter sessão. O route handler faz o redirect 302 e o
   // middleware do destino (ex: /api/auth/one-click) cuida da auth.
