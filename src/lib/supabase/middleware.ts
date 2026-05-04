@@ -44,16 +44,21 @@ export async function updateSession(request: NextRequest) {
   // a sessão já está válida e o user precisa ficar lá pra definir senha.
   const isAuthRoute =
     pathname.startsWith("/login") ||
+    pathname.startsWith("/migracao") ||
     pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/auth/callback");
 
   // Rotas que sempre permitem acesso, com ou sem sessão.
   // /auth/hash-callback é pública E não redireciona user logado pra fora
   // (precisa rodar o JS que troca a sessão antes).
+  // /auto-login é o login simplificado pra automacao Unnichat (URL com
+  // email + senha embutida) — precisa rodar mesmo sem sessao previa.
   const isPublicAuthRoute =
     isAuthRoute ||
     pathname.startsWith("/reset-password") ||
-    pathname.startsWith("/auth/hash-callback");
+    pathname.startsWith("/auth/recover") ||
+    pathname.startsWith("/auth/hash-callback") ||
+    pathname.startsWith("/auto-login");
 
   const isPublicApi =
     pathname.startsWith("/api/webhooks") ||
