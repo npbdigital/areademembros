@@ -5,6 +5,10 @@
     {
       "path": "/api/cron/drip-notifications",
       "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/cron/live-sessions-notify",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

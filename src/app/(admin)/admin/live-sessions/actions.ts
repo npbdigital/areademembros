@@ -114,6 +114,13 @@ function parseRecurrence(formData: FormData): Recurrence {
     : "none";
 }
 
+function parseDuration(formData: FormData): number {
+  const raw = strField(formData, "duration_minutes");
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n)) return 90;
+  return Math.min(480, Math.max(15, n));
+}
+
 /** Cria uma monitoria + linhas na junção pra cada cohort selecionada. */
 export async function createLiveSessionAction(
   _prev: ActionResult | null,
@@ -127,6 +134,7 @@ export async function createLiveSessionAction(
     const title = strField(formData, "title");
     const description = nullableStr(formData, "description");
     const scheduledAt = parseFormDateTime(nullableStr(formData, "scheduled_at"));
+    const durationMinutes = parseDuration(formData);
     const zoomMeetingId = strField(formData, "zoom_meeting_id");
     const zoomPassword = nullableStr(formData, "zoom_password");
     const recurrence = parseRecurrence(formData);
@@ -136,11 +144,11 @@ export async function createLiveSessionAction(
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (!zoomMeetingId)
       return { ok: false, error: "Meeting ID do Zoom é obrigatório." };
-    if (recurrence !== "none" && !scheduledAt) {
+    if (!scheduledAt) {
       return {
         ok: false,
         error:
-          "Pra recorrência funcionar, defina o horário previsto (vai ser usado pra gerar as próximas).",
+          "Horário previsto é obrigatório (status vira AO VIVO automaticamente nele).",
       };
     }
 
@@ -151,6 +159,7 @@ export async function createLiveSessionAction(
         title,
         description,
         scheduled_at: scheduledAt,
+        duration_minutes: durationMinutes,
         zoom_meeting_id: zoomMeetingId.replace(/\s/g, ""),
         zoom_password: zoomPassword,
         status: "scheduled",
@@ -200,6 +209,7 @@ export async function updateLiveSessionAction(
     const title = strField(formData, "title");
     const description = nullableStr(formData, "description");
     const scheduledAt = parseFormDateTime(nullableStr(formData, "scheduled_at"));
+    const durationMinutes = parseDuration(formData);
     const zoomMeetingId = strField(formData, "zoom_meeting_id");
     const zoomPassword = nullableStr(formData, "zoom_password");
     const recurrence = parseRecurrence(formData);
@@ -209,6 +219,9 @@ export async function updateLiveSessionAction(
     if (!title) return { ok: false, error: "Título é obrigatório." };
     if (!zoomMeetingId)
       return { ok: false, error: "Meeting ID do Zoom é obrigatório." };
+    if (!scheduledAt) {
+      return { ok: false, error: "Horário previsto é obrigatório." };
+    }
 
     const { error } = await sb
       .schema("membros")
@@ -217,6 +230,7 @@ export async function updateLiveSessionAction(
         title,
         description,
         scheduled_at: scheduledAt,
+        duration_minutes: durationMinutes,
         zoom_meeting_id: zoomMeetingId.replace(/\s/g, ""),
         zoom_password: zoomPassword,
         recurrence,
@@ -246,81 +260,28 @@ export async function updateLiveSessionAction(
 }
 
 /**
- * Inicia → status='live' + notifica push pra TODOS alunos das cohorts
- * associadas (com matrícula ativa).
+ * Cancela monitoria — override manual. Status no DB vira 'cancelled' e
+ * a derivação computeLiveStatus respeita esse override absoluto. Use pra
+ * cancelar antes do horário ou interromper antes do tempo previsto.
  */
-export async function startLiveSessionAction(
+export async function cancelLiveSessionAction(
   id: string,
 ): Promise<ActionResult> {
   try {
     await assertAdmin();
     const sb = createAdminClient();
 
-    const { data: sessionRow } = await sb
-      .schema("membros")
-      .from("live_sessions")
-      .select("id, title, status")
-      .eq("id", id)
-      .maybeSingle();
-    const session = sessionRow as
-      | { id: string; title: string; status: string }
-      | null;
-    if (!session) return { ok: false, error: "Monitoria não encontrada." };
-    if (session.status === "ended" || session.status === "cancelled") {
-      return { ok: false, error: "Monitoria já encerrada — crie uma nova." };
-    }
-    if (session.status === "live") return { ok: true }; // idempotente
-
-    // Pega cohorts associadas
-    const { data: linkRows } = await sb
-      .schema("membros")
-      .from("live_session_cohorts")
-      .select("cohort_id")
-      .eq("session_id", id);
-    const cohortIds = ((linkRows ?? []) as Array<{ cohort_id: string }>)
-      .map((r) => r.cohort_id);
-    if (cohortIds.length === 0) {
-      return { ok: false, error: "Monitoria sem turmas associadas." };
-    }
-
     const nowIso = new Date().toISOString();
     const { error } = await sb
       .schema("membros")
       .from("live_sessions")
       .update({
-        status: "live",
-        started_at: nowIso,
+        status: "cancelled",
+        ended_at: nowIso,
         updated_at: nowIso,
       })
       .eq("id", id);
     if (error) return { ok: false, error: error.message };
-
-    // Notifica alunos de TODAS as cohorts (deduplica por user)
-    const { data: enrollments } = await sb
-      .schema("membros")
-      .from("enrollments")
-      .select("user_id, expires_at")
-      .in("cohort_id", cohortIds)
-      .eq("is_active", true);
-    const userIdsSet = new Set<string>();
-    for (const e of (enrollments ?? []) as Array<{
-      user_id: string;
-      expires_at: string | null;
-    }>) {
-      if (e.expires_at === null || new Date(e.expires_at) > new Date()) {
-        userIdsSet.add(e.user_id);
-      }
-    }
-    const userIds = Array.from(userIdsSet);
-
-    if (userIds.length > 0) {
-      await tryNotifyMany(userIds, {
-        title: "🔴 Monitoria ao vivo agora",
-        body: session.title,
-        link: `/monitorias/${id}`,
-        pushCategory: "broadcast",
-      });
-    }
 
     revalidatePath("/admin/live-sessions");
     revalidatePath("/monitorias", "layout");
@@ -332,106 +293,169 @@ export async function startLiveSessionAction(
 }
 
 /**
- * Encerra → status='ended'. Se tinha recurrence != none, gera próxima
- * ocorrência (mesmas cohorts, mesmo zoom, scheduled_at += intervalo).
+ * Cria a próxima ocorrência de uma série recorrente. Chamado pelo cron
+ * quando a sessão atual termina (computado por scheduled_at + duration).
+ * Idempotente via flag `successor_created_at`.
+ *
+ * Exportado pra reuso no cron — não é uma server action propriamente.
  */
-export async function endLiveSessionAction(
+export async function generateNextRecurrenceIfNeeded(
   id: string,
-): Promise<ActionResult<{ nextSessionId: string | null }>> {
-  try {
-    const adminId = await assertAdmin();
-    const sb = createAdminClient();
+): Promise<{ nextSessionId: string | null }> {
+  const sb = createAdminClient();
 
-    const { data: sessionRow } = await sb
-      .schema("membros")
-      .from("live_sessions")
-      .select(
-        "id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, recurrence",
-      )
-      .eq("id", id)
-      .maybeSingle();
-    const session = sessionRow as
-      | {
-          id: string;
-          title: string;
-          description: string | null;
-          scheduled_at: string | null;
-          zoom_meeting_id: string;
-          zoom_password: string | null;
-          status: string;
-          recurrence: Recurrence;
-        }
-      | null;
-    if (!session) return { ok: false, error: "Monitoria não encontrada." };
-
-    const nowIso = new Date().toISOString();
-    const { error } = await sb
-      .schema("membros")
-      .from("live_sessions")
-      .update({
-        status: "ended",
-        ended_at: nowIso,
-        updated_at: nowIso,
-      })
-      .eq("id", id);
-    if (error) return { ok: false, error: error.message };
-
-    // Gera próxima ocorrência se for recorrente E tem horário previsto
-    let nextSessionId: string | null = null;
-    if (session.recurrence !== "none" && session.scheduled_at) {
-      const nextScheduled = nextOccurrence(
-        session.scheduled_at,
-        session.recurrence,
-      );
-      if (nextScheduled) {
-        // Pega cohorts da session original
-        const { data: linkRows } = await sb
-          .schema("membros")
-          .from("live_session_cohorts")
-          .select("cohort_id")
-          .eq("session_id", id);
-        const cohortIds = (
-          (linkRows ?? []) as Array<{ cohort_id: string }>
-        ).map((r) => r.cohort_id);
-
-        if (cohortIds.length > 0) {
-          const { data: nextRow, error: insErr } = await sb
-            .schema("membros")
-            .from("live_sessions")
-            .insert({
-              title: session.title,
-              description: session.description,
-              scheduled_at: nextScheduled,
-              zoom_meeting_id: session.zoom_meeting_id,
-              zoom_password: session.zoom_password,
-              status: "scheduled",
-              recurrence: session.recurrence,
-              created_by: adminId,
-            })
-            .select("id")
-            .single();
-          if (!insErr && nextRow) {
-            nextSessionId = (nextRow as { id: string }).id;
-            await sb
-              .schema("membros")
-              .from("live_session_cohorts")
-              .insert(
-                cohortIds.map((cid) => ({
-                  session_id: nextSessionId,
-                  cohort_id: cid,
-                })),
-              );
-          }
-        }
+  const { data: sessionRow } = await sb
+    .schema("membros")
+    .from("live_sessions")
+    .select(
+      "id, title, description, scheduled_at, duration_minutes, zoom_meeting_id, zoom_password, status, recurrence, successor_created_at, created_by",
+    )
+    .eq("id", id)
+    .maybeSingle();
+  const session = sessionRow as
+    | {
+        id: string;
+        title: string;
+        description: string | null;
+        scheduled_at: string | null;
+        duration_minutes: number | null;
+        zoom_meeting_id: string;
+        zoom_password: string | null;
+        status: string;
+        recurrence: Recurrence;
+        successor_created_at: string | null;
+        created_by: string | null;
       }
-    }
-
-    revalidatePath("/admin/live-sessions");
-    revalidatePath("/monitorias", "layout");
-    return { ok: true, data: { nextSessionId } };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+    | null;
+  if (!session) return { nextSessionId: null };
+  if (session.successor_created_at) return { nextSessionId: null };
+  if (session.recurrence === "none" || !session.scheduled_at) {
+    return { nextSessionId: null };
   }
+  if (session.status === "cancelled") return { nextSessionId: null };
+
+  const nextScheduled = nextOccurrence(session.scheduled_at, session.recurrence);
+  if (!nextScheduled) return { nextSessionId: null };
+
+  // Pega cohorts da session original
+  const { data: linkRows } = await sb
+    .schema("membros")
+    .from("live_session_cohorts")
+    .select("cohort_id")
+    .eq("session_id", id);
+  const cohortIds = ((linkRows ?? []) as Array<{ cohort_id: string }>).map(
+    (r) => r.cohort_id,
+  );
+  if (cohortIds.length === 0) return { nextSessionId: null };
+
+  const { data: nextRow, error: insErr } = await sb
+    .schema("membros")
+    .from("live_sessions")
+    .insert({
+      title: session.title,
+      description: session.description,
+      scheduled_at: nextScheduled,
+      duration_minutes: session.duration_minutes ?? 90,
+      zoom_meeting_id: session.zoom_meeting_id,
+      zoom_password: session.zoom_password,
+      status: "scheduled",
+      recurrence: session.recurrence,
+      created_by: session.created_by,
+    })
+    .select("id")
+    .single();
+  if (insErr || !nextRow) return { nextSessionId: null };
+
+  const nextId = (nextRow as { id: string }).id;
+  await sb
+    .schema("membros")
+    .from("live_session_cohorts")
+    .insert(
+      cohortIds.map((cid) => ({
+        session_id: nextId,
+        cohort_id: cid,
+      })),
+    );
+
+  await sb
+    .schema("membros")
+    .from("live_sessions")
+    .update({ successor_created_at: new Date().toISOString() })
+    .eq("id", id);
+
+  return { nextSessionId: nextId };
+}
+
+/**
+ * Notifica alunos elegíveis pra essa sessão de que ela está AO VIVO.
+ * Idempotente via flag `live_notified_at`. Exportado pra reuso no cron.
+ */
+export async function notifyLiveSessionStartedIfNeeded(
+  id: string,
+): Promise<{ notified: number }> {
+  const sb = createAdminClient();
+
+  const { data: sessionRow } = await sb
+    .schema("membros")
+    .from("live_sessions")
+    .select("id, title, status, live_notified_at")
+    .eq("id", id)
+    .maybeSingle();
+  const session = sessionRow as
+    | {
+        id: string;
+        title: string;
+        status: string;
+        live_notified_at: string | null;
+      }
+    | null;
+  if (!session) return { notified: 0 };
+  if (session.live_notified_at) return { notified: 0 };
+  if (session.status === "cancelled") return { notified: 0 };
+
+  const { data: linkRows } = await sb
+    .schema("membros")
+    .from("live_session_cohorts")
+    .select("cohort_id")
+    .eq("session_id", id);
+  const cohortIds = ((linkRows ?? []) as Array<{ cohort_id: string }>).map(
+    (r) => r.cohort_id,
+  );
+  if (cohortIds.length === 0) return { notified: 0 };
+
+  const { data: enrollments } = await sb
+    .schema("membros")
+    .from("enrollments")
+    .select("user_id, expires_at")
+    .in("cohort_id", cohortIds)
+    .eq("is_active", true);
+  const userIdsSet = new Set<string>();
+  for (const e of (enrollments ?? []) as Array<{
+    user_id: string;
+    expires_at: string | null;
+  }>) {
+    if (e.expires_at === null || new Date(e.expires_at) > new Date()) {
+      userIdsSet.add(e.user_id);
+    }
+  }
+  const userIds = Array.from(userIdsSet);
+
+  if (userIds.length > 0) {
+    await tryNotifyMany(userIds, {
+      title: "🔴 Monitoria ao vivo agora",
+      body: session.title,
+      link: `/monitorias/${id}`,
+      pushCategory: "broadcast",
+    });
+  }
+
+  await sb
+    .schema("membros")
+    .from("live_sessions")
+    .update({ live_notified_at: new Date().toISOString() })
+    .eq("id", id);
+
+  return { notified: userIds.length };
 }
 
 export async function deleteLiveSessionAction(

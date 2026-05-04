@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { LiveSessionRowActions } from "@/components/admin/live-session-row-actions";
 import { CreateLiveSessionForm } from "@/components/admin/create-live-session-form";
 import { formatDateTimeBrt } from "@/lib/format-date";
+import { computeLiveStatus } from "@/lib/live-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ interface SessionRow {
   title: string;
   description: string | null;
   scheduled_at: string | null;
+  duration_minutes: number | null;
   zoom_meeting_id: string;
   zoom_password: string | null;
   status: string;
@@ -41,7 +43,7 @@ export default async function AdminLiveSessionsPage() {
       .schema("membros")
       .from("live_sessions")
       .select(
-        "id, title, description, scheduled_at, zoom_meeting_id, zoom_password, status, recurrence, started_at, ended_at, created_at",
+        "id, title, description, scheduled_at, duration_minutes, zoom_meeting_id, zoom_password, status, recurrence, started_at, ended_at, created_at",
       )
       .order("scheduled_at", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false }),
@@ -94,10 +96,19 @@ export default async function AdminLiveSessionsPage() {
     sessionCohorts.set(row.session_id, arr);
   }
 
-  const live = sessions.filter((s) => s.status === "live");
-  const scheduled = sessions.filter((s) => s.status === "scheduled");
-  const past = sessions.filter(
-    (s) => s.status === "ended" || s.status === "cancelled",
+  // Status COMPUTADO a partir de scheduled_at + duration. O status no DB
+  // só interessa pra override 'cancelled'. Pré-computa pra usar no filtro
+  // + repassar pro componente de linha.
+  const sessionsWithStatus = sessions.map((s) => ({
+    session: s,
+    computedStatus: computeLiveStatus(s),
+  }));
+  const live = sessionsWithStatus.filter((x) => x.computedStatus === "live");
+  const scheduled = sessionsWithStatus.filter(
+    (x) => x.computedStatus === "scheduled",
+  );
+  const past = sessionsWithStatus.filter(
+    (x) => x.computedStatus === "ended" || x.computedStatus === "cancelled",
   );
 
   return (
@@ -119,11 +130,11 @@ export default async function AdminLiveSessionsPage() {
           Lives via Zoom
         </h1>
         <p className="mt-1 text-sm text-npb-text-muted">
-          Aluno só vê monitoria das turmas em que está matriculado. A
-          liberação é manual: clique <strong>Iniciar agora</strong> no horário
-          que você quiser começar — alunos das turmas recebem notificação push
-          na hora. Se for recorrente, ao encerrar criamos a próxima
-          ocorrência automaticamente.
+          Aluno só vê monitoria das turmas em que está matriculado. Status
+          vira <strong>AO VIVO</strong> automaticamente no horário programado e
+          alunos recebem push push pra entrar pelo app do Zoom. Após a duração
+          configurada, vira <strong>Encerrada</strong>; se for recorrente,
+          criamos a próxima ocorrência automaticamente.
         </p>
       </header>
 
@@ -140,11 +151,12 @@ export default async function AdminLiveSessionsPage() {
             🔴 Ao vivo agora ({live.length})
           </h2>
           <ul className="space-y-2">
-            {live.map((s) => (
+            {live.map((x) => (
               <SessionRow
-                key={s.id}
-                session={s}
-                cohortNames={sessionCohorts.get(s.id) ?? []}
+                key={x.session.id}
+                session={x.session}
+                computedStatus={x.computedStatus}
+                cohortNames={sessionCohorts.get(x.session.id) ?? []}
               />
             ))}
           </ul>
@@ -161,11 +173,12 @@ export default async function AdminLiveSessionsPage() {
           </p>
         ) : (
           <ul className="space-y-2">
-            {scheduled.map((s) => (
+            {scheduled.map((x) => (
               <SessionRow
-                key={s.id}
-                session={s}
-                cohortNames={sessionCohorts.get(s.id) ?? []}
+                key={x.session.id}
+                session={x.session}
+                computedStatus={x.computedStatus}
+                cohortNames={sessionCohorts.get(x.session.id) ?? []}
               />
             ))}
           </ul>
@@ -178,11 +191,12 @@ export default async function AdminLiveSessionsPage() {
             Encerradas ({past.length})
           </h2>
           <ul className="space-y-2 opacity-70">
-            {past.slice(0, 10).map((s) => (
+            {past.slice(0, 10).map((x) => (
               <SessionRow
-                key={s.id}
-                session={s}
-                cohortNames={sessionCohorts.get(s.id) ?? []}
+                key={x.session.id}
+                session={x.session}
+                computedStatus={x.computedStatus}
+                cohortNames={sessionCohorts.get(x.session.id) ?? []}
               />
             ))}
           </ul>
@@ -194,17 +208,19 @@ export default async function AdminLiveSessionsPage() {
 
 function SessionRow({
   session,
+  computedStatus,
   cohortNames,
 }: {
   session: SessionRow;
+  computedStatus: string;
   cohortNames: string[];
 }) {
   const statusBadge =
-    session.status === "live"
+    computedStatus === "live"
       ? { label: "🔴 AO VIVO", className: "bg-red-500/20 text-red-400" }
-      : session.status === "scheduled"
+      : computedStatus === "scheduled"
         ? { label: "AGENDADA", className: "bg-npb-bg3 text-npb-text-muted" }
-        : session.status === "ended"
+        : computedStatus === "ended"
           ? { label: "ENCERRADA", className: "bg-npb-bg3 text-npb-text-muted" }
           : { label: "CANCELADA", className: "bg-npb-bg3 text-npb-text-muted" };
 
@@ -248,6 +264,8 @@ function SessionRow({
               <>
                 Previsto: {formatDateTimeBrt(session.scheduled_at)}
                 <span className="px-2">·</span>
+                Duração: {session.duration_minutes ?? 90}min
+                <span className="px-2">·</span>
               </>
             )}
             Meeting ID:{" "}
@@ -262,7 +280,7 @@ function SessionRow({
         </div>
         <LiveSessionRowActions
           sessionId={session.id}
-          status={session.status}
+          status={computedStatus}
         />
       </div>
     </li>

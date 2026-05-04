@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-03 — Etapa 28.5: Frame unlock + busca alunos + email Kiwify único
-**Último commit no main:** `e89febf` — feat(etapa28.5): frame unlock + busca alunos + email kiwify unico
+**Última atualização:** 2026-05-04 — Etapa 29: Monitorias auto-status + calendário + deeplink Zoom
+**Último commit no main:** _(pendente push do commit da Etapa 29)_
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -44,7 +44,41 @@ SaaS de área de membros multi-curso, multi-turma, com:
 
 ---
 
+## 🔮 Melhorias futuras (backlog)
+
+- **Rastreamento de presença em monitorias** — hoje sabemos quem foi *avisado* mas não quem *entrou* no Zoom (tudo acontece no app nativo). Solução: criar um Zoom Marketplace App e assinar webhooks `meeting.participant_joined` / `meeting.participant_left`, gravar em `live_session_attendances (session_id, user_id, joined_at, left_at)`. Permitiria stats por aluno + estatística por monitoria. Cliente abriu mão pra MVP — dá pra adicionar depois sem mexer no fluxo atual.
+
+---
+
 ## ✅ Etapas concluídas
+
+### Etapa 29 — Monitorias auto-status + calendário + deeplink Zoom (2026-05-04)
+
+**Por que:** Zoom Web SDK Component View é frágil — bloqueio de cookies de terceiros (Brave/Safari), mobile quebrado (viewSizes fixos 1000×600), exige clique manual de "Iniciar". Pra alunos menos técnicos virou fonte constante de suporte. Decisão: **abandonar o embed**, usar deeplink universal pro app nativo do Zoom + automatizar o ciclo de vida da sessão.
+
+**Mudanças:**
+
+- **DB:** `live_sessions.duration_minutes INT NOT NULL DEFAULT 90` + `live_notified_at TIMESTAMPTZ` + `successor_created_at TIMESTAMPTZ` (índice parcial pros pendentes de notificação).
+
+- **Status agora é DERIVADO** do tempo real via `computeLiveStatus(scheduled_at, duration_minutes, status)` em `src/lib/live-sessions.ts`:
+  - `cancelled` (override absoluto do DB)
+  - `scheduled` (antes do início, com buffer de 5min pré-início pra contar como "live")
+  - `live` (entre início e início+duração)
+  - `ended` (depois)
+
+- **Removido:** botões "Iniciar agora" / "Encerrar". `startLiveSessionAction` e `endLiveSessionAction` foram descontinuadas. Substituídas por `cancelLiveSessionAction` (override manual). Admin agora só agenda — sistema cuida do resto.
+
+- **Cron novo `/api/cron/live-sessions-notify`** rodando a cada 5 min (vercel.json `*/5 * * * *`). Duas tarefas, ambas idempotentes:
+  1. Quando sessão cruza scheduled_at e `live_notified_at IS NULL` → dispara push pra alunos das cohorts elegíveis com link `/monitorias/{id}` e marca `live_notified_at = now()`.
+  2. Quando sessão termina (computado), tem recurrence != 'none' e `successor_created_at IS NULL` → cria a próxima ocorrência da série copiando título/descrição/zoom/cohorts e marca `successor_created_at = now()`.
+
+- **Página do aluno `/monitorias/[id]`** reescrita: zero embed. Card grande dourado "Entrar no Zoom" → URL universal `zoom.us/j/{meetingNumber}?pwd={password}` que abre app desktop/mobile via custom protocol; cai no webclient como fallback. Status badge calculado em tempo real.
+
+- **Página `/monitorias`** virou calendário mensal (`MonitoriaCalendar` em `src/components/student/`). Mostra todas as sessões dos próximos 90 dias + 60 passados em grid de meses, com cores por status. Aluno navega meses, click no item → detalhe. Abaixo tem seção "Próximas" + card AO VIVO (se houver) com CTA direto pro Zoom.
+
+- **Form admin** ganhou input "Duração (min)" (15–480, default 90). Horário previsto agora é obrigatório (status depende dele). Texto explicativo atualizado: "Status vira AO VIVO automaticamente neste horário".
+
+- **Deletado:** `src/components/student/zoom-embed-player.tsx`, `src/app/api/zoom/signature/route.ts`, dir `/api/zoom/`. O package `@zoom/meetingsdk` continua no package.json mas não é mais carregado — pode remover depois pra reduzir bundle.
 
 ### Etapa 28.5 — Frame unlock + busca alunos + email Kiwify único (2026-05-03)
 

@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, Clock } from "lucide-react";
+import { Calendar, ChevronLeft, Clock, ExternalLink, Video } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { ZoomEmbedPlayer } from "@/components/student/zoom-embed-player";
 import { formatDateTimeBrt } from "@/lib/format-date";
+import { buildZoomJoinUrl, computeLiveStatus } from "@/lib/live-sessions";
 
 export const dynamic = "force-dynamic";
 
@@ -12,12 +12,14 @@ interface SessionRow {
   title: string;
   description: string | null;
   scheduled_at: string | null;
+  duration_minutes: number | null;
+  zoom_meeting_id: string;
+  zoom_password: string | null;
   status: string;
-  started_at: string | null;
   ended_at: string | null;
 }
 
-export default async function MonitoriaPlayerPage({
+export default async function MonitoriaPage({
   params,
 }: {
   params: { id: string };
@@ -33,7 +35,7 @@ export default async function MonitoriaPlayerPage({
     .schema("membros")
     .from("live_sessions")
     .select(
-      "id, title, description, scheduled_at, status, started_at, ended_at",
+      "id, title, description, scheduled_at, duration_minutes, zoom_meeting_id, zoom_password, status, ended_at",
     )
     .eq("id", params.id)
     .maybeSingle();
@@ -41,8 +43,17 @@ export default async function MonitoriaPlayerPage({
   const session = sessionRow as SessionRow | null;
   if (!session) notFound();
 
+  const status = computeLiveStatus(session);
+  const joinUrl = buildZoomJoinUrl(session.zoom_meeting_id, session.zoom_password);
+  const durationMin = session.duration_minutes ?? 90;
+  const scheduledEndIso = session.scheduled_at
+    ? new Date(
+        new Date(session.scheduled_at).getTime() + durationMin * 60_000,
+      ).toISOString()
+    : null;
+
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6">
       <Link
         href="/monitorias"
         className="inline-flex items-center gap-1 text-sm text-npb-text-muted hover:text-npb-gold"
@@ -53,19 +64,25 @@ export default async function MonitoriaPlayerPage({
 
       <header>
         <div className="flex flex-wrap items-center gap-2">
-          {session.status === "live" && (
+          {status === "live" && (
             <span className="inline-flex items-center gap-1 rounded bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-red-400">
               🔴 AO VIVO
             </span>
           )}
-          {session.status === "scheduled" && (
+          {status === "scheduled" && (
             <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-npb-text-muted">
-              Aguardando início
+              <Calendar className="h-3 w-3" />
+              Agendada
             </span>
           )}
-          {(session.status === "ended" || session.status === "cancelled") && (
+          {status === "ended" && (
             <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-npb-text-muted">
-              {session.status === "ended" ? "Encerrada" : "Cancelada"}
+              Encerrada
+            </span>
+          )}
+          {status === "cancelled" && (
+            <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-npb-text-muted">
+              Cancelada
             </span>
           )}
         </div>
@@ -77,40 +94,84 @@ export default async function MonitoriaPlayerPage({
             {session.description}
           </p>
         )}
-        {session.scheduled_at && (
-          <p className="mt-2 inline-flex items-center gap-1 text-xs text-npb-text-muted">
-            <Clock className="h-3.5 w-3.5" />
-            Previsto: {formatDateTimeBrt(session.scheduled_at)}
-          </p>
-        )}
       </header>
 
-      {session.status === "live" ? (
-        <ZoomEmbedPlayer sessionId={session.id} />
-      ) : session.status === "scheduled" ? (
-        <div className="rounded-2xl border border-dashed border-npb-border bg-npb-bg2/50 p-10 text-center">
+      {status === "live" && (
+        <div className="rounded-2xl border border-red-500/40 bg-gradient-to-br from-red-500/15 to-transparent p-6 text-center sm:p-8">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-red-500/20">
+            <Video className="h-6 w-6 text-red-400" />
+          </div>
+          <h2 className="text-lg font-bold text-npb-text">
+            Está rolando agora!
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-npb-text-muted">
+            Toque no botão abaixo pra entrar pelo app do Zoom — vídeo, áudio e
+            chat funcionam de boa em qualquer dispositivo.
+          </p>
+          <a
+            href={joinUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-5 inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-md bg-npb-gold px-4 py-3 text-sm font-bold text-black hover:bg-npb-gold-light"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Entrar no Zoom
+          </a>
+          <SessionTimingInfo
+            scheduledAtIso={session.scheduled_at}
+            durationMin={durationMin}
+          />
+        </div>
+      )}
+
+      {status === "scheduled" && (
+        <div className="rounded-2xl border border-dashed border-npb-border bg-npb-bg2/50 p-8 text-center">
           <Clock className="mx-auto h-10 w-10 text-npb-gold opacity-60" />
           <h2 className="mt-3 text-lg font-bold text-npb-text">
             Aguardando início
           </h2>
-          <p className="mt-2 text-sm text-npb-text-muted">
-            A monitoria ainda não começou. Você vai receber uma notificação
-            push assim que liberar — pode deixar essa página aberta ou voltar
-            depois.
+          <p className="mx-auto mt-2 max-w-md text-sm text-npb-text-muted">
+            A monitoria vai começar no horário programado. Você vai receber uma
+            notificação push assim que estiver no ar — pode deixar essa página
+            aberta ou voltar depois.
           </p>
+          <SessionTimingInfo
+            scheduledAtIso={session.scheduled_at}
+            durationMin={durationMin}
+          />
         </div>
-      ) : (
-        <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-10 text-center">
+      )}
+
+      {(status === "ended" || status === "cancelled") && (
+        <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-8 text-center">
           <h2 className="text-lg font-bold text-npb-text">
-            Monitoria encerrada
+            {status === "ended" ? "Monitoria encerrada" : "Monitoria cancelada"}
           </h2>
-          <p className="mt-2 text-sm text-npb-text-muted">
-            {session.ended_at
-              ? `Encerrou em ${formatDateTimeBrt(session.ended_at)}`
-              : "Esta monitoria já foi encerrada."}
+          <p className="mx-auto mt-2 max-w-md text-sm text-npb-text-muted">
+            {status === "ended"
+              ? scheduledEndIso
+                ? `Terminou em ${formatDateTimeBrt(scheduledEndIso)}.`
+                : "Esta monitoria já foi encerrada."
+              : "Esta monitoria foi cancelada antes do horário."}
           </p>
         </div>
       )}
     </div>
+  );
+}
+
+function SessionTimingInfo({
+  scheduledAtIso,
+  durationMin,
+}: {
+  scheduledAtIso: string | null;
+  durationMin: number;
+}) {
+  if (!scheduledAtIso) return null;
+  return (
+    <p className="mt-4 inline-flex items-center gap-2 text-xs text-npb-text-muted">
+      <Clock className="h-3.5 w-3.5" />
+      {formatDateTimeBrt(scheduledAtIso)} · {durationMin} min
+    </p>
   );
 }

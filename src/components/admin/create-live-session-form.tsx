@@ -87,42 +87,64 @@ export function CreateLiveSessionForm({ cohorts }: Props) {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="space-y-1.5">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="scheduled_at" className="text-npb-text">
-            Horário previsto (BRT)
+            Horário previsto (BRT) <span className="text-npb-gold">*</span>
           </Label>
           <Input
             id="scheduled_at"
             name="scheduled_at"
             type="datetime-local"
+            required
             className="bg-npb-bg3 border-npb-border text-npb-text"
           />
           <p className="text-[10px] text-npb-text-muted">
-            Só pra exibir. Liberação é manual.
+            Status vira AO VIVO automaticamente neste horário. Aluno é
+            notificado e o botão de entrar habilita.
           </p>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="recurrence" className="text-npb-text">
-            Repetir
+          <Label htmlFor="duration_minutes" className="text-npb-text">
+            Duração (min) <span className="text-npb-gold">*</span>
           </Label>
-          <select
-            id="recurrence"
-            name="recurrence"
-            defaultValue="none"
-            className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
-          >
-            <option value="none">Não repetir</option>
-            <option value="daily">Diariamente</option>
-            <option value="weekly">Semanalmente</option>
-            <option value="biweekly">Quinzenalmente</option>
-            <option value="monthly">Mensalmente</option>
-          </select>
+          <Input
+            id="duration_minutes"
+            name="duration_minutes"
+            type="number"
+            min={15}
+            max={480}
+            step={5}
+            defaultValue={90}
+            required
+            className="bg-npb-bg3 border-npb-border text-npb-text"
+          />
           <p className="text-[10px] text-npb-text-muted">
-            Quando você encerrar uma monitoria recorrente, criamos a próxima
-            automaticamente com mesmo horário, turmas e Zoom.
+            Após esse tempo, vira Encerrada.
           </p>
         </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="recurrence" className="text-npb-text">
+          Repetir
+        </Label>
+        <select
+          id="recurrence"
+          name="recurrence"
+          defaultValue="none"
+          className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+        >
+          <option value="none">Não repetir</option>
+          <option value="daily">Diariamente</option>
+          <option value="weekly">Semanalmente</option>
+          <option value="biweekly">Quinzenalmente</option>
+          <option value="monthly">Mensalmente</option>
+        </select>
+        <p className="text-[10px] text-npb-text-muted">
+          Quando esta monitoria encerrar, criamos a próxima automaticamente
+          com mesmo horário, duração, turmas e Zoom.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -166,7 +188,10 @@ export function CreateLiveSessionForm({ cohorts }: Props) {
       {state?.ok && (
         <div className="flex items-start gap-2 rounded-md border border-green-500/40 bg-green-500/10 p-3 text-sm text-green-400">
           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
-          <span>Monitoria criada. Quando for hora, clique em Iniciar.</span>
+          <span>
+            Monitoria criada. No horário marcado, ela vai pra AO VIVO e os
+            alunos recebem notificação automaticamente.
+          </span>
         </div>
       )}
 
