@@ -33,6 +33,8 @@ export interface PostCardData {
   pageSlug: string;
   pageId: string;
   pageTitle: string;
+  /** 'achievement' = card de conquista (renderiza HTML inline). null = normal. */
+  cardType?: string | null;
 }
 
 interface Props {
@@ -55,6 +57,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
   const canDelete = isAuthor || isElevatedRole(currentRole);
 
   const embed = videoEmbedUrl(post.videoUrl);
+  const isAchievement = post.cardType === "achievement";
   const preview = stripHtml(post.contentHtml ?? "").slice(0, 240);
   const firstImageUrl = extractFirstImage(post.contentHtml);
   const detailUrl = `/community/${post.pageSlug}/post/${post.id}`;
@@ -99,7 +102,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
       }`}
     >
       <div className="p-5">
-        {/* Linha de topo: pin + título + menu */}
+        {/* Header: pin + autor + menu */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {post.isPinned && (
@@ -108,12 +111,34 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
                 Fixado
               </span>
             )}
-            <Link
-              href={detailUrl}
-              className="block text-lg font-bold leading-tight text-npb-text hover:text-npb-gold"
-            >
-              {post.title}
-            </Link>
+            {/* Autor primeiro */}
+            <div className="flex items-center gap-2.5">
+              <DecoratedAvatar
+                src={post.authorAvatarUrl}
+                decorationUrl={post.authorDecorationUrl}
+                name={post.authorName}
+                size={32}
+              />
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span className="text-sm font-semibold text-npb-text">
+                  {post.authorName}
+                </span>
+                <LevelBadge level={post.authorLevel} size={14} />
+                <span className="text-xs text-npb-text-muted">
+                  · {timeAgoPtBr(post.createdAt)}
+                </span>
+              </div>
+            </div>
+            {/* Título embaixo do autor (só pra posts normais — achievement
+                tem o titulo dentro do proprio card HTML) */}
+            {!isAchievement && (
+              <Link
+                href={detailUrl}
+                className="mt-2 block text-lg font-bold leading-tight text-npb-text hover:text-npb-gold"
+              >
+                {post.title}
+              </Link>
+            )}
           </div>
 
           {(canEdit || canDelete) && (
@@ -171,31 +196,26 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
             </div>
           )}
         </div>
-
-        {/* Linha do autor */}
-        <div className="mt-3 flex items-center gap-2.5">
-          <DecoratedAvatar
-            src={post.authorAvatarUrl}
-            decorationUrl={post.authorDecorationUrl}
-            name={post.authorName}
-            size={32}
-          />
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            <span className="text-sm font-semibold text-npb-text">
-              {post.authorName}
-            </span>
-            <LevelBadge level={post.authorLevel} size={14} />
-            <span className="text-xs text-npb-text-muted">
-              · {timeAgoPtBr(post.createdAt)}
-            </span>
-          </div>
-        </div>
       </div>
 
-      {/* Imagem hero (full width). Vai abaixo do header — fica chamativa
-          como uma capa de post. Quando há HTML rico com várias imagens,
-          mostra só a primeira. */}
-      {firstImageUrl && (
+      {/* Achievement: renderiza o HTML completo inline (card com avatar+
+          frame composto, label "Você conquistou um marco importante", nome
+          + descrição). Conteúdo é gerado pelo nosso shareAchievementAction
+          server-side (escapeHtml em strings do user). Não extrai img/preview. */}
+      {isAchievement && post.contentHtml && (
+        <Link
+          href={detailUrl}
+          className="block px-5 pb-4 pt-1 [&_h2]:!text-xl [&_img]:mx-auto"
+        >
+          <div
+            className="achievement-card-rendered"
+            dangerouslySetInnerHTML={{ __html: post.contentHtml }}
+          />
+        </Link>
+      )}
+
+      {/* Imagem hero (full width) — só posts normais */}
+      {!isAchievement && firstImageUrl && (
         <Link href={detailUrl} className="block bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -207,8 +227,8 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         </Link>
       )}
 
-      {/* Body */}
-      {(preview || embed) && (
+      {/* Body — só posts normais */}
+      {!isAchievement && (preview || embed) && (
         <div className="px-5 pb-5 pt-4">
           {preview && (
             <Link

@@ -52,7 +52,7 @@ export default async function CommunityPagePage({
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, card_type, created_at",
     )
     .eq("page_id", page.id)
     .eq("status", "approved")
@@ -71,6 +71,7 @@ export default async function CommunityPagePage({
     likes_count: number;
     replies_count: number;
     is_pinned: boolean;
+    card_type: string | null;
     created_at: string;
   }>;
 
@@ -155,6 +156,7 @@ export default async function CommunityPagePage({
       pageSlug: page.slug ?? params.slug,
       pageId: page.id,
       pageTitle: page.title,
+      cardType: p.card_type,
     };
   });
 

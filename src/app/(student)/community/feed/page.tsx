@@ -23,7 +23,7 @@ export default async function CommunityFeedPage() {
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, card_type, created_at",
     )
     .eq("status", "approved")
     .order("is_pinned", { ascending: false })
@@ -41,6 +41,7 @@ export default async function CommunityFeedPage() {
     likes_count: number;
     replies_count: number;
     is_pinned: boolean;
+    card_type: string | null;
     created_at: string;
   }>;
 
@@ -129,6 +130,7 @@ export default async function CommunityFeedPage() {
       pageSlug: pg.slug,
       pageId: p.page_id,
       pageTitle: pg.title,
+      cardType: p.card_type,
     };
   });
 

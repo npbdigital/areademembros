@@ -168,8 +168,10 @@ export async function shareAchievementAction(params: {
       const avatarSrc =
         userAvatarUrl ??
         "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+      // Avatar a 88% (top/left 6%) pra encaixar no anel interno do frame
+      // sem deixar gap visivel. Mesma proporcao do FrameBadge no popup.
       badgeHtml = `<div style="position:relative;width:200px;height:200px;margin:0 auto 12px;">
-  <img src="${avatarSrc}" alt="" style="position:absolute;top:14%;left:14%;width:72%;height:72%;border-radius:50%;object-fit:cover;background:#1e1e1e;" />
+  <img src="${avatarSrc}" alt="" style="position:absolute;top:6%;left:6%;width:88%;height:88%;border-radius:50%;object-fit:cover;background:#1e1e1e;" />
   <img src="${decoImageUrl}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none;" />
 </div>`;
       labelHtml = `<p style="margin:0;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9922a;">Novo frame desbloqueado${decoName ? ` — ${escapeHtml(decoName)}` : ""}</p>`;
@@ -202,6 +204,7 @@ export async function shareAchievementAction(params: {
         status: "approved",
         approved_by: user.id,
         approved_at: new Date().toISOString(),
+        card_type: "achievement",
       })
       .select("id")
       .single();
