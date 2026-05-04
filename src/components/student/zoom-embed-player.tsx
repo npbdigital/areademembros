@@ -51,8 +51,57 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
   const [status, setStatus] = useState<"loading" | "joining" | "joined" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [joinInfo, setJoinInfo] = useState<JoinInfo | null>(null);
+  // Mobile: Zoom Web SDK Component View tem viewSizes fixos (1000x600) que
+  // quebram a UI em telas pequenas. Detectamos mobile e pulamos o SDK,
+  // mostrando direto o CTA pro app nativo (que e o caminho recomendado
+  // mesmo). Inicia null pra evitar flash desktop->mobile no SSR.
+  const [isMobile, setIsMobile] = useState<boolean | null>(null);
+  // Aluno pode forçar tentar embedar mesmo em mobile (se nao tiver app)
+  const [forceEmbed, setForceEmbed] = useState(false);
 
   useEffect(() => {
+    const mql = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mql.matches);
+    update();
+    mql.addEventListener("change", update);
+    return () => mql.removeEventListener("change", update);
+  }, []);
+
+  // Sempre busca a signature pra ter o joinInfo (mesmo em mobile onde o
+  // embed nao roda — precisamos do meetingNumber+password pro deeplink)
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchInfo() {
+      try {
+        const sigRes = await fetch("/api/zoom/signature", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        const sig = (await sigRes.json()) as SignatureResponse;
+        if (cancelled) return;
+        if (sig.ok && sig.meetingNumber) {
+          setJoinInfo({
+            meetingNumber: sig.meetingNumber,
+            password: sig.password ?? "",
+          });
+        }
+      } catch {
+        // ignora — embed vai tratar erro tambem
+      }
+    }
+    fetchInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    // Desktop OU mobile com forceEmbed: roda o SDK. Caso contrario nao
+    // monta nada (mobile vê só o CTA).
+    if (isMobile === null) return;
+    if (isMobile && !forceEmbed) return;
+
     let cancelled = false;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let zoomClient: any = null;
@@ -71,15 +120,6 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
           throw new Error(sig.error ?? "Falha ao autenticar no Zoom.");
         }
         if (cancelled) return;
-
-        // Guarda info pro botao "Abrir no app" — mostra ao lado do embed
-        // pra aluno que preferir o cliente nativo
-        if (sig.meetingNumber) {
-          setJoinInfo({
-            meetingNumber: sig.meetingNumber,
-            password: sig.password ?? "",
-          });
-        }
 
         // 2. Carrega SDK dinamicamente (não bloqueia render inicial)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -145,9 +185,50 @@ export function ZoomEmbedPlayer({ sessionId }: { sessionId: string }) {
         // ignore
       }
     };
-  }, [sessionId]);
+  }, [sessionId, isMobile, forceEmbed]);
 
   const joinUrl = joinInfo ? buildZoomJoinUrl(joinInfo) : null;
+
+  // Mobile sem forçar embed: card grande com CTA pro app, sem render do SDK
+  if (isMobile === true && !forceEmbed) {
+    return (
+      <div className="rounded-2xl border border-npb-gold/30 bg-gradient-to-br from-npb-gold/10 to-transparent p-6 text-center">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-npb-gold/20">
+          <ExternalLink className="h-6 w-6 text-npb-gold" />
+        </div>
+        <h2 className="text-lg font-bold text-npb-text">
+          Entrar pelo app do Zoom
+        </h2>
+        <p className="mx-auto mt-2 max-w-sm text-xs text-npb-text-muted">
+          A monitoria está ao vivo. No celular, a melhor experiência é pelo
+          app nativo do Zoom — vídeo, áudio e chat funcionam de boa.
+        </p>
+        {joinUrl ? (
+          <a
+            href={joinUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-5 inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-md bg-npb-gold px-4 py-3 text-sm font-bold text-black hover:bg-npb-gold-light"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Abrir no Zoom
+          </a>
+        ) : (
+          <div className="mt-5 inline-flex items-center gap-2 text-xs text-npb-text-muted">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Carregando link…
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setForceEmbed(true)}
+          className="mt-3 block w-full text-[11px] text-npb-text-muted underline-offset-2 hover:text-npb-text hover:underline"
+        >
+          Tentar abrir aqui mesmo no navegador
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
