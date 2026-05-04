@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-04 — Etapa 29: Monitorias auto-status + calendário + deeplink Zoom
-**Último commit no main:** _(pendente push do commit da Etapa 29)_
+**Último commit no main:** `622bec4` — feat(etapa29): monitorias auto-status + calendario + deeplink Zoom
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
