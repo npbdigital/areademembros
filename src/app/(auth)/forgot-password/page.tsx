@@ -7,7 +7,7 @@ import { ArrowLeft, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { forgotPasswordAction, type ActionResult } from "../actions";
-import { NpbLogo } from "@/components/npb-logo";
+import { AuthLogo } from "@/components/auth-logo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
@@ -27,7 +27,7 @@ export default function ForgotPasswordPage() {
   return (
     <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-8 shadow-2xl">
       <div className="mb-8 flex flex-col items-center gap-3">
-        <NpbLogo size="lg" />
+        <AuthLogo />
         <div className="text-center">
           <h1 className="text-2xl font-bold text-npb-text">
             Recuperar senha

@@ -17,6 +17,7 @@ export interface PlatformSettingsFormValues {
   platformName: string;
   platformLogoUrl: string | null;
   platformFaviconUrl: string | null;
+  loginLogoUrl: string | null;
   emailFromAddress: string | null;
   emailFromName: string | null;
   primaryColor: string | null;
@@ -136,9 +137,27 @@ export function PlatformSettingsForm({
             recommendedWidth={400}
             recommendedHeight={120}
             label="Logo da plataforma"
+            preserveAspectRatio
           />
           <p className="text-xs text-npb-text-muted">
             Formato horizontal, ~400×120 px. Usada na sidebar/topbar.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label className="text-npb-text">Logo da tela de login</Label>
+          <CoverUpload
+            name="login_logo_url"
+            defaultValue={init.loginLogoUrl}
+            recommendedWidth={400}
+            recommendedHeight={120}
+            label="Logo do login"
+            preserveAspectRatio
+          />
+          <p className="text-xs text-npb-text-muted">
+            Formato horizontal, ~400×120 px. Aparece no topo das telas de
+            login, recuperação de senha e migração. Se vazio, usa o ícone
+            dourado padrão.
           </p>
         </div>
 

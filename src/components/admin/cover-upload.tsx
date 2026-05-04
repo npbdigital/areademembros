@@ -12,6 +12,12 @@ interface CoverUploadProps {
   recommendedWidth?: number;
   recommendedHeight?: number;
   label?: string;
+  /**
+   * Quando true, mostra a imagem inteira respeitando a proporção real
+   * (object-contain + aspect-[w/h]) em vez de cortar pra um quadrado fixo.
+   * Útil pra logos retangulares onde cortar deforma o desenho.
+   */
+  preserveAspectRatio?: boolean;
 }
 
 const ACCEPT = "image/jpeg,image/jpg,image/png,image/webp";
@@ -35,6 +41,7 @@ export function CoverUpload({
   recommendedWidth = 300,
   recommendedHeight = 420,
   label = "Capa",
+  preserveAspectRatio = false,
 }: CoverUploadProps) {
   const [url, setUrl] = useState<string>(defaultValue ?? "");
   const [uploading, setUploading] = useState(false);
@@ -114,12 +121,25 @@ export function CoverUpload({
       <input type="hidden" name={name} value={url} />
 
       <div className="flex flex-col gap-3 sm:flex-row">
-        {/* Preview */}
+        {/* Preview — modo padrao usa moldura fixa 28x40 com object-cover
+            (corta pra encaixar). Modo preserveAspectRatio usa container
+            largo com aspect ratio real e object-contain (mostra imagem
+            inteira, sem cortes — pra logos retangulares). */}
         <div
           className={cn(
-            "relative h-40 w-28 flex-shrink-0 overflow-hidden rounded-md border bg-npb-bg3",
+            "relative flex-shrink-0 overflow-hidden rounded-md border bg-npb-bg3",
+            preserveAspectRatio
+              ? "w-full max-w-[280px]"
+              : "h-40 w-28",
             url ? "border-npb-gold-dim" : "border-dashed border-npb-border",
           )}
+          style={
+            preserveAspectRatio
+              ? {
+                  aspectRatio: `${recommendedWidth} / ${recommendedHeight}`,
+                }
+              : undefined
+          }
         >
           {url ? (
             <>
@@ -127,7 +147,10 @@ export function CoverUpload({
               <img
                 src={url}
                 alt={label}
-                className="h-full w-full object-cover"
+                className={cn(
+                  "h-full w-full",
+                  preserveAspectRatio ? "object-contain" : "object-cover",
+                )}
               />
               <button
                 type="button"

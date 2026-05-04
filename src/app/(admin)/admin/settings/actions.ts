@@ -57,6 +57,10 @@ export async function updatePlatformSettingsAction(
         value: str(formData, "platform_favicon_url") || null,
       },
       {
+        key: SETTINGS_KEYS.LOGIN_LOGO_URL,
+        value: str(formData, "login_logo_url") || null,
+      },
+      {
         key: SETTINGS_KEYS.EMAIL_FROM_ADDRESS,
         value: str(formData, "email_from_address") || null,
       },

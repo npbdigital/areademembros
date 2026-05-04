@@ -11,6 +11,7 @@ export const SETTINGS_KEYS = {
   PLATFORM_NAME: "platform_name",
   PLATFORM_LOGO_URL: "platform_logo_url",
   PLATFORM_FAVICON_URL: "platform_favicon_url",
+  LOGIN_LOGO_URL: "login_logo_url",
   EMAIL_FROM_ADDRESS: "email_from_address",
   EMAIL_FROM_NAME: "email_from_name",
   PRIMARY_COLOR: "primary_color",
@@ -48,6 +49,7 @@ export interface PlatformSettings {
   platformName: string;
   platformLogoUrl: string | null;
   platformFaviconUrl: string | null;
+  loginLogoUrl: string | null;
   emailFromAddress: string | null;
   emailFromName: string | null;
   primaryColor: string | null;
@@ -83,6 +85,7 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   platformName: "Academia NPB",
   platformLogoUrl: null,
   platformFaviconUrl: null,
+  loginLogoUrl: null,
   emailFromAddress: null,
   emailFromName: null,
   primaryColor: null,
@@ -134,6 +137,7 @@ export async function getPlatformSettings(
     platformLogoUrl: map.get(SETTINGS_KEYS.PLATFORM_LOGO_URL)?.trim() || null,
     platformFaviconUrl:
       map.get(SETTINGS_KEYS.PLATFORM_FAVICON_URL)?.trim() || null,
+    loginLogoUrl: map.get(SETTINGS_KEYS.LOGIN_LOGO_URL)?.trim() || null,
     emailFromAddress:
       map.get(SETTINGS_KEYS.EMAIL_FROM_ADDRESS)?.trim() || null,
     emailFromName: map.get(SETTINGS_KEYS.EMAIL_FROM_NAME)?.trim() || null,
