@@ -8,7 +8,7 @@ import { expiresAtFromDuration } from "@/lib/enrollment";
 import { getPlatformSettings } from "@/lib/settings";
 
 /** Senha padrão atribuída a todo aluno criado via /admin/students/new. */
-const DEFAULT_STUDENT_PASSWORD = "123456";
+const DEFAULT_STUDENT_PASSWORD = "mudar123";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;

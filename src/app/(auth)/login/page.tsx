@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 import { signInAction, type ActionResult } from "../actions";
-import { AuthLogo } from "@/components/auth-logo";
+import { AuthLogo, useAuthLogo } from "@/components/auth-logo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SubmitButton } from "@/components/submit-button";
@@ -24,6 +24,7 @@ function LoginInner() {
   const params = useSearchParams();
   const prefilledEmail = params.get("email") ?? "";
   const queryError = params.get("error") ?? null;
+  const { loginLogoUrl, platformName } = useAuthLogo();
 
   const [state, formAction] = useFormState<ActionResult | null, FormData>(
     signInAction,
@@ -43,7 +44,9 @@ function LoginInner() {
       <div className="mb-8 flex flex-col items-center gap-3">
         <AuthLogo />
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-npb-text">Academia NPB</h1>
+          {!loginLogoUrl && (
+            <h1 className="text-2xl font-bold text-npb-text">{platformName}</h1>
+          )}
           <p className="mt-1 text-sm text-npb-text-muted">
             Entre na sua área de membros
           </p>

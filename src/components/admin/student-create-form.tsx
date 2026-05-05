@@ -132,7 +132,7 @@ export function StudentCreateForm({
           <KeyRound className="mt-0.5 h-4 w-4 flex-shrink-0 text-npb-gold" />
           <div>
             <strong className="text-npb-gold">Senha padrão:</strong> todo aluno
-            criado por aqui recebe a senha <code className="rounded bg-npb-bg3 px-1.5 py-0.5 font-mono">123456</code>. O e-mail de boas-vindas
+            criado por aqui recebe a senha <code className="rounded bg-npb-bg3 px-1.5 py-0.5 font-mono">mudar123</code>. O e-mail de boas-vindas
             mostra essa senha e o link de login. Recomende ao aluno trocar em
             <em> Meu perfil → Trocar senha</em>.
           </div>

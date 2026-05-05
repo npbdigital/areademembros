@@ -18,7 +18,7 @@ export const runtime = "nodejs";
  * para de funcionar (segurança eventual).
  *
  * Fluxo:
- *   1. GET /auto-login?e=aluno@email.com&p=123456
+ *   1. GET /auto-login?e=aluno@email.com&p=mudar123
  *   2. signInWithPassword via Supabase, cookies setados
  *   3. Redireciona pra /dashboard (ou /onboarding se needs_onboarding=true)
  *   4. Se falhar, redireciona pra /login?email=...&error=...

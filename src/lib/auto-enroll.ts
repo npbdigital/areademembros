@@ -2,7 +2,7 @@
  * Lógica de auto-enroll a partir de eventos de compra.
  *
  * Lê de `membros.purchase_events` e atua:
- *  - Compra Aprovada → cria/reativa user (senha 123456) + cria matrícula
+ *  - Compra Aprovada → cria/reativa user (senha mudar123) + cria matrícula
  *  - Compra Reembolsada / Cancelada → desativa matrícula
  *
  * Idempotência:
@@ -19,7 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 import { expiresAtFromDuration } from "@/lib/enrollment";
 
-export const DEFAULT_STUDENT_PASSWORD = "123456";
+export const DEFAULT_STUDENT_PASSWORD = "mudar123";
 
 interface PurchaseEventRow {
   id: string;
@@ -162,7 +162,7 @@ async function handleAccessGrant(
   const durationDays = m.default_expires_days ?? c.default_duration_days;
   const expiresAt = expiresAtFromDuration(durationDays);
 
-  // Resolve user (cria se não existe, com senha padrão 123456)
+  // Resolve user (cria se não existe, com senha padrão mudar123)
   const userResolution = await resolveOrCreateUser(sb, {
     email: ev.email,
     fullName: ev.full_name,
