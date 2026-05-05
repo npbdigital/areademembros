@@ -214,8 +214,21 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         </Link>
       )}
 
-      {/* Imagem hero (full width) — só posts normais */}
-      {!isAchievement && firstImageUrl && (
+      {/* Mídia hero (full width) — só posts normais. Vídeo tem prioridade
+          visual sobre imagem (se tiver os dois, mostra só o vídeo no hero
+          pra não empilhar 2 mídias). */}
+      {!isAchievement && embed && (
+        <div className="aspect-video w-full overflow-hidden border-y border-npb-border bg-black">
+          <iframe
+            src={embed}
+            title={post.title}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="h-full w-full"
+          />
+        </div>
+      )}
+      {!isAchievement && !embed && firstImageUrl && (
         <Link href={detailUrl} className="block bg-black">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -227,41 +240,23 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         </Link>
       )}
 
-      {/* Body — só posts normais */}
-      {!isAchievement && (preview || embed) && (
+      {/* Body — só posts normais. Texto aparece sempre depois da mídia. */}
+      {!isAchievement && preview && (
         <div className="px-5 pb-5 pt-4">
-          {preview && (
-            <Link
-              href={detailUrl}
-              className="block text-sm leading-relaxed text-npb-text-muted hover:text-npb-text"
-            >
-              <span className="line-clamp-3 whitespace-pre-wrap">
-                {preview}
-                {previewIsLong && "…"}
+          <Link
+            href={detailUrl}
+            className="block text-sm leading-relaxed text-npb-text-muted hover:text-npb-text"
+          >
+            <span className="line-clamp-3 whitespace-pre-wrap">
+              {preview}
+              {previewIsLong && "…"}
+            </span>
+            {previewIsLong && (
+              <span className="mt-1.5 inline-block text-xs font-semibold text-npb-gold hover:underline">
+                Ver mais
               </span>
-              {previewIsLong && (
-                <span className="mt-1.5 inline-block text-xs font-semibold text-npb-gold hover:underline">
-                  Ver mais
-                </span>
-              )}
-            </Link>
-          )}
-
-          {embed && (
-            <div
-              className={`aspect-video w-full overflow-hidden rounded-lg border border-npb-border bg-black ${
-                preview ? "mt-3" : ""
-              }`}
-            >
-              <iframe
-                src={embed}
-                title={post.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                className="h-full w-full"
-              />
-            </div>
-          )}
+            )}
+          </Link>
         </div>
       )}
 
