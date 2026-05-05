@@ -3,12 +3,14 @@ import {
   ArrowLeft,
   CheckCircle2,
   PackageCheck,
+  Pencil,
   ShoppingCart,
   TriangleAlert,
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { ProductMappingRow } from "@/components/admin/product-mapping-row";
 import { AutoEnrollmentToggle } from "@/components/admin/auto-enrollment-toggle";
+import { AddManualProductMapping } from "@/components/admin/add-manual-product-mapping";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +128,20 @@ export default async function ProductsMappingPage() {
     (p) => !mapByProduct.has(p.product_name),
   );
 
+  // Mappings manuais — produtos no product_cohort_map que NÃO apareceram
+  // em transactions_data nos ultimos 90d (ex: M20K, LTA 1.0, ofertas
+  // antigas). Mostramos numa secao separada pra ficar claro que sao
+  // configurados na mao.
+  const discoveredKeys = new Set(discovered.map((d) => d.product_name));
+  const manualOnlyMappings = mappings
+    .filter((m) => !discoveredKeys.has(m.product_name_pattern.toLowerCase()))
+    .map((m) => ({
+      product_name: m.product_name_pattern.toLowerCase(),
+      total_sales: 0,
+      platforms: [] as string[],
+      last_sale_date: null,
+    }));
+
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <Link
@@ -152,6 +168,9 @@ export default async function ProductsMappingPage() {
           acesso na hora.
         </p>
       </header>
+
+      {/* Adicionar produto manualmente (pra produtos fora de transactions_data) */}
+      <AddManualProductMapping cohorts={cohorts} />
 
       {/* Toggle global */}
       <AutoEnrollmentToggle
@@ -230,7 +249,33 @@ export default async function ProductsMappingPage() {
         </section>
       )}
 
-      {discovered.length === 0 && (
+      {/* Mappings manuais (produtos sem venda em transactions_data) */}
+      {manualOnlyMappings.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="inline-flex items-center gap-2 text-sm font-bold text-npb-text-muted">
+            <Pencil className="h-4 w-4" />
+            Manuais — sem vendas em transactions_data ({manualOnlyMappings.length})
+          </h2>
+          <p className="text-[11px] text-npb-text-muted">
+            Mapeados manualmente. Funcionam pra vendas que chegam pelo
+            webhook <code>kiwify-direct</code> ou que serão importadas no
+            futuro pra <code>transactions_data</code>.
+          </p>
+          <ul className="space-y-2">
+            {manualOnlyMappings.map((p) => (
+              <ProductMappingRow
+                key={p.product_name}
+                product={p}
+                mapping={mapByProduct.get(p.product_name) ?? null}
+                cohorts={cohorts}
+                cohortMap={cohortMap}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {discovered.length === 0 && manualOnlyMappings.length === 0 && (
         <div className="rounded-2xl border border-dashed border-npb-border bg-npb-bg2/40 p-10 text-center">
           <ShoppingCart className="mx-auto h-10 w-10 text-npb-text-muted opacity-40" />
           <p className="mt-3 text-sm text-npb-text-muted">
