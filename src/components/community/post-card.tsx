@@ -1,8 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Heart, MessageCircle, MoreHorizontal, Pencil, Pin, Trash2 } from "lucide-react";
+import {
+  Heart,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Pin,
+  PinOff,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { timeAgoPtBr, videoEmbedUrl } from "@/lib/community";
 import { isElevatedRole, type AccessRole } from "@/lib/access";
@@ -10,6 +19,7 @@ import {
   deleteTopicAction,
   toggleTopicLikeAction,
 } from "@/app/(student)/community/actions";
+import { toggleTopicPinAction } from "@/app/(admin)/admin/community/actions";
 import { PostModal } from "@/components/community/create-post-button";
 import { DecoratedAvatar } from "@/components/decorated-avatar";
 import { LevelBadge } from "@/components/level-badge";
@@ -44,10 +54,13 @@ interface Props {
 }
 
 export function PostCard({ post, currentRole, currentUserId }: Props) {
+  const router = useRouter();
   const [liked, setLiked] = useState(post.liked);
   const [likes, setLikes] = useState(post.likesCount);
+  const [pinned, setPinned] = useState(post.isPinned ?? false);
   const [pendingLike, startLikeTransition] = useTransition();
   const [pendingDelete, startDeleteTransition] = useTransition();
+  const [pendingPin, startPinTransition] = useTransition();
   const [hidden, setHidden] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editingOpen, setEditingOpen] = useState(false);
@@ -55,6 +68,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
   const isAuthor = post.authorId === currentUserId;
   const canEdit = isAuthor || isElevatedRole(currentRole);
   const canDelete = isAuthor || isElevatedRole(currentRole);
+  const canPin = isElevatedRole(currentRole);
 
   const embed = videoEmbedUrl(post.videoUrl);
   const isAchievement = post.cardType === "achievement";
@@ -71,6 +85,22 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         setLiked((p) => !p);
         setLikes((c) => (liked ? c + 1 : Math.max(c - 1, 0)));
         toast.error(res.error ?? "Falha ao curtir.");
+      }
+    });
+  }
+
+  function handleTogglePin() {
+    setMenuOpen(false);
+    const next = !pinned;
+    setPinned(next);
+    startPinTransition(async () => {
+      const res = await toggleTopicPinAction(post.id, next);
+      if (res.ok) {
+        toast.success(next ? "Post fixado." : "Post desfixado.");
+        router.refresh();
+      } else {
+        setPinned(!next);
+        toast.error(res.error ?? "Falha ao fixar.");
       }
     });
   }
@@ -96,7 +126,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
   return (
     <li
       className={`overflow-hidden rounded-xl border transition hover:border-npb-gold/40 ${
-        post.isPinned
+        pinned
           ? "border-npb-gold/40 bg-npb-gold/5"
           : "border-npb-border bg-npb-bg2"
       }`}
@@ -105,7 +135,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
         {/* Header: pin + autor + menu */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            {post.isPinned && (
+            {pinned && (
               <span className="mb-2 inline-flex items-center gap-1 rounded bg-npb-gold/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-npb-gold">
                 <Pin className="h-2.5 w-2.5" />
                 Fixado
@@ -141,7 +171,7 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
             )}
           </div>
 
-          {(canEdit || canDelete) && (
+          {(canEdit || canDelete || canPin) && (
             <div className="relative flex-shrink-0">
               <button
                 type="button"
@@ -164,6 +194,26 @@ export function PostCard({ post, currentRole, currentUserId }: Props) {
                     >
                       <Pencil className="h-3 w-3" />
                       Editar
+                    </button>
+                  )}
+                  {canPin && (
+                    <button
+                      type="button"
+                      onClick={handleTogglePin}
+                      disabled={pendingPin}
+                      className="flex w-full items-center gap-2 px-3 py-1.5 text-xs text-npb-text hover:bg-npb-bg4"
+                    >
+                      {pinned ? (
+                        <>
+                          <PinOff className="h-3 w-3" />
+                          Desfixar
+                        </>
+                      ) : (
+                        <>
+                          <Pin className="h-3 w-3" />
+                          Fixar
+                        </>
+                      )}
                     </button>
                   )}
                   {canDelete && (
