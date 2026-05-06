@@ -45,6 +45,17 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  // Recovery: eventos travados em "processing" ha mais de 5min sao
+  // resetados pra "pending". Acontece se a serverless function crashar
+  // (timeout, OOM) entre o lock atomico e o markEvent final.
+  const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+  await sb
+    .schema("membros")
+    .from("purchase_events")
+    .update({ status: "pending" })
+    .eq("status", "processing")
+    .lt("updated_at", fiveMinAgo);
+
   // Pega os pendentes mais antigos primeiro
   const { data: rows } = await sb
     .schema("membros")

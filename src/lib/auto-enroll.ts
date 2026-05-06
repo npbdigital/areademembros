@@ -66,30 +66,51 @@ export async function processPurchaseEvent(
 ): Promise<ProcessResult> {
   const sb = createAdminClient();
 
-  const { data: row } = await sb
+  // Lock atômico: tenta marcar status pending -> processing. Se retornar
+  // 0 linhas, significa que outra execução pegou primeiro (cron + webhook
+  // do Supabase + retry manual podem rodar em paralelo). Sai sem fazer
+  // nada — evita race condition e double-INSERT no enrollment.
+  const { data: locked } = await sb
     .schema("membros")
     .from("purchase_events")
+    .update({ status: "processing" })
+    .eq("id", eventId)
+    .eq("status", "pending")
     .select(
       "id, transaction_row_id, platform, event, email, full_name, phone, product_name, status",
     )
-    .eq("id", eventId)
     .maybeSingle();
 
-  const ev = row as PurchaseEventRow | null;
+  const ev = locked as PurchaseEventRow | null;
   if (!ev) {
-    return { ok: false, status: "failed", message: "Evento não encontrado." };
-  }
-  if (ev.status !== "pending") {
+    // Buscar o estado atual só pra dar uma resposta informativa
+    const { data: cur } = await sb
+      .schema("membros")
+      .from("purchase_events")
+      .select("status")
+      .eq("id", eventId)
+      .maybeSingle();
+    const curStatus = (cur as { status: string } | null)?.status ?? "?";
     return {
       ok: true,
       status: "skipped",
-      message: `Já está em status=${ev.status}.`,
+      message:
+        curStatus === "?"
+          ? "Evento não encontrado."
+          : `Já em status=${curStatus} (concorrência ou já processado).`,
     };
   }
 
-  // Toggle global
+  // Toggle global. Se desativado, devolve o status pra pending pra que,
+  // quando admin reativar, o cron pegue de novo (em vez de ficar preso
+  // em "processing").
   const enabled = await isAutoEnrollmentEnabled(sb);
   if (!enabled) {
+    await sb
+      .schema("membros")
+      .from("purchase_events")
+      .update({ status: "pending" })
+      .eq("id", ev.id);
     return {
       ok: true,
       status: "skipped",
@@ -177,59 +198,38 @@ async function handleAccessGrant(
     };
   }
 
-  // Cria/reativa enrollment
-  const { data: existingEnroll } = await sb
+  // UPSERT idempotente — usa a unique constraint (user_id, cohort_id) pra
+  // evitar race conditions. Antes usavamos SELECT-then-INSERT, mas duas
+  // execuçoes paralelas (cron + webhook + retry) podiam ler "nao existe"
+  // ao mesmo tempo e ambas tentar INSERT, batendo no duplicate key.
+  const { data: upserted, error: enrollErr } = await sb
     .schema("membros")
     .from("enrollments")
-    .select("id")
-    .eq("user_id", userResolution.userId)
-    .eq("cohort_id", m.cohort_id)
-    .maybeSingle();
-
-  let enrollmentId: string;
-  if (existingEnroll) {
-    enrollmentId = (existingEnroll as { id: string }).id;
-    const { error } = await sb
-      .schema("membros")
-      .from("enrollments")
-      .update({
-        is_active: true,
-        expires_at: expiresAt,
-        enrolled_at: new Date().toISOString(),
-        source: "webhook",
-      })
-      .eq("id", enrollmentId);
-    if (error) {
-      await markEvent(sb, ev.id, "failed", {
-        message: `Falha ao reativar enrollment: ${error.message}`,
-      });
-      return { ok: false, status: "failed", message: error.message };
-    }
-  } else {
-    const { data: created, error } = await sb
-      .schema("membros")
-      .from("enrollments")
-      .insert({
+    .upsert(
+      {
         user_id: userResolution.userId,
         cohort_id: m.cohort_id,
         expires_at: expiresAt,
         source: "webhook",
         is_active: true,
-      })
-      .select("id")
-      .single();
-    if (error || !created) {
-      await markEvent(sb, ev.id, "failed", {
-        message: `Falha ao criar enrollment: ${error?.message ?? "?"}`,
-      });
-      return {
-        ok: false,
-        status: "failed",
-        message: error?.message ?? "Falha enrollment.",
-      };
-    }
-    enrollmentId = (created as { id: string }).id;
+        enrolled_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,cohort_id" },
+    )
+    .select("id")
+    .single();
+
+  if (enrollErr || !upserted) {
+    await markEvent(sb, ev.id, "failed", {
+      message: `Falha ao criar enrollment: ${enrollErr?.message ?? "?"}`,
+    });
+    return {
+      ok: false,
+      status: "failed",
+      message: enrollErr?.message ?? "Falha no upsert.",
+    };
   }
+  const enrollmentId = (upserted as { id: string }).id;
 
   await markEvent(sb, ev.id, "processed", {
     cohortId: m.cohort_id,
