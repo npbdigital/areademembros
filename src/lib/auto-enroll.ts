@@ -196,7 +196,7 @@ async function handleAccessGrant(
         is_active: true,
         expires_at: expiresAt,
         enrolled_at: new Date().toISOString(),
-        source: `purchase:${ev.platform}`,
+        source: "webhook",
       })
       .eq("id", enrollmentId);
     if (error) {
@@ -213,7 +213,7 @@ async function handleAccessGrant(
         user_id: userResolution.userId,
         cohort_id: m.cohort_id,
         expires_at: expiresAt,
-        source: `purchase:${ev.platform}`,
+        source: "webhook",
         is_active: true,
       })
       .select("id")
