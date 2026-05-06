@@ -140,6 +140,35 @@ export async function approveManuallyAction(params: {
 }
 
 /**
+ * Apaga um purchase_event do log. Útil pra remover testes (johndoe@…),
+ * webhooks duplicados sem conserto, ou ruído.
+ *
+ * NÃO desfaz cadastro/enrollment — se o evento ja foi processado, o aluno
+ * continua matriculado. Pra revogar acesso, use a tela de pessoas.
+ */
+export async function deleteEventAction(
+  eventId: string,
+): Promise<ActionResult> {
+  try {
+    await assertAdmin();
+    const sb = createAdminClient();
+
+    const { error } = await sb
+      .schema("membros")
+      .from("purchase_events")
+      .delete()
+      .eq("id", eventId);
+    if (error) return { ok: false, error: error.message };
+
+    revalidatePath("/admin/access-logs");
+    revalidatePath("/admin/products-mapping");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/**
  * Reprocessa um evento que estava em failed (sem mexer no mapping).
  * Útil pra retentar após corrigir algum problema externo (cohort criada,
  * email arrumado, etc.).

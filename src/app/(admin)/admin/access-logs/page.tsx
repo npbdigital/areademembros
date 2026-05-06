@@ -399,14 +399,12 @@ function EventRow({
           )}
         </div>
 
-        {(event.status === "unmapped" || event.status === "failed") && (
-          <AccessLogActions
-            eventId={event.id}
-            status={event.status}
-            isApproved={isApproved}
-            cohorts={cohorts}
-          />
-        )}
+        <AccessLogActions
+          eventId={event.id}
+          status={event.status}
+          isApproved={isApproved}
+          cohorts={cohorts}
+        />
       </div>
     </li>
   );

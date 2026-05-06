@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CheckCircle2, Loader2, RefreshCw } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import {
   approveManuallyAction,
+  deleteEventAction,
   retryEventAction,
 } from "@/app/(admin)/admin/access-logs/actions";
 
@@ -76,6 +77,24 @@ export function AccessLogActions({
     });
   }
 
+  function handleDelete() {
+    if (
+      !confirm(
+        "Apagar esse evento do log? Não desfaz cadastro/matrícula — só remove o registro.",
+      )
+    )
+      return;
+    startTransition(async () => {
+      const res = await deleteEventAction(eventId);
+      if (res.ok) {
+        toast.success("Evento apagado.");
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Falha.");
+      }
+    });
+  }
+
   if (approving) {
     return (
       <div className="flex w-full flex-shrink-0 flex-col gap-2 rounded-md border border-npb-border bg-npb-bg3 p-3 sm:w-auto sm:min-w-[300px]">
@@ -117,9 +136,10 @@ export function AccessLogActions({
             />
           </div>
         </div>
-        <p className="text-[10px] text-npb-text-muted">
-          Salva o mapeamento + cadastra o aluno em uma operação só. Vendas
-          futuras desse produto vão pra mesma turma automaticamente.
+        <p className="rounded border border-npb-gold/30 bg-npb-gold/5 p-2 text-[10px] text-npb-text">
+          ⚡ <strong className="text-npb-gold">Importante:</strong> isso cria o
+          mapeamento permanente desse produto pra essa turma. Toda venda
+          futura dele entra direto sem precisar aprovar de novo.
         </p>
         <div className="flex justify-end gap-2">
           <button
@@ -158,7 +178,7 @@ export function AccessLogActions({
           className="inline-flex items-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-1.5 text-xs font-bold text-yellow-400 hover:bg-yellow-500/20 disabled:opacity-50"
         >
           <CheckCircle2 className="h-3 w-3" />
-          Aprovar manualmente
+          Mapear produto + aprovar
         </button>
       )}
       {status === "failed" && (
@@ -176,6 +196,15 @@ export function AccessLogActions({
           Tentar de novo
         </button>
       )}
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={pending}
+        title="Apagar evento do log"
+        className="rounded-md p-1.5 text-npb-text-muted hover:bg-red-500/10 hover:text-red-400 disabled:opacity-50"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
