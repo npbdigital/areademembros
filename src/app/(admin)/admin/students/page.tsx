@@ -21,7 +21,10 @@ interface SearchParams {
   to?: string;
   access?: string;
   showFicticio?: string;
+  page?: string;
 }
+
+const PAGE_SIZE = 100;
 
 interface StudentRow {
   id: string;
@@ -47,6 +50,9 @@ export default async function AdminStudentsPage({
   const dateTo = (searchParams?.to ?? "").trim();
   const lastAccess = (searchParams?.access ?? "").trim();
   const showFicticio = searchParams?.showFicticio !== "0";
+  const page = Math.max(1, parseInt(searchParams?.page ?? "1", 10) || 1);
+  const offsetStart = (page - 1) * PAGE_SIZE;
+  const offsetEnd = offsetStart + PAGE_SIZE - 1;
 
   const sb = createAdminClient();
 
@@ -76,16 +82,19 @@ export default async function AdminStudentsPage({
     if (userIdsByCohort.length === 0) userIdsByCohort = ["00000000-0000-0000-0000-000000000000"];
   }
 
-  // Query principal na view (que ja traz last_sign_in_at + has_logged_in)
+  // Query principal na view (que ja traz last_sign_in_at + has_logged_in).
+  // count: "exact" pra ter o total real (nao limitado pelo range), permite
+  // calcular numero de paginas sem segunda query.
   let query = sb
     .schema("membros")
     .from("students_admin")
     .select(
       "id, email, full_name, phone, avatar_url, is_active, role, created_at, last_sign_in_at, has_logged_in",
+      { count: "exact" },
     )
     .in("role", showFicticio ? (STUDENT_LIKE_ROLES as unknown as string[]) : ["student"])
     .order("created_at", { ascending: false })
-    .limit(500);
+    .range(offsetStart, offsetEnd);
 
   if (q) {
     query = query.or(`full_name.ilike.%${q}%,email.ilike.%${q}%`);
@@ -107,8 +116,10 @@ export default async function AdminStudentsPage({
     query = query.gte("last_sign_in_at", since);
   }
 
-  const { data: studentsRaw } = await query;
+  const { data: studentsRaw, count: totalCount } = await query;
   const list = (studentsRaw ?? []) as StudentRow[];
+  const total = totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Conta matriculas ativas por aluno (lista visivel apenas)
   const ids = list.map((s) => s.id);
@@ -134,12 +145,16 @@ export default async function AdminStudentsPage({
         <div>
           <h1 className="text-xl font-bold text-npb-text">Alunos</h1>
           <p className="text-sm text-npb-text-muted">
-            {list.length === 0
+            {total === 0
               ? hasAnyFilter
                 ? "Nenhum aluno encontrado com esses filtros."
                 : "Nenhum aluno cadastrado."
-              : `${list.length} aluno${list.length > 1 ? "s" : ""}${
+              : `${total.toLocaleString("pt-BR")} aluno${total === 1 ? "" : "s"}${
                   hasAnyFilter ? " (filtrado)" : ""
+                }${
+                  totalPages > 1
+                    ? ` · Página ${page} de ${totalPages.toLocaleString("pt-BR")}`
+                    : ""
                 }.`}
           </p>
         </div>
@@ -303,10 +318,14 @@ export default async function AdminStudentsPage({
               ))}
             </tbody>
           </table>
-          {list.length === 500 && (
-            <div className="border-t border-npb-border bg-npb-bg3/50 px-4 py-2 text-center text-[11px] text-npb-text-muted">
-              Mostrando primeiros 500 — refine os filtros pra ver mais.
-            </div>
+          {totalPages > 1 && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={PAGE_SIZE}
+              params={searchParams ?? {}}
+            />
           )}
         </div>
       )}
@@ -323,6 +342,79 @@ function buildHref(params: SearchParams): string {
   if (params.to) sp.set("to", params.to);
   if (params.access) sp.set("access", params.access);
   if (params.showFicticio === "0") sp.set("showFicticio", "0");
+  if (params.page && params.page !== "1") sp.set("page", params.page);
   const s = sp.toString();
   return s ? `/admin/students?${s}` : "/admin/students";
+}
+
+function Pagination({
+  page,
+  totalPages,
+  total,
+  pageSize,
+  params,
+}: {
+  page: number;
+  totalPages: number;
+  total: number;
+  pageSize: number;
+  params: SearchParams;
+}) {
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  const pageHref = (p: number) =>
+    buildHref({ ...params, page: String(p) });
+
+  // Lista compacta de paginas: sempre 1, atual-1, atual, atual+1, last
+  const pagesToShow = new Set<number>([1, totalPages, page - 1, page, page + 1]);
+  const validPages = Array.from(pagesToShow)
+    .filter((p) => p >= 1 && p <= totalPages)
+    .sort((a, b) => a - b);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-npb-border bg-npb-bg3/50 px-4 py-2.5 text-[11px]">
+      <span className="text-npb-text-muted">
+        Mostrando {start.toLocaleString("pt-BR")}–{end.toLocaleString("pt-BR")}{" "}
+        de {total.toLocaleString("pt-BR")}
+      </span>
+      <div className="flex items-center gap-1">
+        {page > 1 && (
+          <Link
+            href={pageHref(page - 1)}
+            className="rounded border border-npb-border bg-npb-bg3 px-2.5 py-1 font-semibold text-npb-text-muted hover:border-npb-gold-dim hover:text-npb-gold"
+          >
+            ← Anterior
+          </Link>
+        )}
+        {validPages.map((p, i) => {
+          const prev = validPages[i - 1];
+          const gap = prev !== undefined && p - prev > 1;
+          return (
+            <span key={p} className="flex items-center gap-1">
+              {gap && <span className="px-1 text-npb-text-muted">…</span>}
+              <Link
+                href={pageHref(p)}
+                className={`rounded px-2.5 py-1 font-semibold transition ${
+                  p === page
+                    ? "bg-npb-gold text-black"
+                    : "border border-npb-border bg-npb-bg3 text-npb-text-muted hover:border-npb-gold-dim hover:text-npb-gold"
+                }`}
+              >
+                {p}
+              </Link>
+            </span>
+          );
+        })}
+        {page < totalPages && (
+          <Link
+            href={pageHref(page + 1)}
+            className="rounded border border-npb-border bg-npb-bg3 px-2.5 py-1 font-semibold text-npb-text-muted hover:border-npb-gold-dim hover:text-npb-gold"
+          >
+            Próxima →
+          </Link>
+        )}
+      </div>
+    </div>
+  );
 }
