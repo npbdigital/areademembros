@@ -137,6 +137,8 @@ export default async function StudentLayout({
           <StudentSidebar
             platformName={settings.platformName}
             platformLogoUrl={settings.platformLogoUrl}
+            socialInstagramUrl={settings.socialInstagramUrl}
+            socialYoutubeUrl={settings.socialYoutubeUrl}
           />
         }
         mainArea={

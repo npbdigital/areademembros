@@ -43,6 +43,8 @@ export interface PlatformSettingsFormValues {
   leaderboardVisibleToAdmin: boolean;
   leaderboardVisibleToModerator: boolean;
   leaderboardVisibleToStudent: boolean;
+  socialInstagramUrl: string | null;
+  socialYoutubeUrl: string | null;
 }
 
 export function PlatformSettingsForm({
@@ -240,6 +242,48 @@ export function PlatformSettingsForm({
           aplicados no DNS). Enquanto não preencher, os e-mails saem do default
           do Resend (`onboarding@resend.dev`), que só envia pro dono da conta.
         </p>
+      </fieldset>
+
+      {/* REDES SOCIAIS */}
+      <fieldset className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+        <legend className="-ml-2 px-2 text-xs font-semibold uppercase tracking-wide text-npb-gold">
+          Redes sociais
+        </legend>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="social_instagram_url" className="text-npb-text">
+              Instagram
+            </Label>
+            <Input
+              id="social_instagram_url"
+              name="social_instagram_url"
+              type="url"
+              defaultValue={init.socialInstagramUrl ?? ""}
+              placeholder="https://instagram.com/seuperfil"
+              className="bg-npb-bg3 border-npb-border text-npb-text"
+            />
+            <p className="text-[11px] text-npb-text-muted">
+              Link aparece na sidebar do aluno. Vazio = não mostra.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="social_youtube_url" className="text-npb-text">
+              YouTube
+            </Label>
+            <Input
+              id="social_youtube_url"
+              name="social_youtube_url"
+              type="url"
+              defaultValue={init.socialYoutubeUrl ?? ""}
+              placeholder="https://youtube.com/@seucanal"
+              className="bg-npb-bg3 border-npb-border text-npb-text"
+            />
+            <p className="text-[11px] text-npb-text-muted">
+              Link aparece na sidebar do aluno. Vazio = não mostra.
+            </p>
+          </div>
+        </div>
       </fieldset>
 
       {/* SUPORTE */}

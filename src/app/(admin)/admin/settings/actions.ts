@@ -81,6 +81,14 @@ export async function updatePlatformSettingsAction(
         value: str(formData, "support_whatsapp") || null,
       },
       {
+        key: SETTINGS_KEYS.SOCIAL_INSTAGRAM_URL,
+        value: str(formData, "social_instagram_url") || null,
+      },
+      {
+        key: SETTINGS_KEYS.SOCIAL_YOUTUBE_URL,
+        value: str(formData, "social_youtube_url") || null,
+      },
+      {
         key: SETTINGS_KEYS.WELCOME_ENABLED,
         value: welcomeEnabled ? "true" : "false",
       },

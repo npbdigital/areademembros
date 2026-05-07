@@ -41,6 +41,9 @@ export const SETTINGS_KEYS = {
   LEADERBOARD_VISIBLE_TO_STUDENT: "leaderboard_visible_to_student",
   // Push notifications
   PUSH_NOTIFICATIONS_ENABLED: "push_notifications_enabled",
+  // Redes sociais (links na sidebar do aluno)
+  SOCIAL_INSTAGRAM_URL: "social_instagram_url",
+  SOCIAL_YOUTUBE_URL: "social_youtube_url",
 } as const;
 
 export type SettingKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -78,6 +81,9 @@ export interface PlatformSettings {
   leaderboardVisibleToModerator: boolean;
   leaderboardVisibleToStudent: boolean;
   pushNotificationsEnabled: boolean;
+  // Redes sociais
+  socialInstagramUrl: string | null;
+  socialYoutubeUrl: string | null;
 }
 
 /** Defaults aplicados quando a chave não está no banco. */
@@ -112,6 +118,8 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   leaderboardVisibleToModerator: true,
   leaderboardVisibleToStudent: false,
   pushNotificationsEnabled: true,
+  socialInstagramUrl: null,
+  socialYoutubeUrl: null,
 };
 
 /** Lê todas as configs num único hit. */
@@ -217,6 +225,10 @@ export async function getPlatformSettings(
       map.get(SETTINGS_KEYS.PUSH_NOTIFICATIONS_ENABLED),
       SETTINGS_DEFAULTS.pushNotificationsEnabled,
     ),
+    socialInstagramUrl:
+      map.get(SETTINGS_KEYS.SOCIAL_INSTAGRAM_URL)?.trim() || null,
+    socialYoutubeUrl:
+      map.get(SETTINGS_KEYS.SOCIAL_YOUTUBE_URL)?.trim() || null,
   };
 }
 
