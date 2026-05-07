@@ -246,6 +246,7 @@ async function handleAccessGrant(
   // mandamos so o aviso de novo acesso sem sobrescrever a senha dele.
   try {
     await sendWelcomeEmail({
+      userId: userResolution.userId,
       email: ev.email,
       fullName: ev.full_name,
       isNewUser: userResolution.created,
@@ -266,19 +267,45 @@ async function handleAccessGrant(
 
 /**
  * Envia email de boas-vindas pra aluno recem matriculado via auto-enroll.
- * Roda fora da transacao principal (fire-and-forget): se Resend tiver
- * problema, nao queremos derrubar o cadastro. Erro vai pro log da Vercel.
+ *
+ * **Idempotente por aluno:** checa membros.users.welcome_email_sent_at
+ * ANTES de mandar. Se ja teve email enviado (mesmo que numa venda
+ * anterior), pula — assim reativacoes de enrollment ou retries do cron
+ * nunca enviam email duplicado.
+ *
+ * Marca o timestamp via UPDATE WHERE welcome_email_sent_at IS NULL pra
+ * blindar contra race condition de 2 chamadas simultaneas — so a primeira
+ * efetivamente atualiza e dispara o email.
+ *
+ * Erro nao derruba o cadastro — aluno ja foi criado/matriculado.
  */
 async function sendWelcomeEmail(params: {
+  userId: string;
   email: string;
   fullName: string | null;
   isNewUser: boolean;
   eventId: string;
 }): Promise<void> {
   const sb = createAdminClient();
+
+  // Lock atomico: tenta marcar timestamp. Se a UPDATE retornar 0 linhas,
+  // alguem ja enviou (concorrencia ou venda anterior do mesmo aluno).
+  const { data: marked } = await sb
+    .schema("membros")
+    .from("users")
+    .update({ welcome_email_sent_at: new Date().toISOString() })
+    .eq("id", params.userId)
+    .is("welcome_email_sent_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (!marked) {
+    // Aluno ja recebeu email em algum momento — nao envia de novo.
+    return;
+  }
+
   const settings = await getPlatformSettings(sb);
 
-  // URL de login — em dev/preview usa o env, em prod o domain final.
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://membros.felipesempe.com.br";
   const loginUrl = `${origin}/auto-login?e=${encodeURIComponent(params.email)}&p=${encodeURIComponent(DEFAULT_STUDENT_PASSWORD)}`;
@@ -303,11 +330,19 @@ async function sendWelcomeEmail(params: {
   });
 
   if (!result.ok) {
+    // Se Resend falhou, devolve a flag pra null pra que retry/reprocessamento
+    // tente de novo numa proxima rodada (em vez de ficar marcado como enviado
+    // sem ter saido). Logamos pra investigacao.
     console.error(
-      "[auto-enroll] sendEmail falhou",
+      "[auto-enroll] sendEmail falhou — revertendo welcome_email_sent_at",
       params.eventId,
       result.error,
     );
+    await sb
+      .schema("membros")
+      .from("users")
+      .update({ welcome_email_sent_at: null })
+      .eq("id", params.userId);
   }
 }
 
