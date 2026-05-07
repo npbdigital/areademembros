@@ -79,9 +79,18 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/favicon") ||
     pathname === "/";
 
+  // Requests com Authorization: Bearer ... bypassam o redirect pra login.
+  // O route handler faz a checagem do token (CRON_SECRET, internal API,
+  // etc). Sem isso, automacoes server-to-server (pg_cron + pg_net,
+  // CI, monitoring) nao conseguem chamar /api/admin/* nem /api/internal/*.
+  const hasBearerAuth = (request.headers.get("authorization") ?? "")
+    .toLowerCase()
+    .startsWith("bearer ");
+
   // Sem sessão → manda pra /login (exceto em rotas públicas)
   if (
     !user &&
+    !hasBearerAuth &&
     !isPublicAuthRoute &&
     !isPublicApi &&
     !isShortLink &&
