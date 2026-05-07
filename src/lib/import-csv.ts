@@ -95,8 +95,19 @@ export function parseImportCsv(csvText: string): ParseResult {
       errors.push(`Email inválido: ${email}`);
     }
 
-    const fullName = idx.fullName >= 0 ? (cols[idx.fullName] ?? "").trim() : "";
-    if (!fullName) warnings.push("Sem nome — aluno entra com aviso de completar cadastro.");
+    const fullNameRaw =
+      idx.fullName >= 0 ? (cols[idx.fullName] ?? "").trim() : "";
+    // "Sua compra sem nome" vinha como placeholder na plataforma antiga
+    // quando a pessoa nao preenchia o nome no checkout. Tratamos como
+    // ausente — usamos o email no lugar pra que o admin/aluno consigam
+    // identificar visualmente em vez de ver 8k registros iguais.
+    const isPlaceholderName = isSemNomePlaceholder(fullNameRaw);
+    const fullName = isPlaceholderName ? email : fullNameRaw;
+    if (!fullName) {
+      warnings.push("Sem nome — aluno entra com aviso de completar cadastro.");
+    } else if (isPlaceholderName) {
+      warnings.push("Nome vazio na origem — usando email como nome.");
+    }
 
     const cpf = idx.cpf >= 0 ? (cols[idx.cpf] ?? "").trim() : "";
     const phone = idx.phone >= 0 ? (cols[idx.phone] ?? "").trim() : "";
@@ -246,6 +257,26 @@ function parseCsvLine(line: string, sep: string): string[] {
 
 function isValidEmail(s: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+}
+
+/**
+ * Detecta o placeholder "Sua compra sem nome" (e variações) que a
+ * plataforma antiga punha quando o nome do aluno nao foi preenchido
+ * no checkout. Aceita acentos, caixa diferente, espaços extras.
+ */
+function isSemNomePlaceholder(name: string): boolean {
+  if (!name) return false;
+  const norm = name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+  return (
+    norm === "sua compra sem nome" ||
+    norm === "compra sem nome" ||
+    norm === "sem nome"
+  );
 }
 
 /**
