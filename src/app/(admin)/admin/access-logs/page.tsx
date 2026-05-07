@@ -36,6 +36,7 @@ const STATUS_FILTERS: Array<{ key: string; label: string }> = [
   { key: "failed", label: "Com erro" },
   { key: "pending", label: "Aguardando" },
   { key: "processed", label: "Processadas" },
+  { key: "skipped", label: "Ignorados" },
 ];
 
 export default async function AccessLogsPage({
@@ -59,6 +60,12 @@ export default async function AccessLogsPage({
 
   if (status !== "all") {
     query = query.eq("status", status);
+  } else {
+    // "Todos" esconde skipped por padrao — esses sao cancelamentos/reembolsos
+    // de gente que nunca chegou a ter cadastro (cartao recusou, chargeback
+    // pre-cadastro, etc). Sao ruido sem acao possivel — o admin so ve eles
+    // se clicar explicitamente em "Ignorados".
+    query = query.neq("status", "skipped");
   }
   if (q) {
     query = query.or(`email.ilike.%${q}%,full_name.ilike.%${q}%`);
