@@ -125,16 +125,27 @@ export default async function MonitoriaPage({
       )}
 
       {status === "scheduled" && (
-        <div className="rounded-2xl border border-dashed border-npb-border bg-npb-bg2/50 p-8 text-center">
-          <Clock className="mx-auto h-10 w-10 text-npb-gold opacity-60" />
-          <h2 className="mt-3 text-lg font-bold text-npb-text">
-            Aguardando início
+        <div className="rounded-2xl border border-npb-gold/30 bg-gradient-to-br from-npb-gold/10 to-transparent p-6 text-center sm:p-8">
+          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-npb-gold/15">
+            <Calendar className="h-6 w-6 text-npb-gold" />
+          </div>
+          <h2 className="text-lg font-bold text-npb-text">
+            Link já liberado!
           </h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-npb-text-muted">
-            A monitoria vai começar no horário programado. Você vai receber uma
-            notificação push assim que estiver no ar — pode deixar essa página
-            aberta ou voltar depois.
+            A sala do Zoom está pronta. Você pode entrar agora pra deixar
+            aberta ou voltar exatamente no horário — vamos te avisar com uma
+            notificação push assim que começar.
           </p>
+          <a
+            href={joinUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-5 inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-md bg-npb-gold px-4 py-3 text-sm font-bold text-black hover:bg-npb-gold-light"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Entrar no Zoom
+          </a>
           <SessionTimingInfo
             scheduledAtIso={session.scheduled_at}
             durationMin={durationMin}
