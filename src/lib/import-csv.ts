@@ -98,13 +98,14 @@ export function parseImportCsv(csvText: string): ParseResult {
     const fullNameRaw =
       idx.fullName >= 0 ? (cols[idx.fullName] ?? "").trim() : "";
     // "Sua compra sem nome" vinha como placeholder na plataforma antiga
-    // quando a pessoa nao preenchia o nome no checkout. Tratamos como
-    // ausente — usamos o email no lugar pra que o admin/aluno consigam
-    // identificar visualmente em vez de ver 8k registros iguais.
+    // quando a pessoa nao preenchia o nome no checkout. Tratamos esses
+    // E nomes literalmente vazios da mesma forma — usamos o email no
+    // lugar pra que o admin/aluno consigam identificar visualmente E
+    // pra evitar erro de constraint NOT NULL no full_name.
     const isPlaceholderName = isSemNomePlaceholder(fullNameRaw);
-    const fullName = isPlaceholderName ? email : fullNameRaw;
-    if (!fullName) {
-      warnings.push("Sem nome — aluno entra com aviso de completar cadastro.");
+    const fullName = !fullNameRaw || isPlaceholderName ? email : fullNameRaw;
+    if (!fullNameRaw) {
+      warnings.push("Sem nome no CSV — usando email como nome.");
     } else if (isPlaceholderName) {
       warnings.push("Nome vazio na origem — usando email como nome.");
     }
