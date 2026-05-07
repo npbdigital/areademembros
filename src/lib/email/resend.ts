@@ -166,6 +166,69 @@ export function inviteEmailHtml(params: {
 }
 
 /**
+ * E-mail de "novo acesso liberado" enviado pra aluno que JA TEM conta
+ * (recebeu o welcome inicial em outra venda). Avisa que ele ganhou
+ * matricula em uma nova turma/produto. Sem senha — usa a que ele ja tem.
+ */
+export function newAccessEmailHtml(params: {
+  fullName: string;
+  cohortName: string;
+  loginUrl: string;
+  platformName?: string;
+  platformLogoUrl?: string | null;
+}): string {
+  const platformName = params.platformName ?? "Academia NPB";
+  const safeName = escapeHtml(params.fullName || "aluno");
+  const safePlatform = escapeHtml(platformName);
+  const safeCohort = escapeHtml(params.cohortName);
+
+  const logoBlock = params.platformLogoUrl
+    ? `<img src="${params.platformLogoUrl}" alt="${safePlatform}"
+           width="120" height="168"
+           style="display:inline-block;width:120px;height:168px;max-width:120px;object-fit:contain;border-radius:12px;" />`
+    : `<div style="display:inline-block;width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,#c9922a,#7a5618);text-align:center;line-height:48px;font-weight:700;color:#fff;">A</div>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<body style="margin:0;padding:0;background:#0d0d0d;color:#f0f0f0;font-family:'Segoe UI',system-ui,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;padding:32px 24px;">
+    <div style="text-align:center;margin-bottom:32px;">
+      ${logoBlock}
+      <div style="margin-top:12px;font-size:14px;letter-spacing:2px;color:#c9922a;">${safePlatform.toUpperCase()}</div>
+    </div>
+
+    <div style="background:#161616;border:1px solid #2a2a2a;border-radius:12px;padding:32px 28px;">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#f0f0f0;">Novo acesso liberado, ${safeName}!</h1>
+      <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#cfcfcf;">
+        Sua nova compra foi confirmada e você acabou de ganhar acesso a:
+      </p>
+
+      <div style="background:#0d0d0d;border:1px solid #c9922a44;border-radius:10px;padding:18px 20px;margin-bottom:24px;">
+        <div style="font-size:11px;letter-spacing:1.5px;color:#c9922a;text-transform:uppercase;margin-bottom:6px;">Turma liberada</div>
+        <div style="font-size:18px;font-weight:700;color:#f0f0f0;">${safeCohort}</div>
+      </div>
+
+      <p style="margin:0 0 20px;font-size:13px;line-height:1.6;color:#cfcfcf;">
+        Use a senha que você já configurou pra entrar — não precisa criar conta nova.
+      </p>
+
+      <div style="text-align:center;margin:24px 0;">
+        <a href="${params.loginUrl}"
+           style="display:inline-block;background:#c9922a;color:#000;font-weight:700;padding:14px 32px;border-radius:10px;text-decoration:none;font-size:14px;">
+          Acessar minha conta
+        </a>
+      </div>
+    </div>
+
+    <p style="text-align:center;margin-top:24px;font-size:11px;color:#666;">
+      Este e-mail foi enviado por ${safePlatform}. Se você não esperava recebê-lo, ignore.
+    </p>
+  </div>
+</body>
+</html>`;
+}
+
+/**
  * Template genérico de e-mail de notificação. Usado pelos eventos in-app
  * que também devem disparar e-mail (resposta no post, novo curso publicado,
  * conquista, etc.).

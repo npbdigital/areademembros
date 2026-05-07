@@ -18,7 +18,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 import { expiresAtFromDuration } from "@/lib/enrollment";
-import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
+import {
+  inviteEmailHtml,
+  newAccessEmailHtml,
+  sendEmail,
+} from "@/lib/email/resend";
 import { getPlatformSettings } from "@/lib/settings";
 
 export const DEFAULT_STUDENT_PASSWORD = "mudar123";
@@ -167,14 +171,17 @@ async function handleAccessGrant(
     };
   }
 
-  // Pega duração da cohort (fallback se mapping não tem default_expires_days)
+  // Pega duração + nome da cohort. Nome vai pro email "novo acesso liberado"
+  // pra aluno saber qual produto/turma ele acabou de comprar.
   const { data: cohort } = await sb
     .schema("membros")
     .from("cohorts")
-    .select("id, default_duration_days")
+    .select("id, name, default_duration_days")
     .eq("id", m.cohort_id)
     .maybeSingle();
-  const c = cohort as { id: string; default_duration_days: number | null } | null;
+  const c = cohort as
+    | { id: string; name: string; default_duration_days: number | null }
+    | null;
   if (!c) {
     await markEvent(sb, ev.id, "failed", {
       message: `Cohort ${m.cohort_id} mapeada não existe mais.`,
@@ -239,17 +246,16 @@ async function handleAccessGrant(
     enrollmentId,
   });
 
-  // Dispara email de boas-vindas. Await pra garantir que sai antes da
-  // serverless function terminar (fire-and-forget em Vercel pode nao
-  // completar). Erro nao derruba o fluxo — aluno ja foi cadastrado.
-  // Email so leva senha quando user foi criado AGORA — pra existente,
-  // mandamos so o aviso de novo acesso sem sobrescrever a senha dele.
+  // Dispara email apropriado (boas-vindas inicial OU "novo acesso liberado").
+  // Decisao + idempotencia ficam dentro do helper. Await pra garantir que
+  // sai antes da serverless terminar. Erro nao derruba — aluno ja matriculado.
   try {
-    await sendWelcomeEmail({
+    await sendEnrollmentEmail({
       userId: userResolution.userId,
+      enrollmentId,
+      cohortName: c.name,
       email: ev.email,
       fullName: ev.full_name,
-      isNewUser: userResolution.created,
       eventId: ev.id,
     });
   } catch (e) {
@@ -266,31 +272,39 @@ async function handleAccessGrant(
 }
 
 /**
- * Envia email de boas-vindas pra aluno recem matriculado via auto-enroll.
+ * Decide e dispara o email correto pra aluno recem matriculado:
  *
- * **Idempotente por aluno:** checa membros.users.welcome_email_sent_at
- * ANTES de mandar. Se ja teve email enviado (mesmo que numa venda
- * anterior), pula — assim reativacoes de enrollment ou retries do cron
- * nunca enviam email duplicado.
+ *   - 1ª compra do aluno (users.welcome_email_sent_at IS NULL)
+ *     -> email INICIAL com senha "mudar123" + CTA pro auto-login.
  *
- * Marca o timestamp via UPDATE WHERE welcome_email_sent_at IS NULL pra
- * blindar contra race condition de 2 chamadas simultaneas — so a primeira
- * efetivamente atualiza e dispara o email.
+ *   - 2ª+ compra (users.welcome_email_sent_at JA preenchido) e enrollment
+ *     novo (enrollments.welcome_email_sent_at IS NULL)
+ *     -> email "NOVO ACESSO LIBERADO" sem senha, citando o nome da turma.
  *
- * Erro nao derruba o cadastro — aluno ja foi criado/matriculado.
+ *   - Reprocessamento de venda ja avisada (enrollments.welcome_email_sent_at
+ *     IS NOT NULL)
+ *     -> nao envia nada.
+ *
+ * Idempotencia por LOCK ATOMICO: UPDATE WHERE coluna IS NULL retornando
+ * a linha. Se duas execucoes paralelas chamarem ao mesmo tempo, so a
+ * primeira efetivamente atualiza — a segunda enxerga 0 linhas e pula.
+ *
+ * Em caso de falha no Resend, reverte o timestamp pra que retry futuro
+ * tente de novo (em vez de ficar marcado mas sem ter saido).
  */
-async function sendWelcomeEmail(params: {
+async function sendEnrollmentEmail(params: {
   userId: string;
+  enrollmentId: string;
+  cohortName: string;
   email: string;
   fullName: string | null;
-  isNewUser: boolean;
   eventId: string;
 }): Promise<void> {
   const sb = createAdminClient();
 
-  // Lock atomico: tenta marcar timestamp. Se a UPDATE retornar 0 linhas,
-  // alguem ja enviou (concorrencia ou venda anterior do mesmo aluno).
-  const { data: marked } = await sb
+  // Tenta lock no LEVEL 1 (email inicial com senha). Se UPDATE pegou,
+  // esse aluno nunca recebeu nada antes — manda o welcome completo.
+  const { data: userMarked } = await sb
     .schema("membros")
     .from("users")
     .update({ welcome_email_sent_at: new Date().toISOString() })
@@ -299,50 +313,94 @@ async function sendWelcomeEmail(params: {
     .select("id")
     .maybeSingle();
 
-  if (!marked) {
-    // Aluno ja recebeu email em algum momento — nao envia de novo.
-    return;
-  }
-
   const settings = await getPlatformSettings(sb);
-
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ?? "https://membros.felipesempe.com.br";
   const loginUrl = `${origin}/auto-login?e=${encodeURIComponent(params.email)}&p=${encodeURIComponent(DEFAULT_STUDENT_PASSWORD)}`;
 
-  const html = inviteEmailHtml({
-    fullName: params.fullName ?? "novo aluno",
-    email: params.email,
-    password: params.isNewUser ? DEFAULT_STUDENT_PASSWORD : null,
+  if (userMarked) {
+    // LEVEL 1: email inicial com senha
+    const html = inviteEmailHtml({
+      fullName: params.fullName ?? "novo aluno",
+      email: params.email,
+      password: DEFAULT_STUDENT_PASSWORD,
+      loginUrl,
+      platformName: settings.platformName,
+      platformLogoUrl: settings.platformLogoUrl,
+    });
+
+    const result = await sendEmail({
+      to: params.email,
+      subject: `Seu acesso à ${settings.platformName} está pronto`,
+      html,
+    });
+
+    if (!result.ok) {
+      console.error(
+        "[auto-enroll] welcome inicial falhou — revertendo flag",
+        params.eventId,
+        result.error,
+      );
+      await sb
+        .schema("membros")
+        .from("users")
+        .update({ welcome_email_sent_at: null })
+        .eq("id", params.userId);
+    } else {
+      // Marca tambem esse enrollment como ja "avisado", pra nao mandar
+      // o email de "novo acesso" depois redundante. O 1o email ja menciona
+      // o produto que ele comprou no contexto da plataforma.
+      await sb
+        .schema("membros")
+        .from("enrollments")
+        .update({ welcome_email_sent_at: new Date().toISOString() })
+        .eq("id", params.enrollmentId);
+    }
+    return;
+  }
+
+  // LEVEL 2: aluno ja recebeu o welcome inicial em outra venda. Tenta
+  // lock no enrollment — se conseguir, manda email de "novo acesso".
+  const { data: enrollMarked } = await sb
+    .schema("membros")
+    .from("enrollments")
+    .update({ welcome_email_sent_at: new Date().toISOString() })
+    .eq("id", params.enrollmentId)
+    .is("welcome_email_sent_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (!enrollMarked) {
+    // Esse enrollment ja foi avisado anteriormente — nao manda nada.
+    return;
+  }
+
+  // Email "novo acesso liberado" — sem senha, citando a turma.
+  const html = newAccessEmailHtml({
+    fullName: params.fullName ?? "aluno",
+    cohortName: params.cohortName,
     loginUrl,
     platformName: settings.platformName,
     platformLogoUrl: settings.platformLogoUrl,
   });
 
-  const subject = params.isNewUser
-    ? `Seu acesso à ${settings.platformName} está pronto`
-    : `${settings.platformName} — novo acesso liberado`;
-
   const result = await sendEmail({
     to: params.email,
-    subject,
+    subject: `Novo acesso liberado: ${params.cohortName}`,
     html,
   });
 
   if (!result.ok) {
-    // Se Resend falhou, devolve a flag pra null pra que retry/reprocessamento
-    // tente de novo numa proxima rodada (em vez de ficar marcado como enviado
-    // sem ter saido). Logamos pra investigacao.
     console.error(
-      "[auto-enroll] sendEmail falhou — revertendo welcome_email_sent_at",
+      "[auto-enroll] novo-acesso falhou — revertendo flag",
       params.eventId,
       result.error,
     );
     await sb
       .schema("membros")
-      .from("users")
+      .from("enrollments")
       .update({ welcome_email_sent_at: null })
-      .eq("id", params.userId);
+      .eq("id", params.enrollmentId);
   }
 }
 
