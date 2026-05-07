@@ -18,6 +18,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/server";
 import { expiresAtFromDuration } from "@/lib/enrollment";
+import { inviteEmailHtml, sendEmail } from "@/lib/email/resend";
+import { getPlatformSettings } from "@/lib/settings";
 
 export const DEFAULT_STUDENT_PASSWORD = "mudar123";
 
@@ -237,6 +239,22 @@ async function handleAccessGrant(
     enrollmentId,
   });
 
+  // Dispara email de boas-vindas. Await pra garantir que sai antes da
+  // serverless function terminar (fire-and-forget em Vercel pode nao
+  // completar). Erro nao derruba o fluxo — aluno ja foi cadastrado.
+  // Email so leva senha quando user foi criado AGORA — pra existente,
+  // mandamos so o aviso de novo acesso sem sobrescrever a senha dele.
+  try {
+    await sendWelcomeEmail({
+      email: ev.email,
+      fullName: ev.full_name,
+      isNewUser: userResolution.created,
+      eventId: ev.id,
+    });
+  } catch (e) {
+    console.error("[auto-enroll] falha enviando email", ev.id, e);
+  }
+
   return {
     ok: true,
     status: "processed",
@@ -244,6 +262,53 @@ async function handleAccessGrant(
     userId: userResolution.userId,
     enrollmentId,
   };
+}
+
+/**
+ * Envia email de boas-vindas pra aluno recem matriculado via auto-enroll.
+ * Roda fora da transacao principal (fire-and-forget): se Resend tiver
+ * problema, nao queremos derrubar o cadastro. Erro vai pro log da Vercel.
+ */
+async function sendWelcomeEmail(params: {
+  email: string;
+  fullName: string | null;
+  isNewUser: boolean;
+  eventId: string;
+}): Promise<void> {
+  const sb = createAdminClient();
+  const settings = await getPlatformSettings(sb);
+
+  // URL de login — em dev/preview usa o env, em prod o domain final.
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL ?? "https://membros.felipesempe.com.br";
+  const loginUrl = `${origin}/auto-login?e=${encodeURIComponent(params.email)}&p=${encodeURIComponent(DEFAULT_STUDENT_PASSWORD)}`;
+
+  const html = inviteEmailHtml({
+    fullName: params.fullName ?? "novo aluno",
+    email: params.email,
+    password: params.isNewUser ? DEFAULT_STUDENT_PASSWORD : null,
+    loginUrl,
+    platformName: settings.platformName,
+    platformLogoUrl: settings.platformLogoUrl,
+  });
+
+  const subject = params.isNewUser
+    ? `Seu acesso à ${settings.platformName} está pronto`
+    : `${settings.platformName} — novo acesso liberado`;
+
+  const result = await sendEmail({
+    to: params.email,
+    subject,
+    html,
+  });
+
+  if (!result.ok) {
+    console.error(
+      "[auto-enroll] sendEmail falhou",
+      params.eventId,
+      result.error,
+    );
+  }
 }
 
 async function handleAccessRevoke(
