@@ -30,27 +30,36 @@ export const maxDuration = 60;
  * Auth: admin logado via cookie.
  */
 export async function POST(req: NextRequest) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json(
-      { ok: false, error: "Não autenticado." },
-      { status: 401 },
-    );
-  }
-  const { data: profile } = await supabase
-    .schema("membros")
-    .from("users")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-  if ((profile as { role?: string } | null)?.role !== "admin") {
-    return NextResponse.json(
-      { ok: false, error: "Sem permissão." },
-      { status: 403 },
-    );
+  // Auth: aceita admin via cookie OU Bearer com CRON_SECRET
+  // (pra disparar via pg_cron / SQL automation).
+  const authHeader = req.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+  const isCronAuth =
+    !!cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+  if (!isCronAuth) {
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json(
+        { ok: false, error: "Não autenticado." },
+        { status: 401 },
+      );
+    }
+    const { data: profile } = await supabase
+      .schema("membros")
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if ((profile as { role?: string } | null)?.role !== "admin") {
+      return NextResponse.json(
+        { ok: false, error: "Sem permissão." },
+        { status: 403 },
+      );
+    }
   }
 
   const sb = createAdminClient();
