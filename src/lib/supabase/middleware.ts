@@ -6,6 +6,18 @@ import { NextResponse, type NextRequest } from "next/server";
  * a cada request e proteger rotas autenticadas.
  */
 export async function updateSession(request: NextRequest) {
+  // Subdominio legado da plataforma antiga (MemberKit). Qualquer request
+  // pra academia.felipesempe.com.br/* redireciona pra /migracao no
+  // dominio principal, com 308 permanente. Cobre bookmarks dos alunos +
+  // links velhos compartilhados.
+  const host = request.headers.get("host") ?? "";
+  if (host === "academia.felipesempe.com.br") {
+    return NextResponse.redirect(
+      "https://membros.felipesempe.com.br/migracao",
+      308,
+    );
+  }
+
   let response = NextResponse.next({
     request: { headers: request.headers },
   });
