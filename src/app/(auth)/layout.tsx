@@ -28,7 +28,9 @@ export default async function AuthLayout({
               "radial-gradient(circle, rgba(201,146,42,0.4) 0%, transparent 70%)",
           }}
         />
-        <div className="relative w-full max-w-md">{children}</div>
+        {/* Constraint de largura fica em cada page (login/forgot/reset usam
+            max-w-md; migracao usa max-w-3xl pra caber vídeo). */}
+        <div className="relative w-full">{children}</div>
         <Toaster
           theme="dark"
           position="top-right"

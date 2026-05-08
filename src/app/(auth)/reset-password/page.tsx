@@ -23,7 +23,7 @@ export default function ResetPasswordPage() {
   }, [state]);
 
   return (
-    <div className="rounded-2xl border border-npb-border bg-npb-bg2 p-8 shadow-2xl">
+    <div className="mx-auto w-full max-w-md rounded-2xl border border-npb-border bg-npb-bg2 p-8 shadow-2xl">
       <div className="mb-8 flex flex-col items-center gap-3">
         <AuthLogo />
         <div className="text-center">
