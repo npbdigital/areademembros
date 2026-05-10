@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-08 — Etapa 33: Página de migração + redirect domínio antigo (academia.felipesempe.com.br)
-**Último commit no main:** `9913373` — feat(middleware): redirect academia.felipesempe.com.br -> /migracao 308
+**Última atualização:** 2026-05-10 — Etapa 34: Activity status (engagement) + webhook outbound de inatividade
+**Último commit no main:** `e7a3cbe` — fix(inactive-webhook): insere "9" do mobile em telefones antigos BR
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -51,6 +51,92 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 34 — Activity status (engagement) + webhook outbound de inatividade (2026-05-10)
+
+**Commits:** `421ec88` (feature principal), `6a52761` (phone no payload), `e7a3cbe` (fix "9" do mobile)
+
+**Por que:** Felipe queria separar visualmente alunos engajados dos não engajados sem bloquear acesso (acesso pago continua liberado). Pra usar em campanhas de reativação no Unnichat.
+
+**Decisões arquiteturais:**
+- **Sem coluna `activity_status` nova, sem trigger** — status é **derivado** de `auth.users.last_sign_in_at` (já exposto na view `students_admin` desde Etapa 32). Aluno que loga reativa instantâneo, sem propagação. Threshold mudável em runtime via setting (sem migration).
+- Critério "acessou" = login no painel (não watch-time/abrir aula). É o que faz mais sentido pra "engajamento" mínimo.
+- Aluno que **nunca logou** conta como inativo (não foi engajado).
+
+**Migration `activity_status_settings`:**
+- `platform_settings.inactivity_threshold_days = '60'` (default — Felipe pode mudar pra 30/90)
+- `platform_settings.inactive_user_webhook_url` (nullable — vazio = noop, status na UI continua)
+- `membros.inactive_webhook_log(user_id, fired_on date, fired_at, response_status, response_body, error)` PK composta `(user_id, fired_on)` → idempotência: cron rodando 2× no mesmo dia não duplica disparo
+
+**Backend (`lib/activity.ts`):**
+- `isInactive(lastSignInAt, days)` — boolean
+- `getActivityStatus(...)` — `'active' | 'inactive'`
+- `inactivityCutoffIso(days)` — ISO string pra usar em `.gte()/.lt()` Supabase
+- `getUserIdsByActivity(supabase, status, days)` — busca via `students_admin`
+
+**Push helper (`lib/push.ts`):**
+- `BroadcastAudience` ganha campo opcional `engagement: 'all' | 'active' | 'inactive'` (default `'all'`)
+- `resolveBroadcastAudience` aplica filtro **depois** dos cohorts (não recarrega audiência inteira quando `'all'`)
+
+**Settings UI (`/admin/settings`):**
+- Nova fieldset "Status de atividade" com:
+  - Input "Inativo após (dias)" (1-365, default 60)
+  - Input "Webhook de inatividade (POST)" (URL opcional)
+- Help text explica payload, formato `phone_digits` e comportamento de skip sem telefone
+
+**Lista admin (`/admin/students`):**
+- Filtro novo "Engajamento" (Todos / Ativos / Inativos)
+- Coluna nova "Engajamento" com badge dourado "Ativo" ou cinza "Inativo"
+- Coluna "Status" antiga renomeada pra **"Acesso"** (Liberado/Bloqueado, baseado em `is_active`) pra evitar conflito semântico com a nova
+- Threshold lido de settings, mostrado no `title` do badge
+
+**Broadcast form (`/admin/notifications/broadcast`):**
+- Pill "Status de engajamento" (Todos / Só ativos / Só inativos) abaixo das turmas
+- Aparece no preview do confirm modal quando `≠ all`
+
+**Cron `/api/cron/inactive-webhook`:**
+- Roda 1×/dia às `0 6 * * *` UTC = 03:00 BRT (configurado em `vercel.json`)
+- Detecta quem **cruzou o threshold nas últimas 24h** (`last_sign_in_at` em `[now-(N+1)d, now-Nd]`) — não pega quem já está inativo há tempos
+- Lock idempotente via INSERT na log com PK composta — falha 23505 (unique violation) = já fired hoje, pula
+- **Quando webhook URL vazia**: registra a transição no log mas não dispara HTTP (útil pra Felipe configurar no Unnichat depois e ter histórico)
+- Timeout 10s no fetch — não trava o cron se webhook for lento
+- Auth: `Bearer CRON_SECRET` (Vercel cron já adiciona automático)
+
+**Payload do webhook:**
+```json
+{
+  "event": "user.became_inactive",
+  "user": {
+    "id": "uuid",
+    "email": "...",
+    "full_name": "...",
+    "phone": "(11) 99479-7299",
+    "phone_digits": "5511994797299",
+    "last_sign_in_at": "..."
+  },
+  "threshold_days": 60
+}
+```
+
+**Normalização de telefone (`normalizePhoneDigits` no cron):**
+- Strip todos não-dígitos
+- Tira DDI 55 se já tiver, normaliza a parte local primeiro
+- Cell antigo (10 chars, 1º dígito local 6-9) ganha "9" do mobile automático
+  → `(11) 9479-7299` vira `5511994797299`. Encontrei 19 alunos na base nesse formato.
+- Fixo (1º dígito 2-5) deixa em 10 chars
+- Re-prepende "55" no fim
+- Estrangeiro (length ≠ 10/11 depois de strip) passa cru sem "55"
+- Aluno **sem telefone válido** → registra `error: "no_phone"` no log e **não dispara HTTP** (Unnichat filtra por phone, sem onde mandar)
+
+**Bonus fix (durante a Etapa 34):**
+- `(auth)/migracao/page.tsx` importava `migracaoSignInAction` + `MigracaoResult` que **não existiam** em `actions.ts` (bug pré-existente da Etapa 33 que estava quebrando o build).
+- Adicionei a action: tenta login, se senha errada dispara reset por e-mail automático e devolve `{resetSent: true}` pra UI.
+
+**Migrations aplicadas:** `activity_status_settings`
+
+**Arquivos novos:**
+- `src/lib/activity.ts`
+- `src/app/api/cron/inactive-webhook/route.ts`
 
 ### Etapa 33 — Página de migração + redirect domínio antigo (2026-05-08)
 
@@ -2180,6 +2266,9 @@ Cole essa mensagem inicial:
 | `e7a3454` | **Etapa 32 (parte)** — Painel de importação em massa de alunos via CSV |
 | `6a46741` | **Etapa 32 (parte)** — Filtros + paginação real + colunas extras em /admin/students |
 | `9913373` | **Etapa 33** — Página /migracao com tutorial + redirect academia.felipesempe.com.br -> /migracao 308 |
+| `421ec88` | **Etapa 34** — Activity status (engagement) derivado + filtro/coluna em /admin/students + audience de broadcast + cron + webhook outbound |
+| `6a52761` | feat: payload do inactive-webhook ganha `phone` + `phone_digits` (Unnichat filtra por phone) |
+| `e7a3cbe` | fix: insere "9" do mobile em telefones BR antigos (10 dígitos sem o 9) — 19 alunos na base nesse formato |
 
 ---
 
