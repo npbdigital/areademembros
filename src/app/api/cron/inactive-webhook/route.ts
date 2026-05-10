@@ -6,27 +6,44 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * Normaliza telefone pra Unnichat: só dígitos, com DDI 55 (Brasil) na
- * frente quando o aluno cadastrou só com DDD. Aceita variações comuns:
- *   "(27) 99893-3223"  → "5527998933223"
- *   "27 998933223"     → "5527998933223"
- *   "+55 27 998933223" → "5527998933223"
- *   "5527998933223"    → "5527998933223" (já normalizado)
- *   ""/null/inválido   → null (skip do disparo)
+ * Normaliza telefone pra Unnichat: 1 string só de dígitos no formato
+ * `DDI + DDD + número completo` (ex: 5551997058050). WhatsApp/Unnichat
+ * exige o "9" do mobile no formato moderno BR — celular antigo de 8
+ * dígitos (pré-2012) ganha o "9" automático.
+ *
+ * Variações aceitas:
+ *   "(11) 99479-7299"    → "5511994797299"  (moderno, completo)
+ *   "(11) 9479-7299"     → "5511994797299"  (antigo BR — insere "9")
+ *   "11 994797299"       → "5511994797299"
+ *   "+55 11 99479-7299"  → "5511994797299"
+ *   "5511994797299"      → "5511994797299"  (passa direto)
+ *   "(11) 3300-1234"     → "551133001234"   (fixo — não insere "9")
+ *   ""/null/inválido     → null (skip do disparo)
  */
 function normalizePhoneDigits(phone: string | null | undefined): string | null {
   if (!phone) return null;
-  const digits = phone.replace(/\D+/g, "");
-  if (digits.length < 10) return null; // muito curto = inválido
-  // Já tem DDI 55 + DDD (12-13 dígitos): retorna direto
-  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
-    return digits;
+  let digits = phone.replace(/\D+/g, "");
+  if (digits.length < 10) return null;
+
+  // Tira DDI 55 se já estiver — vamos normalizar a parte local primeiro
+  if (digits.length >= 12 && digits.startsWith("55")) {
+    digits = digits.slice(2);
   }
-  // 10-11 dígitos sem DDI: prepende 55
+
+  // Cell antigo (10 chars, 1º dígito do local é 6-9): insere o "9" do mobile
+  // pra virar formato novo de 11 chars. Fixo (1º dígito 2-5) não recebe.
+  if (digits.length === 10) {
+    const local = digits.slice(2);
+    if (/^[6-9]/.test(local)) {
+      digits = digits.slice(0, 2) + "9" + local;
+    }
+  }
+
+  // BR válido = 10 (fixo) ou 11 (mobile c/ 9). Outros tamanhos provavelmente
+  // DDI estrangeiro — passa cru (sem prefixar 55) pra Unnichat decidir.
   if (digits.length === 10 || digits.length === 11) {
     return "55" + digits;
   }
-  // Outros formatos (DDIs estrangeiros, telefones malformados) — passa cru
   return digits;
 }
 
