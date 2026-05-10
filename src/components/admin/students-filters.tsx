@@ -15,6 +15,7 @@ interface Defaults {
   from: string;
   to: string;
   access: string;
+  engagement: string; // "" | "active" | "inactive"
   showFicticio: boolean;
 }
 
@@ -31,6 +32,12 @@ const ACCESS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "never", label: "Nunca acessou" },
 ];
 
+const ENGAGEMENT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: "", label: "Todos" },
+  { value: "active", label: "Ativos" },
+  { value: "inactive", label: "Inativos" },
+];
+
 /**
  * Form GET de filtros — re-renderiza a página via navegação. Sem JS,
  * o "Aplicar" funciona como submit comum. O hidden showFicticio mantém
@@ -43,6 +50,7 @@ export function StudentsFilters({ defaults, cohorts }: Props) {
   const [from, setFrom] = useState(defaults.from);
   const [to, setTo] = useState(defaults.to);
   const [access, setAccess] = useState(defaults.access);
+  const [engagement, setEngagement] = useState(defaults.engagement);
 
   // Re-sincroniza quando os defaults mudam (ex: usuário clicou "Limpar")
   useEffect(() => {
@@ -51,14 +59,23 @@ export function StudentsFilters({ defaults, cohorts }: Props) {
     setFrom(defaults.from);
     setTo(defaults.to);
     setAccess(defaults.access);
-  }, [defaults.q, defaults.cohort, defaults.from, defaults.to, defaults.access]);
+    setEngagement(defaults.engagement);
+  }, [
+    defaults.q,
+    defaults.cohort,
+    defaults.from,
+    defaults.to,
+    defaults.access,
+    defaults.engagement,
+  ]);
 
   const hasAnyFilter =
     !!defaults.q ||
     !!defaults.cohort ||
     !!defaults.from ||
     !!defaults.to ||
-    !!defaults.access;
+    !!defaults.access ||
+    !!defaults.engagement;
 
   const clearHref = defaults.showFicticio
     ? "/admin/students"
@@ -126,6 +143,25 @@ export function StudentsFilters({ defaults, cohorts }: Props) {
             className="rounded-md border border-npb-border bg-npb-bg3 px-2 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
           >
             {ACCESS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Engajamento (status derivado do threshold) */}
+        <div className="flex flex-col gap-1 min-w-[140px]">
+          <label className="text-[10px] font-semibold uppercase tracking-wider text-npb-text-muted">
+            Engajamento
+          </label>
+          <select
+            name="engagement"
+            value={engagement}
+            onChange={(e) => setEngagement(e.target.value)}
+            className="rounded-md border border-npb-border bg-npb-bg3 px-2 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+          >
+            {ENGAGEMENT_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
                 {o.label}
               </option>

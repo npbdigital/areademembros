@@ -45,6 +45,8 @@ export interface PlatformSettingsFormValues {
   leaderboardVisibleToStudent: boolean;
   socialInstagramUrl: string | null;
   socialYoutubeUrl: string | null;
+  inactivityThresholdDays: number;
+  inactiveUserWebhookUrl: string | null;
 }
 
 export function PlatformSettingsForm({
@@ -284,6 +286,52 @@ export function PlatformSettingsForm({
             </p>
           </div>
         </div>
+      </fieldset>
+
+      {/* STATUS DE ATIVIDADE / INATIVOS */}
+      <fieldset className="space-y-4 rounded-2xl border border-npb-border bg-npb-bg2 p-6">
+        <legend className="-ml-2 px-2 text-xs font-semibold uppercase tracking-wide text-npb-gold">
+          Status de atividade
+        </legend>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[180px_1fr]">
+          <div className="space-y-1.5">
+            <Label htmlFor="inactivity_threshold_days" className="text-npb-text">
+              Inativo após (dias)
+            </Label>
+            <Input
+              id="inactivity_threshold_days"
+              name="inactivity_threshold_days"
+              type="number"
+              min={1}
+              max={365}
+              defaultValue={init.inactivityThresholdDays}
+              className="bg-npb-bg3 border-npb-border text-npb-text"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="inactive_user_webhook_url" className="text-npb-text">
+              Webhook de inatividade (POST)
+            </Label>
+            <Input
+              id="inactive_user_webhook_url"
+              name="inactive_user_webhook_url"
+              type="url"
+              defaultValue={init.inactiveUserWebhookUrl ?? ""}
+              placeholder="https://hooks.unnichat.com/..."
+              className="bg-npb-bg3 border-npb-border text-npb-text"
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-npb-text-muted">
+          Aluno que não acessa o painel há mais que esse limite vira{" "}
+          <strong className="text-npb-text">inativo</strong> (volta pra ativo
+          automaticamente quando logar). Acesso continua liberado — é só pra
+          separar engajados dos não engajados em <code>/admin/students</code>{" "}
+          e em filtros de broadcast. O webhook recebe um <code>POST</code> 1×
+          por aluno no dia em que ele cruza o limite (cron 1×/dia). Vazio =
+          desliga o disparo, mas o status na UI continua funcionando.
+        </p>
       </fieldset>
 
       {/* SUPORTE */}

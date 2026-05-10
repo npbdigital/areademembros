@@ -89,6 +89,14 @@ export async function updatePlatformSettingsAction(
         value: str(formData, "social_youtube_url") || null,
       },
       {
+        key: SETTINGS_KEYS.INACTIVITY_THRESHOLD_DAYS,
+        value: str(formData, "inactivity_threshold_days") || null,
+      },
+      {
+        key: SETTINGS_KEYS.INACTIVE_USER_WEBHOOK_URL,
+        value: str(formData, "inactive_user_webhook_url") || null,
+      },
+      {
         key: SETTINGS_KEYS.WELCOME_ENABLED,
         value: welcomeEnabled ? "true" : "false",
       },

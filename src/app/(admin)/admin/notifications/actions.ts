@@ -97,10 +97,17 @@ export async function sendBroadcastAction(
     const excludeRaw = formData.getAll("exclude_cohort_ids").map(String);
     const rolesRaw = formData.getAll("roles").map(String);
 
+    const engagementRaw = String(formData.get("engagement") ?? "all");
+    const engagement: "active" | "inactive" | "all" =
+      engagementRaw === "active" || engagementRaw === "inactive"
+        ? engagementRaw
+        : "all";
+
     const audience: BroadcastAudience = {
       include_cohort_ids: includeRaw.filter(Boolean),
       exclude_cohort_ids: excludeRaw.filter(Boolean),
       roles: rolesRaw.filter(Boolean).length > 0 ? rolesRaw.filter(Boolean) : undefined,
+      engagement,
     };
 
     // Canais de entrega — pelo menos 1 obrigatório

@@ -117,6 +117,59 @@ export async function resetPasswordAction(
 }
 
 // =============================================
+// MIGRACAO — login pra alunos vindos da plataforma antiga.
+// Tenta a senha primeiro; se inválida, dispara o reset por e-mail e
+// devolve {resetSent:true} pra UI mostrar a mensagem.
+// =============================================
+export type MigracaoResult = {
+  ok: boolean;
+  error?: string;
+  resetSent?: boolean;
+};
+
+export async function migracaoSignInAction(
+  _prev: MigracaoResult | null,
+  formData: FormData,
+): Promise<MigracaoResult> {
+  const email = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || !password) {
+    return { ok: false, error: "Preencha e-mail e senha." };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (!error) {
+    revalidatePath("/", "layout");
+    redirect("/dashboard");
+  }
+
+  // Senha errada (ou conta sem senha confirmada) → dispara reset automático
+  // pra reduzir fricção. Não diferencia "e-mail não cadastrado" pra evitar
+  // enumeração — devolve resetSent mesmo que o e-mail não exista.
+  const msg = error.message.toLowerCase();
+  if (msg.includes("invalid login credentials")) {
+    const origin =
+      headers().get("origin") ??
+      process.env.NEXT_PUBLIC_APP_URL ??
+      "http://localhost:3000";
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/callback?next=/reset-password`,
+    });
+    return { ok: false, resetSent: true };
+  }
+  if (msg.includes("email not confirmed")) {
+    return {
+      ok: false,
+      error: "E-mail ainda não confirmado. Verifique sua caixa de entrada.",
+    };
+  }
+  return { ok: false, error: error.message };
+}
+
+// =============================================
 // SIGN OUT — usado pelo header/menu de qualquer rota
 // =============================================
 export async function signOutAction() {

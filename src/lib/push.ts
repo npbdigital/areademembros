@@ -13,6 +13,7 @@
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getPlatformSettings } from "@/lib/settings";
+import { inactivityCutoffIso } from "@/lib/activity";
 
 export type PushCategory =
   | "broadcast"
@@ -192,6 +193,14 @@ export interface BroadcastAudience {
   roles?: string[]; // ['student', 'ficticio', 'moderator', 'admin']
   include_cohort_ids?: string[];
   exclude_cohort_ids?: string[];
+  /**
+   * Filtro de engajamento (status de atividade). Default 'all'.
+   * - 'active'   = só alunos que logaram dentro do threshold
+   * - 'inactive' = só alunos que NÃO logaram (nunca OU > threshold)
+   * - 'all'      = ignora o filtro
+   * Threshold lido de platform_settings.inactivity_threshold_days.
+   */
+  engagement?: "active" | "inactive" | "all";
 }
 
 export async function resolveBroadcastAudience(
@@ -252,6 +261,31 @@ export async function resolveBroadcastAudience(
     }
     return true;
   });
+
+  // Filtro de engajamento (active/inactive). Aplica DEPOIS dos cohorts pra
+  // não recarregar audiência inteira quando engagement = 'all'.
+  const engagement = audience.engagement ?? "all";
+  if (engagement !== "all" && userIds.length > 0) {
+    const settings = await getPlatformSettings(admin);
+    const cutoff = inactivityCutoffIso(settings.inactivityThresholdDays);
+    const { data: signIns } = await admin
+      .schema("membros")
+      .from("students_admin")
+      .select("id, last_sign_in_at")
+      .in("id", userIds);
+    const signInMap = new Map<string, string | null>();
+    for (const r of (signIns ?? []) as Array<{
+      id: string;
+      last_sign_in_at: string | null;
+    }>) {
+      signInMap.set(r.id, r.last_sign_in_at);
+    }
+    userIds = userIds.filter((uid) => {
+      const lastSignIn = signInMap.get(uid);
+      const isInactiveUser = !lastSignIn || lastSignIn < cutoff;
+      return engagement === "inactive" ? isInactiveUser : !isInactiveUser;
+    });
+  }
 
   return userIds;
 }

@@ -6,8 +6,10 @@ import {
   Users,
   XCircle,
 } from "lucide-react";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { formatDateBrt, formatDateTimeBrt } from "@/lib/format-date";
+import { getPlatformSettings } from "@/lib/settings";
+import { inactivityCutoffIso, isInactive } from "@/lib/activity";
 import { StudentsFilters } from "@/components/admin/students-filters";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +22,7 @@ interface SearchParams {
   from?: string;
   to?: string;
   access?: string;
+  engagement?: string;
   showFicticio?: string;
   page?: string;
 }
@@ -49,12 +52,19 @@ export default async function AdminStudentsPage({
   const dateFrom = (searchParams?.from ?? "").trim();
   const dateTo = (searchParams?.to ?? "").trim();
   const lastAccess = (searchParams?.access ?? "").trim();
+  const engagement = (searchParams?.engagement ?? "").trim();
   const showFicticio = searchParams?.showFicticio !== "0";
   const page = Math.max(1, parseInt(searchParams?.page ?? "1", 10) || 1);
   const offsetStart = (page - 1) * PAGE_SIZE;
   const offsetEnd = offsetStart + PAGE_SIZE - 1;
 
   const sb = createAdminClient();
+
+  // Threshold de inatividade vem das configs (default 60d). Usado pra
+  // filtrar a query E pra renderizar a badge de Engajamento.
+  const settings = await getPlatformSettings(createClient());
+  const thresholdDays = settings.inactivityThresholdDays;
+  const inactiveCutoff = inactivityCutoffIso(thresholdDays);
 
   // Lista de cohorts pro select de filtro
   const { data: cohortsRaw } = await sb
@@ -116,6 +126,16 @@ export default async function AdminStudentsPage({
     query = query.gte("last_sign_in_at", since);
   }
 
+  // Filtro de engajamento (binário, threshold configurável). Inativo =
+  // nunca logou OU last_sign_in_at < cutoff. Ativo = logou DENTRO do cutoff.
+  if (engagement === "inactive") {
+    query = query.or(
+      `last_sign_in_at.is.null,last_sign_in_at.lt.${inactiveCutoff}`,
+    );
+  } else if (engagement === "active") {
+    query = query.gte("last_sign_in_at", inactiveCutoff);
+  }
+
   const { data: studentsRaw, count: totalCount } = await query;
   const list = (studentsRaw ?? []) as StudentRow[];
   const total = totalCount ?? 0;
@@ -137,7 +157,7 @@ export default async function AdminStudentsPage({
   }
 
   const hasAnyFilter =
-    !!q || !!cohortId || !!dateFrom || !!dateTo || !!lastAccess;
+    !!q || !!cohortId || !!dateFrom || !!dateTo || !!lastAccess || !!engagement;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -187,6 +207,7 @@ export default async function AdminStudentsPage({
           from: dateFrom,
           to: dateTo,
           access: lastAccess,
+          engagement,
           showFicticio,
         }}
         cohorts={cohorts}
@@ -228,7 +249,8 @@ export default async function AdminStudentsPage({
                 <th className="px-4 py-2.5 font-semibold">Matrículas</th>
                 <th className="px-4 py-2.5 font-semibold">Confirmou</th>
                 <th className="px-4 py-2.5 font-semibold">Último acesso</th>
-                <th className="px-4 py-2.5 font-semibold">Status</th>
+                <th className="px-4 py-2.5 font-semibold">Engajamento</th>
+                <th className="px-4 py-2.5 font-semibold">Acesso</th>
                 <th className="px-4 py-2.5 font-semibold">Criado em</th>
               </tr>
             </thead>
@@ -301,12 +323,29 @@ export default async function AdminStudentsPage({
                       : "—"}
                   </td>
                   <td className="px-4 py-3">
-                    {s.is_active !== false ? (
-                      <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
-                        <CheckCircle2 className="h-2.5 w-2.5" /> Ativo
+                    {isInactive(s.last_sign_in_at, thresholdDays) ? (
+                      <span
+                        title={`Sem login há ${thresholdDays}+ dias (ou nunca logou). Reativa automático no próximo acesso.`}
+                        className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-semibold text-npb-text-muted"
+                      >
+                        <XCircle className="h-2.5 w-2.5" /> Inativo
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 rounded bg-npb-bg3 px-1.5 py-0.5 text-[10px] font-semibold text-npb-text-muted">
+                      <span
+                        title={`Logou nos últimos ${thresholdDays} dias`}
+                        className="inline-flex items-center gap-1 rounded bg-npb-gold/15 px-1.5 py-0.5 text-[10px] font-semibold text-npb-gold"
+                      >
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Ativo
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {s.is_active !== false ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-green-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-green-400">
+                        <CheckCircle2 className="h-2.5 w-2.5" /> Liberado
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-red-400">
                         <XCircle className="h-2.5 w-2.5" /> Bloqueado
                       </span>
                     )}
@@ -341,6 +380,7 @@ function buildHref(params: SearchParams): string {
   if (params.from) sp.set("from", params.from);
   if (params.to) sp.set("to", params.to);
   if (params.access) sp.set("access", params.access);
+  if (params.engagement) sp.set("engagement", params.engagement);
   if (params.showFicticio === "0") sp.set("showFicticio", "0");
   if (params.page && params.page !== "1") sp.set("page", params.page);
   const s = sp.toString();
