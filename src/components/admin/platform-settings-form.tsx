@@ -328,9 +328,18 @@ export function PlatformSettingsForm({
           <strong className="text-npb-text">inativo</strong> (volta pra ativo
           automaticamente quando logar). Acesso continua liberado — é só pra
           separar engajados dos não engajados em <code>/admin/students</code>{" "}
-          e em filtros de broadcast. O webhook recebe um <code>POST</code> 1×
-          por aluno no dia em que ele cruza o limite (cron 1×/dia). Vazio =
-          desliga o disparo, mas o status na UI continua funcionando.
+          e em filtros de broadcast.
+        </p>
+        <p className="text-[11px] text-npb-text-muted">
+          O webhook recebe um <code>POST</code> 1× por aluno no dia em que ele
+          cruza o limite (cron 1×/dia). Payload:{" "}
+          <code>
+            {`{ event, user: { id, email, full_name, phone, phone_digits, last_sign_in_at }, threshold_days }`}
+          </code>
+          . O campo <code>phone_digits</code> já vem normalizado (só dígitos
+          com DDI 55 — pronto pra filtrar no Unnichat). Aluno sem telefone
+          cadastrado é registrado no log mas <strong>não dispara HTTP</strong>.
+          Vazio = desliga o disparo, mas o status na UI continua funcionando.
         </p>
       </fieldset>
 

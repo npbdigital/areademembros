@@ -6,6 +6,31 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
+ * Normaliza telefone pra Unnichat: só dígitos, com DDI 55 (Brasil) na
+ * frente quando o aluno cadastrou só com DDD. Aceita variações comuns:
+ *   "(27) 99893-3223"  → "5527998933223"
+ *   "27 998933223"     → "5527998933223"
+ *   "+55 27 998933223" → "5527998933223"
+ *   "5527998933223"    → "5527998933223" (já normalizado)
+ *   ""/null/inválido   → null (skip do disparo)
+ */
+function normalizePhoneDigits(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D+/g, "");
+  if (digits.length < 10) return null; // muito curto = inválido
+  // Já tem DDI 55 + DDD (12-13 dígitos): retorna direto
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) {
+    return digits;
+  }
+  // 10-11 dígitos sem DDI: prepende 55
+  if (digits.length === 10 || digits.length === 11) {
+    return "55" + digits;
+  }
+  // Outros formatos (DDIs estrangeiros, telefones malformados) — passa cru
+  return digits;
+}
+
+/**
  * Cron de webhook de inatividade — roda 1×/dia.
  *
  * Detecta alunos que CRUZARAM o threshold de inatividade nas últimas 24h
@@ -52,7 +77,7 @@ export async function GET(req: NextRequest) {
   const { data: candidatesRaw } = await sb
     .schema("membros")
     .from("students_admin")
-    .select("id, email, full_name, last_sign_in_at")
+    .select("id, email, full_name, phone, last_sign_in_at")
     .in("role", ["student", "ficticio"])
     .gte("last_sign_in_at", cutoffYesterday)
     .lt("last_sign_in_at", cutoffNow);
@@ -61,6 +86,7 @@ export async function GET(req: NextRequest) {
     id: string;
     email: string;
     full_name: string | null;
+    phone: string | null;
     last_sign_in_at: string;
   }>;
 
@@ -77,6 +103,7 @@ export async function GET(req: NextRequest) {
 
   let fired = 0;
   let skipped = 0;
+  let skippedNoPhone = 0;
   let webhookFailed = 0;
 
   for (const c of candidates) {
@@ -101,9 +128,24 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
+    const phoneDigits = normalizePhoneDigits(c.phone);
+
     // Sem URL configurada: registra a transição mas não dispara HTTP
     if (!webhookUrl) {
       fired++; // conta a transição detectada
+      continue;
+    }
+
+    // Sem telefone válido: pula o POST (Unnichat filtra por phone). Marca
+    // no log com erro pra Felipe ver depois quem não pôde ser disparado.
+    if (!phoneDigits) {
+      await sb
+        .schema("membros")
+        .from("inactive_webhook_log")
+        .update({ error: "no_phone" })
+        .eq("user_id", c.id)
+        .eq("fired_on", new Date().toISOString().slice(0, 10));
+      skippedNoPhone++;
       continue;
     }
 
@@ -122,6 +164,8 @@ export async function GET(req: NextRequest) {
             id: c.id,
             email: c.email,
             full_name: c.full_name,
+            phone: c.phone, // formato bruto (como o aluno cadastrou)
+            phone_digits: phoneDigits, // só dígitos com DDI — usar pra Unnichat
             last_sign_in_at: c.last_sign_in_at,
           },
           threshold_days: thresholdDays,
@@ -157,6 +201,7 @@ export async function GET(req: NextRequest) {
     detected: candidates.length,
     fired,
     skipped,
+    skipped_no_phone: skippedNoPhone,
     webhook_failed: webhookFailed,
     threshold_days: thresholdDays,
     webhook_configured: Boolean(webhookUrl),
