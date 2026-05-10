@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-04 — Etapa 29: Monitorias auto-status + calendário + deeplink Zoom
-**Último commit no main:** `622bec4` — feat(etapa29): monitorias auto-status + calendario + deeplink Zoom
+**Última atualização:** 2026-05-08 — Etapa 33: Página de migração + redirect domínio antigo (academia.felipesempe.com.br)
+**Último commit no main:** `9913373` — feat(middleware): redirect academia.felipesempe.com.br -> /migracao 308
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -51,6 +51,109 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 33 — Página de migração + redirect domínio antigo (2026-05-08)
+
+**Commits:** `ccc45c4` (página), `9913373` (middleware)
+
+**Por que:** Felipe está migrando alunos da MemberKit antiga (`academia.felipesempe.com.br`) pra Área de Membros nova (`membros.felipesempe.com.br`). Bookmark e link compartilhado dos alunos ainda batem no domínio velho.
+
+**Mudanças:**
+- Middleware checa `request.headers.host`. Se for `academia.felipesempe.com.br`, redireciona 308 permanente pra `/migracao` no domínio novo. Cobre TODA rota — bookmark de aula, comunidade, etc.
+- Nova página `/migracao` (dentro do route group `(auth)`):
+  - Layout `max-w-3xl`: video do YouTube de tutorial em destaque + instruções numeradas (use senha `mudar123` da plataforma antiga) + form de login lado-a-lado no desktop / empilhado no mobile
+  - `TUTORIAL_VIDEO_ID` hardcoded no topo do arquivo (trocar quando regravar tutorial)
+- Layout `(auth)/layout.tsx` deixou de aplicar `max-w-md` global — agora cada page escolhe sua largura. Login/forgot/reset mantém `max-w-md` (igual antes).
+
+### Etapa 32 — Painel de alunos admin repaginado (2026-05-07)
+
+**Commits:** `6a46741`, `74116a4`, `e7a3454`, `a319aab`, `713b964`, `63d6d47`, `2286855`, `5d49586`, `a359509`
+
+**Por que:** Volume de alunos cresceu (importação da plataforma antiga) e o admin precisava de filtros + import em massa pra operar.
+
+**Filtros + colunas extras em `/admin/students`:**
+- Busca textual (nome/email) + filtro de turma + filtro de data de cadastro + filtro "acessou últimos N dias"
+- Colunas novas: "Confirmou e-mail" (data) + "Último acesso" — ajuda a identificar alunos inativos
+- **Paginação real** (`74116a4`): antes era `.limit(500)` hardcoded. Agora paginated com count + page params na URL
+
+**Importação em massa `/admin/import`:**
+- Select de turma destino + upload de CSV + dry-run + execução em chunks com barra de progresso e log de falhas
+- Aceita formato do export da plataforma antiga (Id, Nome completo, Email, Criado em, CPF/CNPJ, Telefone…). **Obrigatórias:** Email + Criado em. Outras opcionais
+- Regra de matrícula:
+  - Aluno novo → cria conta + matrícula
+  - Aluno existente sem matrícula nessa turma → adiciona matrícula
+  - Aluno existente com matrícula nessa turma:
+    - CSV mais recente → renova (atualiza `enrolled_at` + `expires_at`)
+    - CSV mais antigo → mantém (preserva tempo do aluno)
+- Helper `lib/import-csv.ts` parseia + executa. Linha sem nome cai em fallback "email como full_name" (`a319aab` + `713b964`)
+
+**Access logs admin (`/admin/access-logs`):**
+- Botão excluir evento (`63d6d47`)
+- Filtro "Todos" agora esconde eventos `skipped` (só aparecem em "Ignorados") — UX mais limpa
+
+**Sidebar:**
+- Link "Instagram" + "YouTube" editáveis no admin (`a359509`) — antes hardcoded
+- Monitoria agendada mostra link do Zoom já na listagem (`5d49586`) — admin não precisa entrar pra copiar
+
+**Migrations aplicadas:** `students_pagination_indexes` (índices em `created_at`, `last_seen_at`)
+
+### Etapa 31 — Polimentos diversos (2026-05-04 → 2026-05-06)
+
+**Commits:** `efece84`, `bfa7a28`, `aaaac78`, `a596e4a`, `9724eed`, `c241acd`, `e60a600`
+
+Bateria de pequenas melhorias e fixes técnicos espalhados por toda a app.
+
+- **Branding (`efece84`):** logo retangular customizada agora aparece nas telas de login/forgot/reset/migração (antes era só no app interno)
+- **Auth (`bfa7a28`):** senha padrão de novos cadastros mudou de `123456` pra `mudar123`. Esconde título "Academia NPB" no login quando há logo customizada (evita duplicar branding)
+- **Vercel cron (`aaaac78`):** removeu crons sub-daily — Hobby plan só aceita 1×/dia. Reorganizou o cron de monitoria-status pra rodar 1×/dia em horário de pico
+- **Monitorias (`a596e4a`):** calendário do aluno trocou de mensal pra **semanal** — densidade visual melhor no mobile, foca nos próximos 7d
+- **Comunidade (`9724eed` + `c241acd`):**
+  - Vídeo na descrição do post agora aparece **acima** do texto na prévia do feed (antes ficava embaixo, escondido)
+  - Admin/moderador podem **fixar/desfixar posts** pelo menu do post (3 pontinhos). Fixados aparecem no topo do feed do espaço com badge "Fixado"
+- **Supabase admin client (`e60a600`):** trocou pra `@supabase/supabase-js` puro em vez de `@supabase/ssr` no `createAdminClient`. O wrapper SSR usava o **Data Cache do Next.js** que cacheava queries indevidamente em produção (admin via dados velhos por minutos). Sem cache = leituras sempre frescas
+
+### Etapa 30 — Auto-enrollment por venda + auto-login + e-mails de boas-vindas em 2 níveis (2026-05-04 → 2026-05-07)
+
+**Commits (cluster massivo):** `9fcaa70`, `1de7307`, `23f399a`, `e6d0303`, `dfc1a63`, `7b8a1d2`, `52853fa`, `da8f2c7`, `db89d8c`, `d78826c`, `ce1c59f`, `ad134b2`
+
+**Por que:** Felipe vinha matriculando aluno **manual** depois de cada venda na Kiwify. Rota crítica — atrasava primeiro acesso e gerava suporte. Esta etapa fecha o ciclo: venda → matrícula → e-mail → login one-click, sem intervenção humana.
+
+**Pipeline (`23f399a` + `dfc1a63` + `e6d0303`):**
+
+1. **Migration `purchase_events`:** tabela queue em `membros.purchase_events` (`transaction_row_id`, `event`, `processed_at`, `error`). UNIQUE(`transaction_row_id`, `event`) garante idempotência.
+2. **Trigger SQL** em `public.transactions_data`: ao INSERT ou UPDATE OF `event`, enfileira venda em `purchase_events` se o produto está mapeado. Reage tanto a venda nova quanto a UPDATE (Kiwify às vezes atualiza o row em vez de criar novo).
+3. **Setting `auto_enrollment_enabled`** (default `false`): kill switch global na UI.
+4. **Página `/admin/products-mapping`:** auto-descobre produtos únicos em `transactions_data` últimos 90d cross-platform (Kiwify+Hubla+Payt+Youshop colapsam em 1 linha por produto). Por produto: dropdown de turma + dias de acesso opcional. **2 cliques.**
+5. **Webhook direct `/api/webhooks/kiwify-direct`:** pra produtos fora do `transactions_data` (vendas que não passam pela ETL principal). Enfileira direto em `purchase_events`.
+6. **Helper `lib/auto-enroll.ts`:** consome a queue, cria/atualiza usuário, faz UPSERT de `enrollments` com `expires_at` calculado do mapeamento, marca evento como processado. Lock atômico via `UPDATE WHERE processed_at IS NULL` evita race condition entre 2 jobs concorrentes (`db89d8c`). Recovery automático de eventos travados em `processing` há mais de 5min.
+
+**One-click login + Unnichat (`9fcaa70` + `1de7307`):**
+
+- **Rota `/auto-login`:** aceita `?email=...&password=...` na URL, faz sign-in server-side, redireciona pro dashboard. Usado em e-mails (CTA "entrar agora") e em links de WhatsApp.
+- **Endpoint `/api/unnichat/login-link`:** POST com `Authorization: Bearer UNNICHAT_API_TOKEN` e body `{ email }` retorna `{ login_url, expires_at }` com URL encurtada (`/l/{slug}`). Reutiliza token vigente se ainda válido (TTL 7d), senão cria novo. Helper `lib/one-click.ts` encapsula a lógica.
+- **Caso de uso:** Unnichat precisa enviar mensagem fora do fluxo de compra (lembrete, reativação) — só tem o email do lead. Chama esse endpoint, recebe link pronto pra colar na mensagem.
+
+**E-mails de boas-vindas em 2 níveis (`d78826c` + `ce1c59f` + `ad134b2`):**
+
+- **Migration:** adiciona `users.welcome_email_sent_at` + `enrollments.welcome_email_sent_at`.
+- **LEVEL 1 (1× na vida do aluno):** se `users.welcome_email_sent_at IS NULL` → envia `inviteEmailHtml` com senha `mudar123` + CTA pro auto-login. Cobre o 1º cadastro.
+- **LEVEL 2 (1× por matrícula):** se `users.welcome_email_sent_at` JÁ preenchido + `enrollments.welcome_email_sent_at IS NULL` → envia `newAccessEmailHtml` (template novo) avisando "Novo acesso liberado: <nome da turma>" sem senha.
+- **Reprocessamento de venda já avisada não envia nada** (idempotência via lock atômico — `UPDATE WHERE coluna IS NULL`, se afetou 0 linhas alguém já enviou).
+- **Endpoint POST `/api/admin/send-pending-welcome-emails`:** dispara em lote pros alunos cadastrados ANTES desse fix (50 por chamada). Mesmo lock atômico, idempotente em paralelo.
+
+**Middleware (`52853fa`) + Bearer (`da8f2c7`):**
+- Middleware bypassa redirect de login pra requests com `Authorization: Bearer` (cron jobs + webhooks externos não devem cair em `/login`).
+- Endpoint de backfill aceita `Bearer CRON_SECRET` em vez de cookie de sessão (Vercel cron consegue chamar).
+
+**Migrations aplicadas:** `purchase_events`, `auto_enrollment_setting`, `products_mapping`, `users_welcome_email_sent_at`, `enrollments_welcome_email_sent_at`
+
+**Arquivos novos:**
+- `src/lib/auto-enroll.ts`, `src/lib/one-click.ts`
+- `src/app/api/unnichat/login-link/route.ts`
+- `src/app/api/webhooks/kiwify-direct/route.ts`
+- `src/app/api/admin/send-pending-welcome-emails/route.ts`
+- `src/app/auto-login/page.tsx`
+- `src/app/(admin)/admin/products-mapping/page.tsx` + actions
 
 ### Etapa 29 — Monitorias auto-status + calendário + deeplink Zoom (2026-05-04)
 
@@ -2068,6 +2171,15 @@ Cole essa mensagem inicial:
 | `feeb7d4` | **Etapa 26.1** — Polimentos broadcast banner + Favicon custom + PWA install fix |
 | `da4dc3d` | fix(lesson-mobile): tabs scroll horizontal + URL longa não estoura layout |
 | `8de4ac0` | **Etapa 27** — Encurtador de URLs (manual + auto) + Player YouTube limpo |
+| `871a528` | **Etapa 28** — One-click login + Welcome popup por curso + Celebração de conquistas |
+| `622bec4` | **Etapa 29** — Monitorias auto-status + calendário + deeplink Zoom |
+| `23f399a` | **Etapa 30 (parte)** — Auto-enrollment por venda + products-mapping |
+| `ad134b2` | **Etapa 30 (parte)** — E-mails de boas-vindas em 2 níveis (welcome + new access) |
+| `9fcaa70` | **Etapa 30 (parte)** — Endpoint Unnichat login-link + auto-login URL |
+| `c241acd` | **Etapa 31** — Polimentos: fixar posts, monitoria semanal, branding login, admin client sem cache |
+| `e7a3454` | **Etapa 32 (parte)** — Painel de importação em massa de alunos via CSV |
+| `6a46741` | **Etapa 32 (parte)** — Filtros + paginação real + colunas extras em /admin/students |
+| `9913373` | **Etapa 33** — Página /migracao com tutorial + redirect academia.felipesempe.com.br -> /migracao 308 |
 
 ---
 
