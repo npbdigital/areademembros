@@ -44,6 +44,9 @@ export const SETTINGS_KEYS = {
   // Redes sociais (links na sidebar do aluno)
   SOCIAL_INSTAGRAM_URL: "social_instagram_url",
   SOCIAL_YOUTUBE_URL: "social_youtube_url",
+  // Activity status — alunos que não acessam há N dias contam como inativos
+  INACTIVITY_THRESHOLD_DAYS: "inactivity_threshold_days",
+  INACTIVE_USER_WEBHOOK_URL: "inactive_user_webhook_url",
 } as const;
 
 export type SettingKey = (typeof SETTINGS_KEYS)[keyof typeof SETTINGS_KEYS];
@@ -84,6 +87,9 @@ export interface PlatformSettings {
   // Redes sociais
   socialInstagramUrl: string | null;
   socialYoutubeUrl: string | null;
+  // Activity status
+  inactivityThresholdDays: number;
+  inactiveUserWebhookUrl: string | null;
 }
 
 /** Defaults aplicados quando a chave não está no banco. */
@@ -120,6 +126,8 @@ export const SETTINGS_DEFAULTS: PlatformSettings = {
   pushNotificationsEnabled: true,
   socialInstagramUrl: null,
   socialYoutubeUrl: null,
+  inactivityThresholdDays: 60,
+  inactiveUserWebhookUrl: null,
 };
 
 /** Lê todas as configs num único hit. */
@@ -229,6 +237,12 @@ export async function getPlatformSettings(
       map.get(SETTINGS_KEYS.SOCIAL_INSTAGRAM_URL)?.trim() || null,
     socialYoutubeUrl:
       map.get(SETTINGS_KEYS.SOCIAL_YOUTUBE_URL)?.trim() || null,
+    inactivityThresholdDays: parseInt2(
+      map.get(SETTINGS_KEYS.INACTIVITY_THRESHOLD_DAYS),
+      SETTINGS_DEFAULTS.inactivityThresholdDays,
+    ),
+    inactiveUserWebhookUrl:
+      map.get(SETTINGS_KEYS.INACTIVE_USER_WEBHOOK_URL)?.trim() || null,
   };
 }
 

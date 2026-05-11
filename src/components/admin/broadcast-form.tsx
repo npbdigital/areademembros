@@ -30,6 +30,9 @@ export function BroadcastForm({ cohorts }: Props) {
   const [roles, setRoles] = useState<Set<string>>(
     new Set(["student", "ficticio"]),
   );
+  const [engagement, setEngagement] = useState<"all" | "active" | "inactive">(
+    "all",
+  );
   const [deliverPush, setDeliverPush] = useState(true);
   const [deliverInapp, setDeliverInapp] = useState(true);
   const [deliverBanner, setDeliverBanner] = useState(false);
@@ -111,6 +114,7 @@ export function BroadcastForm({ cohorts }: Props) {
       includes.forEach((cid) => fd.append("include_cohort_ids", cid));
       excludes.forEach((cid) => fd.append("exclude_cohort_ids", cid));
       roles.forEach((r) => fd.append("roles", r));
+      fd.set("engagement", engagement);
       if (deliverPush) fd.set("deliver_push", "on");
       if (deliverInapp) fd.set("deliver_inapp", "on");
       if (deliverBanner) {
@@ -134,6 +138,7 @@ export function BroadcastForm({ cohorts }: Props) {
         setPicks(new Map());
         setBannerExpiresAt("");
         setPopupImageUrl("");
+        setEngagement("all");
         setConfirmOpen(false);
         router.refresh();
       } else {
@@ -289,6 +294,42 @@ export function BroadcastForm({ cohorts }: Props) {
               </p>
             </>
           )}
+        </div>
+
+        {/* Engajamento */}
+        <div>
+          <label className="mb-2 block text-xs font-semibold text-npb-text-muted">
+            Status de engajamento
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { key: "all", label: "Todos" },
+                { key: "active", label: "Só ativos" },
+                { key: "inactive", label: "Só inativos" },
+              ] as const
+            ).map((opt) => {
+              const active = engagement === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setEngagement(opt.key)}
+                  className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${
+                    active
+                      ? "border-npb-gold bg-npb-gold/10 text-npb-gold"
+                      : "border-npb-border bg-npb-bg3 text-npb-text-muted hover:text-npb-text"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11px] text-npb-text-muted">
+            Ativo = logou nos últimos N dias (configurável em Configurações).
+            Inativo = nunca logou ou está sem acessar há mais que esse limite.
+          </p>
         </div>
 
         {/* Canais de entrega */}
@@ -448,6 +489,12 @@ export function BroadcastForm({ cohorts }: Props) {
                   <p>
                     <strong className="text-red-400">Excluir</strong>:{" "}
                     {excludes.length} turma{excludes.length > 1 ? "s" : ""}
+                  </p>
+                )}
+                {engagement !== "all" && (
+                  <p>
+                    <strong className="text-npb-text">Engajamento</strong>:{" "}
+                    {engagement === "active" ? "só ativos" : "só inativos"}
                   </p>
                 )}
                 {link && (
