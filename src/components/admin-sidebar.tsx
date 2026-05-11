@@ -71,6 +71,11 @@ const groups = [
         label: "Importar alunos",
         icon: Upload,
       },
+      {
+        href: "/admin/import/community",
+        label: "Importar do Circle",
+        icon: MessageCircle,
+      },
     ],
   },
   {
