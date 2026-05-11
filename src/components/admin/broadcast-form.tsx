@@ -191,6 +191,14 @@ export function BroadcastForm({ cohorts }: Props) {
               placeholder="/lessons/abc-123 ou https://exemplo.com"
               className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-2 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
             />
+            <p className="mt-1.5 text-[10px] leading-relaxed text-npb-text-muted">
+              <strong className="text-npb-gold">Variáveis personalizadas:</strong>{" "}
+              use {"{{firstName}}"}, {"{{lastName}}"}, {"{{fullName}}"},{" "}
+              {"{{email}}"}, {"{{phone}}"} ou {"{{cpf}}"} no link — a gente
+              substitui pelos dados reais do aluno antes de redirecionar.
+              Útil pra pré-preencher cadastro do WebinarJam, formulários
+              externos, etc.
+            </p>
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-npb-text-muted">

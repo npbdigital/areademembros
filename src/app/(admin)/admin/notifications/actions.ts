@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { type BroadcastAudience, sendBroadcast } from "@/lib/push";
+import { findUnsupportedPlaceholders } from "@/lib/broadcast-link";
 
 export type ActionResult<T = unknown> = {
   ok: boolean;
@@ -90,6 +91,17 @@ export async function sendBroadcastAction(
     }
     if (link && !link.startsWith("/") && !link.startsWith("http")) {
       return { ok: false, error: 'Link inválido. Use /caminho ou https://...' };
+    }
+    // Avisa se o admin usou {{xpto}} com variavel desconhecida — vai virar
+    // string vazia silenciosamente, melhor explicitar antes de mandar.
+    if (link) {
+      const unsupported = findUnsupportedPlaceholders(link);
+      if (unsupported.length > 0) {
+        return {
+          ok: false,
+          error: `Variáveis desconhecidas no link: ${unsupported.map((v) => `{{${v}}}`).join(", ")}. Disponíveis: {{firstName}}, {{lastName}}, {{fullName}}, {{email}}, {{phone}}, {{cpf}}.`,
+        };
+      }
     }
 
     // Audience: lê os 3 fields do form

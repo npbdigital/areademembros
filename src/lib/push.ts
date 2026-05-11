@@ -13,6 +13,7 @@
 import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/server";
 import { getPlatformSettings } from "@/lib/settings";
+import { linkHasPlaceholders } from "@/lib/broadcast-link";
 
 export type PushCategory =
   | "broadcast"
@@ -301,7 +302,13 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
     throw new Error("Selecione pelo menos um canal de entrega.");
   }
 
-  // Cria registro de broadcast
+  // Detecta placeholders no link tipo {{firstName}}, {{email}}. Se tiver,
+  // guarda o link original em link_template e cada user recebe um link
+  // curto /r/{broadcastId} que faz a substituicao no momento do clique.
+  const hasPlaceholders = linkHasPlaceholders(params.link);
+  const linkTemplate = hasPlaceholders ? params.link : null;
+
+  // Cria registro de broadcast (link sera atualizado depois se tiver placeholder)
   const { data: bc, error: bcErr } = await admin
     .schema("membros")
     .from("push_broadcasts")
@@ -309,7 +316,8 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
       sent_by: params.sentBy,
       title: params.title,
       body: params.body,
-      link: params.link,
+      link: hasPlaceholders ? null : params.link,
+      link_template: linkTemplate,
       link_label: params.linkLabel ?? null,
       audience: params.audience,
       recipients_count: userIds.length,
@@ -328,6 +336,18 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
   }
   const broadcastId = (bc as { id: string }).id;
 
+  // Se tinha placeholder, agora que temos o broadcastId, reescreve o link
+  // pra apontar pra rota nossa de redirect-com-vars.
+  let effectiveLink = params.link;
+  if (hasPlaceholders) {
+    effectiveLink = `/r/${broadcastId}`;
+    await admin
+      .schema("membros")
+      .from("push_broadcasts")
+      .update({ link: effectiveLink })
+      .eq("id", broadcastId);
+  }
+
   if (userIds.length === 0) {
     return { broadcastId, recipientsCount: 0, delivered: 0, failed: 0 };
   }
@@ -338,7 +358,7 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
       user_id: uid,
       title: params.title,
       body: params.body,
-      link: params.link,
+      link: effectiveLink,
     }));
     await admin.schema("membros").from("notifications").insert(notifications);
   }
@@ -358,7 +378,7 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
             payload: {
               title: params.title,
               body: params.body ?? undefined,
-              link: params.link ?? undefined,
+              link: effectiveLink ?? undefined,
               tag: `broadcast-${broadcastId}`,
             },
           }).catch(() => ({ delivered: 0, failed: 1 })),
