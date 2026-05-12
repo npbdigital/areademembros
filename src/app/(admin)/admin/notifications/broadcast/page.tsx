@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, Megaphone } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/server";
 import { BroadcastForm } from "@/components/admin/broadcast-form";
+import { StopBroadcastButton } from "@/components/admin/stop-broadcast-button";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function BroadcastPage() {
       .schema("membros")
       .from("push_broadcasts")
       .select(
-        "id, title, body, audience, recipients_count, delivered_count, failed_count, created_at, sent_by",
+        "id, title, body, audience, recipients_count, delivered_count, failed_count, created_at, sent_by, deliver_banner, banner_expires_at, deliver_popup, popup_expires_at",
       )
       .order("created_at", { ascending: false })
       .limit(20),
@@ -35,7 +36,12 @@ export default async function BroadcastPage() {
     failed_count: number;
     created_at: string;
     sent_by: string | null;
+    deliver_banner: boolean;
+    banner_expires_at: string | null;
+    deliver_popup: boolean;
+    popup_expires_at: string | null;
   }>;
+  const nowIso = new Date().toISOString();
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -83,6 +89,12 @@ export default async function BroadcastPage() {
                 minute: "2-digit",
                 timeZone: "America/Sao_Paulo",
               });
+              const bannerActive =
+                b.deliver_banner &&
+                (b.banner_expires_at === null || b.banner_expires_at > nowIso);
+              const popupActive =
+                b.deliver_popup &&
+                (b.popup_expires_at === null || b.popup_expires_at > nowIso);
               return (
                 <li
                   key={b.id}
@@ -92,9 +104,18 @@ export default async function BroadcastPage() {
                     <p className="text-sm font-semibold text-npb-text">
                       {b.title}
                     </p>
-                    <span className="flex-shrink-0 text-[11px] text-npb-text-muted">
-                      {dt}
-                    </span>
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      <span className="text-[11px] text-npb-text-muted">
+                        {dt}
+                      </span>
+                      {(bannerActive || popupActive) && (
+                        <StopBroadcastButton
+                          broadcastId={b.id}
+                          title={b.title}
+                          channels={{ banner: bannerActive, popup: popupActive }}
+                        />
+                      )}
+                    </div>
                   </div>
                   {b.body && (
                     <p className="mt-1 line-clamp-2 text-xs text-npb-text-muted">

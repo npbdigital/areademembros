@@ -149,6 +149,17 @@ export async function sendBroadcastAction(
     const popupImageUrl =
       String(formData.get("popup_image_url") ?? "").trim() || null;
 
+    // Popup — expira em (opcional, mesmo formato do banner)
+    let popupExpiresAt: string | null = null;
+    const popupExpRaw = String(formData.get("popup_expires_at") ?? "").trim();
+    if (deliverPopup && popupExpRaw) {
+      const withTz = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(popupExpRaw)
+        ? popupExpRaw
+        : popupExpRaw + "-03:00";
+      const d = new Date(withTz);
+      if (!Number.isNaN(d.getTime())) popupExpiresAt = d.toISOString();
+    }
+
     const result = await sendBroadcast({
       sentBy: userId,
       title,
@@ -162,6 +173,7 @@ export async function sendBroadcastAction(
       bannerExpiresAt,
       deliverPopup,
       popupImageUrl,
+      popupExpiresAt,
     });
 
     revalidatePath("/admin/notifications/broadcast");
@@ -172,6 +184,77 @@ export async function sendBroadcastAction(
         recipientsCount: result.recipientsCount,
         delivered: result.delivered,
       },
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Erro." };
+  }
+}
+
+/**
+ * Interrompe a entrega de banner/popup que ainda esta rodando — seta as
+ * datas de expiracao pra agora. Push e in-app ja foram entregues no envio
+ * e nao tem como desfazer; isso aqui afeta so quem ainda nao viu o
+ * banner/popup. Quem ja viu, viu.
+ */
+export async function stopBroadcastDeliveryAction(
+  broadcastId: string,
+): Promise<ActionResult<{ stopped: { banner: boolean; popup: boolean } }>> {
+  try {
+    await assertAdmin();
+    const admin = createAdminClient();
+
+    const { data: bc, error: fetchErr } = await admin
+      .schema("membros")
+      .from("push_broadcasts")
+      .select(
+        "id, deliver_banner, banner_expires_at, deliver_popup, popup_expires_at",
+      )
+      .eq("id", broadcastId)
+      .single();
+
+    if (fetchErr || !bc) {
+      return { ok: false, error: "Anúncio não encontrado." };
+    }
+
+    const row = bc as {
+      deliver_banner: boolean;
+      banner_expires_at: string | null;
+      deliver_popup: boolean;
+      popup_expires_at: string | null;
+    };
+
+    const nowIso = new Date().toISOString();
+    const stopBanner =
+      row.deliver_banner &&
+      (row.banner_expires_at === null || row.banner_expires_at > nowIso);
+    const stopPopup =
+      row.deliver_popup &&
+      (row.popup_expires_at === null || row.popup_expires_at > nowIso);
+
+    if (!stopBanner && !stopPopup) {
+      return {
+        ok: false,
+        error:
+          "Nada pra interromper — push/in-app já foram entregues no envio.",
+      };
+    }
+
+    const update: Record<string, string> = {};
+    if (stopBanner) update.banner_expires_at = nowIso;
+    if (stopPopup) update.popup_expires_at = nowIso;
+
+    const { error: updErr } = await admin
+      .schema("membros")
+      .from("push_broadcasts")
+      .update(update)
+      .eq("id", broadcastId);
+
+    if (updErr) return { ok: false, error: updErr.message };
+
+    revalidatePath("/admin/notifications/broadcast");
+    return {
+      ok: true,
+      data: { stopped: { banner: stopBanner, popup: stopPopup } },
     };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Erro." };

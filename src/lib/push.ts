@@ -316,6 +316,8 @@ export interface SendBroadcastParams {
   deliverPopup?: boolean;
   /** URL da imagem que aparece no topo do popup (opcional). */
   popupImageUrl?: string | null;
+  /** Quando setado, popup para de aparecer pra todos depois desta data. */
+  popupExpiresAt?: string | null;
 }
 
 export async function sendBroadcast(params: SendBroadcastParams): Promise<{
@@ -361,6 +363,7 @@ export async function sendBroadcast(params: SendBroadcastParams): Promise<{
       banner_expires_at: params.bannerExpiresAt ?? null,
       deliver_popup: deliverPopup,
       image_url: params.popupImageUrl ?? null,
+      popup_expires_at: params.popupExpiresAt ?? null,
     })
     .select("id")
     .single();
@@ -551,6 +554,7 @@ export async function getNextPopupForUser(
   userId: string,
 ): Promise<PendingPopup | null> {
   const admin = createAdminClient();
+  const nowIso = new Date().toISOString();
 
   const { data: rows } = await admin
     .schema("membros")
@@ -559,6 +563,7 @@ export async function getNextPopupForUser(
       "id, title, body, link, link_label, image_url, audience, created_at",
     )
     .eq("deliver_popup", true)
+    .or(`popup_expires_at.is.null,popup_expires_at.gt.${nowIso}`)
     .order("created_at", { ascending: true })
     .limit(20);
 

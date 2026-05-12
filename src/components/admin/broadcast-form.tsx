@@ -40,6 +40,7 @@ export function BroadcastForm({ cohorts }: Props) {
   const [bannerExpiresAt, setBannerExpiresAt] = useState("");
   const [popupImageUrl, setPopupImageUrl] = useState("");
   const [popupImageUploading, setPopupImageUploading] = useState(false);
+  const [popupExpiresAt, setPopupExpiresAt] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -124,6 +125,7 @@ export function BroadcastForm({ cohorts }: Props) {
       if (deliverPopup) {
         fd.set("deliver_popup", "on");
         if (popupImageUrl.trim()) fd.set("popup_image_url", popupImageUrl.trim());
+        if (popupExpiresAt) fd.set("popup_expires_at", popupExpiresAt);
       }
 
       const res = await sendBroadcastAction(null, fd);
@@ -138,6 +140,7 @@ export function BroadcastForm({ cohorts }: Props) {
         setPicks(new Map());
         setBannerExpiresAt("");
         setPopupImageUrl("");
+        setPopupExpiresAt("");
         setEngagement("all");
         setConfirmOpen(false);
         router.refresh();
@@ -378,7 +381,20 @@ export function BroadcastForm({ cohorts }: Props) {
             </div>
           )}
           {deliverPopup && (
-            <div className="mt-3 space-y-2 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
+            <div className="mt-3 space-y-3 rounded-md border border-npb-gold/30 bg-npb-gold/5 p-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold text-npb-text-muted">
+                  Popup expira em (BRT) — opcional, vazio = aparece pra todos
+                  até cada um ver pela primeira vez
+                </label>
+                <input
+                  type="datetime-local"
+                  value={popupExpiresAt}
+                  onChange={(e) => setPopupExpiresAt(e.target.value)}
+                  className="w-full rounded-md border border-npb-border bg-npb-bg3 px-3 py-1.5 text-sm text-npb-text outline-none focus:border-npb-gold-dim"
+                />
+              </div>
+
               <label className="block text-[11px] font-semibold text-npb-text-muted">
                 Imagem do popup (opcional) — fica no topo do modal · max 5MB,
                 ideal 1200×600

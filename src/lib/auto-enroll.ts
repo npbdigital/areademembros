@@ -76,10 +76,16 @@ export async function processPurchaseEvent(
   // 0 linhas, significa que outra execução pegou primeiro (cron + webhook
   // do Supabase + retry manual podem rodar em paralelo). Sai sem fazer
   // nada — evita race condition e double-INSERT no enrollment.
+  //
+  // Setamos processed_at=now() no lock pra servir de "ultimo heartbeat":
+  // se a serverless crashar entre o lock e o markEvent final, o recovery
+  // do cron usa processed_at < 5min ago como sinal de evento travado.
+  // Quando o markEvent final roda, processed_at é sobrescrito com o
+  // timestamp final — semantica nao quebra (status discrimina os casos).
   const { data: locked } = await sb
     .schema("membros")
     .from("purchase_events")
-    .update({ status: "processing" })
+    .update({ status: "processing", processed_at: new Date().toISOString() })
     .eq("id", eventId)
     .eq("status", "pending")
     .select(
@@ -109,13 +115,14 @@ export async function processPurchaseEvent(
 
   // Toggle global. Se desativado, devolve o status pra pending pra que,
   // quando admin reativar, o cron pegue de novo (em vez de ficar preso
-  // em "processing").
+  // em "processing"). Limpa processed_at (estava setado pelo lock como
+  // heartbeat) — pending nao deve ter processed_at populado.
   const enabled = await isAutoEnrollmentEnabled(sb);
   if (!enabled) {
     await sb
       .schema("membros")
       .from("purchase_events")
-      .update({ status: "pending" })
+      .update({ status: "pending", processed_at: null })
       .eq("id", ev.id);
     return {
       ok: true,

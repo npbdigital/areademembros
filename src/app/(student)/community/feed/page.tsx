@@ -18,15 +18,16 @@ export default async function CommunityFeedPage() {
   const role = await getUserRole(supabase, user.id);
   const adminSupabase = createAdminClient();
 
-  // Pega todos os posts approved de páginas ativas, mais recentes primeiro
+  // Pega todos os posts approved de páginas ativas, timeline pura
+  // (ignora is_pinned — fixar é só pra dentro de cada página, não pro feed
+  // global).
   const { data: postsData } = await supabase
     .schema("membros")
     .from("community_topics")
     .select(
-      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, is_pinned, card_type, created_at",
+      "id, page_id, user_id, title, content_html, video_url, image_url, likes_count, replies_count, card_type, created_at",
     )
     .eq("status", "approved")
-    .order("is_pinned", { ascending: false })
     .order("created_at", { ascending: false })
     .range(0, PAGE_SIZE - 1);
 
@@ -40,7 +41,6 @@ export default async function CommunityFeedPage() {
     image_url: string | null;
     likes_count: number;
     replies_count: number;
-    is_pinned: boolean;
     card_type: string | null;
     created_at: string;
   }>;
@@ -119,7 +119,7 @@ export default async function CommunityFeedPage() {
       imageUrl: p.image_url,
       likesCount: p.likes_count,
       repliesCount: p.replies_count,
-      isPinned: p.is_pinned,
+      isPinned: false,
       createdAt: p.created_at,
       authorId: p.user_id,
       authorName: author?.full_name ?? "Aluno",

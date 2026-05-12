@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-10 — Etapa 34: Activity status (engagement) + webhook outbound de inatividade
-**Último commit no main:** `e7a3cbe` — fix(inactive-webhook): insere "9" do mobile em telefones antigos BR
+**Última atualização:** 2026-05-12 — Etapa 35: Painel Circle import + ajustes broadcast/feed/cron
+**Último commit no main:** _(a ser preenchido pelo próximo commit)_
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -51,6 +51,39 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 35 — Painel Circle import + ajustes broadcast/feed/cron (2026-05-10 → 2026-05-12)
+
+**Commit:** _(este — `feat(etapa35): painel circle + popup expira + interromper broadcast + feed timeline + fix recovery cron)`_
+
+**Por que:** consolidação de várias melhorias pequenas pedidas pelo Felipe + correção de um bug de recovery do cron de auto-enroll que estava quebrado em silêncio (descoberto durante análise de Disk IO da Supabase).
+
+**1) Painel de importação Circle** (`/admin/import/community`)
+- Migra posts/comments/membros de uma comunidade exportada do Circle pra `membros.community_topics` + `community_replies`.
+- Fluxo: upload de 4 CSVs (posts, comments, members, spaces) → análise (cruza autores por nome com `membros.users` por email) → admin decide cada autor (use_existing / create_fictitious / skip) → admin marca quais posts importar (default desmarcado, agrupados por space) → executa.
+- Posts entram com `status='approved'`, `is_moderated=true`, `created_at` preservado do Circle.
+- Felipe excluído por nome (todos "Felipe Sempe" filtrados).
+- Imagens hospedadas no Circle podem ser migradas pro bucket `course-covers/circle-import/` no momento do import (1-3s extra por post com imagem).
+- Comments importados com threading (top-level primeiro, depois filhos resolvendo `parent_id`).
+- Arquivos: `src/lib/circle-import.ts`, `src/app/api/admin/import/community/{analyze,run}/route.ts`, `src/components/admin/circle-import-panel.tsx`, `src/app/(admin)/admin/import/community/page.tsx`.
+
+**2) Popup grande ganha "expira em" + botão Interromper no histórico**
+- Migration `push_broadcasts_popup_expires_at`: nova coluna `popup_expires_at TIMESTAMPTZ NULL` em `membros.push_broadcasts`. `getNextPopupForUser` filtra `popup_expires_at IS NULL OR popup_expires_at > now()`.
+- Form de broadcast ([broadcast-form.tsx](src/components/admin/broadcast-form.tsx)) tem novo `<input type="datetime-local">` no bloco do popup, idêntico ao do banner.
+- Histórico de broadcasts ganha botão **Interromper** ([stop-broadcast-button.tsx](src/components/admin/stop-broadcast-button.tsx)) que aparece só quando o broadcast tem banner ou popup ainda ativos. Action `stopBroadcastDeliveryAction` seta `banner_expires_at` e/ou `popup_expires_at = now()`. Push e in-app já foram entregues no momento do envio — não dá pra desfazer; o componente já avisa isso na confirmação.
+
+**3) Feed da comunidade vira timeline pura**
+- [src/app/(student)/community/feed/page.tsx](src/app/(student)/community/feed/page.tsx) ignora `is_pinned` na ordenação e força `isPinned: false` ao montar os cards. Posts fixados continuam funcionando dentro de cada página `/community/[slug]`, mas no Feed global aparecem em ordem cronológica sem badge "FIXADO" nem borda dourada.
+
+**4) Fix do recovery do cron `process-pending-purchases` (silent bug)**
+- O recovery filtrava por `lt("updated_at", fiveMinAgo)`, mas a tabela `membros.purchase_events` não tem coluna `updated_at` (só `created_at` e `processed_at`). PostgREST retornava erro silencioso (sem `throwOnError`), ou seja: **eventos travados em `processing` por crash de serverless ficavam presos pra sempre**.
+- Solução sem schema change: lock atômico em `processPurchaseEvent` agora seta `processed_at = now()` junto com `status = "processing"` (vira "último heartbeat"). Recovery filtra `lt("processed_at", fiveMinAgo)`. Quando o `markEvent` final roda, `processed_at` é sobrescrito com timestamp final — semântica não quebra (status discrimina).
+- Fallback do toggle global desativado e o próprio recovery limpam `processed_at = null` ao devolver pra `pending`.
+- Arquivos: [src/lib/auto-enroll.ts](src/lib/auto-enroll.ts), [src/app/api/cron/process-pending-purchases/route.ts](src/app/api/cron/process-pending-purchases/route.ts).
+
+**Contexto adicional do Disk IO da Supabase:** o alerta veio porque o banco é compartilhado com `dashboard-estruturamais`, que tem 11 cron jobs `refresh-*` rodando MVs a cada 15-30min. Areademembros não usa nenhum dos MVs (`mv_daily_*`, `mv_hourly_*`, etc) — confirmado por grep. Os crons do areademembros (`live-sessions-notify`, `process-pending-purchases`) rodam a cada 5min com volume mínimo. Vítima do IO compartilhado, não geradora.
+
+---
 
 ### Etapa 34 — Activity status (engagement) + webhook outbound de inatividade (2026-05-10)
 
