@@ -3,7 +3,7 @@
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
 **Última atualização:** 2026-05-12 — Etapa 35: Painel Circle import + ajustes broadcast/feed/cron
-**Último commit no main:** _(a ser preenchido pelo próximo commit)_
+**Último commit no main:** `0d628fa` — feat(etapa35): popup expira + interromper broadcast + feed timeline + fix recovery cron
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -54,7 +54,7 @@ SaaS de área de membros multi-curso, multi-turma, com:
 
 ### Etapa 35 — Painel Circle import + ajustes broadcast/feed/cron (2026-05-10 → 2026-05-12)
 
-**Commit:** _(este — `feat(etapa35): painel circle + popup expira + interromper broadcast + feed timeline + fix recovery cron)`_
+**Commits:** `aaf80b4` (painel Circle import — Etapa 34.5, ainda dentro do escopo da 35), `0d628fa` (popup expira + interromper + feed timeline + fix recovery)
 
 **Por que:** consolidação de várias melhorias pequenas pedidas pelo Felipe + correção de um bug de recovery do cron de auto-enroll que estava quebrado em silêncio (descoberto durante análise de Disk IO da Supabase).
 
