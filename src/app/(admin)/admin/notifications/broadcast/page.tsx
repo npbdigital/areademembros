@@ -19,7 +19,7 @@ export default async function BroadcastPage() {
       .schema("membros")
       .from("push_broadcasts")
       .select(
-        "id, title, body, audience, recipients_count, delivered_count, failed_count, created_at, sent_by, deliver_banner, banner_expires_at, deliver_popup, popup_expires_at",
+        "id, title, body, audience, recipients_count, delivered_count, failed_count, created_at, sent_by, deliver_push, deliver_inapp, deliver_banner, banner_expires_at, deliver_popup, popup_expires_at",
       )
       .order("created_at", { ascending: false })
       .limit(20),
@@ -36,12 +36,45 @@ export default async function BroadcastPage() {
     failed_count: number;
     created_at: string;
     sent_by: string | null;
+    deliver_push: boolean;
+    deliver_inapp: boolean;
     deliver_banner: boolean;
     banner_expires_at: string | null;
     deliver_popup: boolean;
     popup_expires_at: string | null;
   }>;
   const nowIso = new Date().toISOString();
+
+  // Métricas agregadas por canal — popup tem broadcast_popup_seen
+  // (1 row por aluno que viu); banner tem user_dismissed_broadcasts
+  // (1 row por aluno que dispensou). Push e in-app já têm contador no
+  // proprio broadcast (delivered_count e recipients_count).
+  const broadcastIds = history.map((b) => b.id);
+  const popupSeenMap = new Map<string, number>();
+  const bannerDismissedMap = new Map<string, number>();
+  if (broadcastIds.length > 0) {
+    const [{ data: seenRows }, { data: dismRows }] = await Promise.all([
+      supabase
+        .schema("membros")
+        .from("broadcast_popup_seen")
+        .select("broadcast_id")
+        .in("broadcast_id", broadcastIds),
+      supabase
+        .schema("membros")
+        .from("user_dismissed_broadcasts")
+        .select("broadcast_id")
+        .in("broadcast_id", broadcastIds),
+    ]);
+    for (const r of (seenRows ?? []) as Array<{ broadcast_id: string }>) {
+      popupSeenMap.set(r.broadcast_id, (popupSeenMap.get(r.broadcast_id) ?? 0) + 1);
+    }
+    for (const r of (dismRows ?? []) as Array<{ broadcast_id: string }>) {
+      bannerDismissedMap.set(
+        r.broadcast_id,
+        (bannerDismissedMap.get(r.broadcast_id) ?? 0) + 1,
+      );
+    }
+  }
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -122,26 +155,60 @@ export default async function BroadcastPage() {
                       {b.body}
                     </p>
                   )}
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-npb-text-muted">
-                    <span>
-                      <strong className="text-npb-text">{b.delivered_count}</strong>{" "}
-                      entregue{b.delivered_count !== 1 ? "s" : ""} de{" "}
-                      {b.recipients_count}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-npb-text-muted">
+                    <span className="text-npb-text-muted">
+                      Audiência:{" "}
+                      <strong className="text-npb-text">
+                        {b.recipients_count}
+                      </strong>
                     </span>
-                    {b.failed_count > 0 && (
-                      <span className="text-red-400">
-                        {b.failed_count} falha{b.failed_count !== 1 ? "s" : ""}
+                    {b.deliver_push && (
+                      <span title="Notificação no celular/desktop entregue ao OS">
+                        📱 Push:{" "}
+                        <strong className="text-npb-text">
+                          {b.delivered_count}
+                        </strong>
+                        {b.failed_count > 0 && (
+                          <span className="text-red-400">
+                            {" "}
+                            ({b.failed_count} falha
+                            {b.failed_count !== 1 ? "s" : ""})
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {b.deliver_inapp && (
+                      <span title="Notificação no sino do topbar — criada pra cada aluno da audiência">
+                        🔔 In-app: enviado pra todos
+                      </span>
+                    )}
+                    {b.deliver_banner && (
+                      <span title="Quantos alunos clicaram em dispensar a barra fixa">
+                        📌 Banner:{" "}
+                        <strong className="text-npb-text">
+                          {bannerDismissedMap.get(b.id) ?? 0}
+                        </strong>{" "}
+                        dispensaram
+                      </span>
+                    )}
+                    {b.deliver_popup && (
+                      <span title="Quantos alunos viram o popup grande (1× por aluno)">
+                        🪟 Popup:{" "}
+                        <strong className="text-npb-text">
+                          {popupSeenMap.get(b.id) ?? 0}
+                        </strong>{" "}
+                        viram
                       </span>
                     )}
                     {audience.include_cohort_ids?.length ? (
                       <span>
-                        Incluiu {audience.include_cohort_ids.length} turma
+                        · Incluiu {audience.include_cohort_ids.length} turma
                         {audience.include_cohort_ids.length > 1 ? "s" : ""}
                       </span>
                     ) : null}
                     {audience.exclude_cohort_ids?.length ? (
                       <span>
-                        Excluiu {audience.exclude_cohort_ids.length} turma
+                        · Excluiu {audience.exclude_cohort_ids.length} turma
                         {audience.exclude_cohort_ids.length > 1 ? "s" : ""}
                       </span>
                     ) : null}
