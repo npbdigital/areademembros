@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Compra confirmada — Low Ticket Automático</title>
+<meta name="description" content="Sua matrícula no Low Ticket Automático foi confirmada. Veja como acessar a plataforma." />
+
+<!-- Open Graph (compartilhamento) -->
+<meta property="og:title" content="Compra confirmada — Low Ticket Automático" />
+<meta property="og:description" content="Sua matrícula foi confirmada. Acesse agora a Academia NPB." />
+<meta property="og:type" content="website" />
+
+<style>
+  /* === Design tokens espelhados da Área de Membros NPB === */
+  :root {
+    --npb-gold:        #c9922a;
+    --npb-gold-light:  #e8b84b;
+    --npb-gold-dim:    #7a5618;
+    --npb-bg:          #0d0d0d;
+    --npb-bg2:         #161616;
+    --npb-bg3:         #1e1e1e;
+    --npb-bg4:         #252525;
+    --npb-text:        #f0f0f0;
+    --npb-text-muted:  #888888;
+    --npb-border:      #2a2a2a;
+    --npb-success:     #4ade80;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    min-height: 100%;
+  }
+
+  body {
+    background: var(--npb-bg);
+    color: var(--npb-text);
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Gradiente sutil dourado no topo, igual sidebar do app */
+    background-image:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(201, 146, 42, 0.12), transparent 70%),
+      linear-gradient(180deg, #1a1500 0%, var(--npb-bg) 40%);
+    background-attachment: fixed;
+  }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 32px 20px 64px;
+  }
+
+  /* Header com logo placeholder + selo de venda confirmada */
+  .header {
+    text-align: center;
+    margin-bottom: 32px;
+  }
+
+  .badge-success {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(74, 222, 128, 0.12);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    color: var(--npb-success);
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 24px;
+  }
+
+  .badge-success svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  h1 {
+    font-size: 32px;
+    font-weight: 800;
+    margin: 0 0 12px;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  h1 .highlight {
+    background: linear-gradient(135deg, var(--npb-gold), var(--npb-gold-light));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .subtitle {
+    font-size: 16px;
+    color: var(--npb-text-muted);
+    max-width: 540px;
+    margin: 0 auto;
+  }
+
+  /* Card principal */
+  .card {
+    background: var(--npb-bg2);
+    border: 1px solid var(--npb-border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 16px;
+  }
+
+  .card.gold-accent {
+    border-color: rgba(201, 146, 42, 0.3);
+    background: linear-gradient(180deg, rgba(201, 146, 42, 0.05) 0%, var(--npb-bg2) 60%);
+  }
+
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--npb-gold);
+    margin: 0 0 16px;
+  }
+
+  /* Lista de passos */
+  .steps {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .steps li {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    background: rgba(201, 146, 42, 0.15);
+    color: var(--npb-gold);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 13px;
+  }
+
+  .step-text {
+    flex: 1;
+    font-size: 15px;
+    color: var(--npb-text);
+  }
+
+  .step-text strong {
+    color: var(--npb-gold-light);
+  }
+
+  .step-text code {
+    background: var(--npb-bg3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 13px;
+    color: var(--npb-gold);
+  }
+
+  /* Botões */
+  .cta-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 15px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    border: none;
+    cursor: pointer;
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--npb-gold), var(--npb-gold-dim));
+    color: #1a1500;
+    box-shadow: 0 4px 16px rgba(201, 146, 42, 0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(201, 146, 42, 0.4);
+  }
+
+  .btn-secondary {
+    background: var(--npb-bg3);
+    color: var(--npb-text);
+    border: 1px solid var(--npb-border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--npb-gold-dim);
+    background: var(--npb-bg4);
+  }
+
+  .btn svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Info box embaixo */
+  .info-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .info-item {
+    background: var(--npb-bg3);
+    border: 1px solid var(--npb-border);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 13px;
+  }
+
+  .info-item strong {
+    display: block;
+    color: var(--npb-gold);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--npb-border);
+    color: var(--npb-text-muted);
+    font-size: 12px;
+  }
+
+  .footer strong {
+    color: var(--npb-gold);
+  }
+
+  /* Responsividade */
+  @media (max-width: 600px) {
+    .container {
+      padding: 24px 16px 48px;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    .subtitle {
+      font-size: 14px;
+    }
+    .card {
+      padding: 20px;
+    }
+    .btn {
+      width: 100%;
+      flex: 1 1 100%;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="badge-success">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      Compra confirmada
+    </div>
+
+    <h1>Bem-vindo ao <span class="highlight">Low Ticket Automático</span></h1>
+    <p class="subtitle">
+      Sua matrícula foi processada com sucesso. Em alguns minutos seu acesso fica
+      disponível — fica de olho no e-mail e no WhatsApp.
+    </p>
+  </header>
+
+  <!-- Card de instruções -->
+  <div class="card gold-accent">
+    <h2 class="section-title">📩 Como acessar sua área de membros</h2>
+
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <span class="step-text">
+          Em alguns minutos você recebe um <strong>e-mail</strong> com seus dados
+          de acesso. Confere a caixa de entrada (e também a aba "Promoções" e
+          "Spam" por garantia).
+        </span>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <span class="step-text">
+          Sua <strong>senha inicial</strong> é <code>mudar123</code>. Recomendamos
+          trocar pra uma senha sua depois do primeiro acesso, em
+          <em>Perfil → Trocar senha</em>.
+        </span>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <span class="step-text">
+          Se não receber em 10 minutos ou tiver qualquer dificuldade, manda mensagem
+          pro nosso <strong>WhatsApp de suporte</strong> com seu e-mail de compra.
+        </span>
+      </li>
+    </ol>
+
+    <div class="cta-row" style="margin-top: 24px;">
+      <a href="https://membros.felipesempe.com.br/login" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+          <polyline points="10 17 15 12 10 7"/>
+          <line x1="15" y1="12" x2="3" y2="12"/>
+        </svg>
+        Acessar área de membros
+      </a>
+      <a href="https://wa.me/5548988757616?text=Oi%2C%20acabei%20de%20comprar%20o%20Low%20Ticket%20Autom%C3%A1tico%20e%20preciso%20de%20ajuda%20com%20o%20acesso" class="btn btn-secondary" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893A11.821 11.821 0 0 0 20.464 3.488"/>
+        </svg>
+        Falar no WhatsApp
+      </a>
+    </div>
+  </div>
+
+  <!-- Info adicional -->
+  <div class="card">
+    <div class="info-row">
+      <div class="info-item">
+        <strong>📚 O que vem no curso</strong>
+        Aulas práticas passo-a-passo do método Low Ticket Automático, com exemplos
+        reais e templates prontos.
+      </div>
+      <div class="info-item">
+        <strong>💬 Comunidade</strong>
+        Acesso à comunidade interna pra trocar ideia com outros alunos e tirar dúvidas
+        direto com o time.
+      </div>
+      <div class="info-item">
+        <strong>🎯 Suporte</strong>
+        Dúvida sobre o método ou conteúdo? WhatsApp de suporte no card acima ou
+        e-mail noplanbdigital@gmail.com.
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    Powered by <strong>NPB Digital</strong>
+  </footer>
+
+</div>
+
+</body>
+</html>
