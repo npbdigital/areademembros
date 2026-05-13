@@ -204,6 +204,33 @@ export interface BroadcastAudience {
   engagement?: "active" | "inactive" | "all";
 }
 
+/**
+ * Helper que pagina queries Supabase em batches de 1000 (limite default
+ * do PostgREST). Recebe uma factory que cria a query do zero a cada
+ * iteracao — necessario porque .range() nao pode ser reaplicado depois
+ * que o builder ja virou Promise.
+ */
+async function fetchAllPaged<T>(
+  buildQuery: () => {
+    range: (
+      from: number,
+      to: number,
+    ) => PromiseLike<{ data: T[] | null; error: unknown }>;
+  },
+): Promise<T[]> {
+  const PAGE = 1000;
+  const all: T[] = [];
+  let offset = 0;
+  while (true) {
+    const { data } = await buildQuery().range(offset, offset + PAGE - 1);
+    const rows = (data ?? []) as T[];
+    all.push(...rows);
+    if (rows.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
 export async function resolveBroadcastAudience(
   audience: BroadcastAudience,
 ): Promise<string[]> {
@@ -212,56 +239,99 @@ export async function resolveBroadcastAudience(
     ? audience.roles
     : ["student", "ficticio"];
 
-  // Pega todos os users com a role
-  const { data: usersData } = await admin
-    .schema("membros")
-    .from("users")
-    .select("id")
-    .in("role", roles)
-    .eq("is_active", true);
-  let userIds = ((usersData ?? []) as Array<{ id: string }>).map((u) => u.id);
+  const include = audience.include_cohort_ids ?? [];
+  const exclude = audience.exclude_cohort_ids ?? [];
+  const nowIso = new Date().toISOString();
+
+  // Estrategia 1 (com include): comeca pelas matriculas das cohorts
+  // alvo. Universo bem menor que pegar todos os users primeiro — uma
+  // turma tem dezenas/centenas de alunos, vs ~10k+ users no banco.
+  // Bug que isso resolve: PostgREST limita 1000 rows por request, entao
+  // .from("users").select(...).in("role", ...) so retornava os
+  // primeiros 1000 dos 9k+ students, quase nunca cobrindo a turma alvo.
+  let candidateIds: string[];
+
+  if (include.length > 0) {
+    const enrollRows = await fetchAllPaged<{
+      user_id: string;
+      cohort_id: string;
+    }>(() =>
+      admin
+        .schema("membros")
+        .from("enrollments")
+        .select("user_id, cohort_id")
+        .in("cohort_id", include)
+        .eq("is_active", true)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`),
+    );
+
+    const userCohorts = new Map<string, Set<string>>();
+    for (const e of enrollRows) {
+      const set = userCohorts.get(e.user_id) ?? new Set<string>();
+      set.add(e.cohort_id);
+      userCohorts.set(e.user_id, set);
+    }
+    // Include: precisa estar em TODAS as cohorts marcadas
+    candidateIds = Array.from(userCohorts.entries())
+      .filter(([, cohorts]) => include.every((c) => cohorts.has(c)))
+      .map(([uid]) => uid);
+  } else {
+    // Sem include: pega todos os users com a role + ativos (paginado).
+    const userRows = await fetchAllPaged<{ id: string }>(() =>
+      admin
+        .schema("membros")
+        .from("users")
+        .select("id")
+        .in("role", roles)
+        .eq("is_active", true),
+    );
+    candidateIds = userRows.map((u) => u.id);
+  }
+
+  if (candidateIds.length === 0) return [];
+
+  // Valida role + is_active em TODOS os candidatos (no caminho com
+  // include, ainda nao filtramos por role; no caminho sem include, ja
+  // validamos mas confirmar nao custa). Paginamos in() em chunks de
+  // 1000 ids — limite seguro de URL/parser do PostgREST.
+  let userIds: string[] = [];
+  const CHUNK = 1000;
+  for (let i = 0; i < candidateIds.length; i += CHUNK) {
+    const chunk = candidateIds.slice(i, i + CHUNK);
+    const { data } = await admin
+      .schema("membros")
+      .from("users")
+      .select("id")
+      .in("id", chunk)
+      .in("role", roles)
+      .eq("is_active", true);
+    for (const u of (data ?? []) as Array<{ id: string }>) {
+      userIds.push(u.id);
+    }
+  }
 
   if (userIds.length === 0) return [];
 
-  const include = audience.include_cohort_ids ?? [];
-  const exclude = audience.exclude_cohort_ids ?? [];
-
-  if (include.length === 0 && exclude.length === 0) {
-    return userIds;
-  }
-
-  // Pega matrículas ativas dos candidatos
-  const nowIso = new Date().toISOString();
-  const { data: enrollData } = await admin
-    .schema("membros")
-    .from("enrollments")
-    .select("user_id, cohort_id")
-    .in("user_id", userIds)
-    .eq("is_active", true)
-    .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
-
-  const userCohorts = new Map<string, Set<string>>();
-  for (const e of (enrollData ?? []) as Array<{
-    user_id: string;
-    cohort_id: string;
-  }>) {
-    const set = userCohorts.get(e.user_id) ?? new Set<string>();
-    set.add(e.cohort_id);
-    userCohorts.set(e.user_id, set);
-  }
-
-  userIds = userIds.filter((uid) => {
-    const cohorts = userCohorts.get(uid) ?? new Set<string>();
-    // Include: TODAS precisam estar
-    for (const c of include) {
-      if (!cohorts.has(c)) return false;
+  // Exclude: remove quem tem matricula ativa em alguma das cohorts
+  // bloqueadas. Paginamos por chunk de user_ids.
+  if (exclude.length > 0) {
+    const excludedSet = new Set<string>();
+    for (let i = 0; i < userIds.length; i += CHUNK) {
+      const chunk = userIds.slice(i, i + CHUNK);
+      const { data } = await admin
+        .schema("membros")
+        .from("enrollments")
+        .select("user_id")
+        .in("user_id", chunk)
+        .in("cohort_id", exclude)
+        .eq("is_active", true)
+        .or(`expires_at.is.null,expires_at.gt.${nowIso}`);
+      for (const e of (data ?? []) as Array<{ user_id: string }>) {
+        excludedSet.add(e.user_id);
+      }
     }
-    // Exclude: NENHUMA pode estar
-    for (const c of exclude) {
-      if (cohorts.has(c)) return false;
-    }
-    return true;
-  });
+    userIds = userIds.filter((uid) => !excludedSet.has(uid));
+  }
 
   // Filtro de engajamento (active/inactive). Aplica DEPOIS dos cohorts pra
   // não recarregar audiência inteira quando engagement = 'all'.
@@ -269,17 +339,20 @@ export async function resolveBroadcastAudience(
   if (engagement !== "all" && userIds.length > 0) {
     const settings = await getPlatformSettings(admin);
     const cutoff = inactivityCutoffIso(settings.inactivityThresholdDays);
-    const { data: signIns } = await admin
-      .schema("membros")
-      .from("students_admin")
-      .select("id, last_sign_in_at")
-      .in("id", userIds);
     const signInMap = new Map<string, string | null>();
-    for (const r of (signIns ?? []) as Array<{
-      id: string;
-      last_sign_in_at: string | null;
-    }>) {
-      signInMap.set(r.id, r.last_sign_in_at);
+    for (let i = 0; i < userIds.length; i += CHUNK) {
+      const chunk = userIds.slice(i, i + CHUNK);
+      const { data } = await admin
+        .schema("membros")
+        .from("students_admin")
+        .select("id, last_sign_in_at")
+        .in("id", chunk);
+      for (const r of (data ?? []) as Array<{
+        id: string;
+        last_sign_in_at: string | null;
+      }>) {
+        signInMap.set(r.id, r.last_sign_in_at);
+      }
     }
     userIds = userIds.filter((uid) => {
       const lastSignIn = signInMap.get(uid);
