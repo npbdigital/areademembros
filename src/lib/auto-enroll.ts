@@ -451,6 +451,41 @@ async function handleAccessRevoke(
     return { ok: false, status: "unmapped" };
   }
 
+  // Anti-revoga-erronea: se existe uma Compra Aprovada do mesmo cohort
+  // com created_at POSTERIOR a esse cancelamento, ignora — o aluno
+  // recomprou depois e tem direito ao acesso. Caso comum: PIX Hubla
+  // expirado processado dias depois da compra Kiwify aprovada.
+  // Reembolso real (created_at posterior à aprovação) continua desativando.
+  const { data: thisEv } = await sb
+    .schema("membros")
+    .from("purchase_events")
+    .select("created_at")
+    .eq("id", ev.id)
+    .single();
+  const cancelCreatedAt = (thisEv as { created_at: string } | null)?.created_at;
+
+  if (cancelCreatedAt) {
+    const { count: laterApprovals } = await sb
+      .schema("membros")
+      .from("purchase_events")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", u.id)
+      .eq("matched_cohort_id", m.cohort_id)
+      .eq("event", "Compra Aprovada")
+      .eq("status", "processed")
+      .gt("created_at", cancelCreatedAt);
+
+    if ((laterApprovals ?? 0) > 0) {
+      await markEvent(sb, ev.id, "skipped", {
+        message:
+          "Cancelamento ignorado: aluno tem compra aprovada posterior do mesmo produto.",
+        cohortId: m.cohort_id,
+        userId: u.id,
+      });
+      return { ok: true, status: "skipped", cohortId: m.cohort_id, userId: u.id };
+    }
+  }
+
   // Desativa enrollment do user nessa cohort
   const { error } = await sb
     .schema("membros")
