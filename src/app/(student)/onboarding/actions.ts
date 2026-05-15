@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { extractBucketPath } from "@/lib/storage-paths";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -32,6 +33,19 @@ export async function completeOnboardingAction(params: {
 
     const admin = createAdminClient();
 
+    // Pega avatar atual antes do UPDATE pra fazer cleanup do antigo
+    // se o aluno trocou nesta tela.
+    let oldAvatarUrl: string | null = null;
+    if (typeof params.avatarUrl !== "undefined") {
+      const { data: prev } = await admin
+        .schema("membros")
+        .from("users")
+        .select("avatar_url")
+        .eq("id", user.id)
+        .single();
+      oldAvatarUrl = (prev as { avatar_url: string | null } | null)?.avatar_url ?? null;
+    }
+
     // 1. Atualiza nome + avatar + flag needs_onboarding
     const updates: Record<string, unknown> = {
       full_name: fullName,
@@ -46,6 +60,16 @@ export async function completeOnboardingAction(params: {
       .update(updates)
       .eq("id", user.id);
     if (profileErr) return { ok: false, error: profileErr.message };
+
+    // Cleanup do avatar anterior (mesmo padrao de profile/actions.ts)
+    if (oldAvatarUrl && oldAvatarUrl !== params.avatarUrl) {
+      const oldPath = extractBucketPath(oldAvatarUrl, "avatars");
+      if (oldPath) {
+        await admin.storage.from("avatars").remove([oldPath]).catch(() => {
+          // best-effort
+        });
+      }
+    }
 
     // 2. Atualiza senha (se fornecida) via auth admin
     if (newPassword) {

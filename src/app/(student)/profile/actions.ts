@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { extractBucketPath } from "@/lib/storage-paths";
 
 export type ActionResult = { ok: boolean; error?: string };
 
@@ -35,19 +36,47 @@ export async function updateProfileAction(
     const emailNotificationsEnabled =
       formData.get("email_notifications_enabled") === "on";
 
+    const newAvatarUrl = nullableStr(formData, "avatar_url");
+
     const supabase = createClient();
+
+    // Pega avatar atual antes do UPDATE pra saber se trocou — se sim,
+    // deletamos o arquivo antigo do bucket pra nao acumular orfaos.
+    const { data: prev } = await supabase
+      .schema("membros")
+      .from("users")
+      .select("avatar_url")
+      .eq("id", userId)
+      .single();
+    const oldAvatarUrl = (prev as { avatar_url: string | null } | null)
+      ?.avatar_url ?? null;
+
     const { error } = await supabase
       .schema("membros")
       .from("users")
       .update({
         full_name: fullName,
         phone: nullableStr(formData, "phone"),
-        avatar_url: nullableStr(formData, "avatar_url"),
+        avatar_url: newAvatarUrl,
         email_notifications_enabled: emailNotificationsEnabled,
       })
       .eq("id", userId);
 
     if (error) return { ok: false, error: error.message };
+
+    // Cleanup do avatar anterior — so se mudou E era do nosso bucket
+    // (avatares legados de outras plataformas ficam intocados).
+    if (oldAvatarUrl && oldAvatarUrl !== newAvatarUrl) {
+      const oldPath = extractBucketPath(oldAvatarUrl, "avatars");
+      if (oldPath) {
+        await createAdminClient()
+          .storage.from("avatars")
+          .remove([oldPath])
+          .catch(() => {
+            // best-effort: se falhar, vira orfao mas nao quebra o save
+          });
+      }
+    }
 
     revalidatePath("/profile");
     revalidatePath("/dashboard", "layout");

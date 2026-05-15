@@ -27,6 +27,8 @@ yarn-error.log*
 
 # local env files
 .env*.local
+import/storage-recompress/.env
+import/storage-recompress/.venv/
 
 # vercel
 .vercel

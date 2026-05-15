@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { compressImage } from "@/lib/compress-image";
 
 interface Props {
   name: string;
@@ -43,16 +44,24 @@ export function AvatarUpload({
 
     setUploading(true);
     try {
+      // Comprime client-side antes de subir — avatar e exibido em max
+      // ~80px na UI, entao 400px JPEG q85 e mais que suficiente. Reduz
+      // upload de ~1MB pra ~30KB tipico, economizando egress recorrente.
+      const compressed = await compressImage(file, {
+        maxSize: 400,
+        quality: 0.85,
+        mimeType: "image/jpeg",
+      });
+
       const supabase = createClient();
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-      const path = `${userId}/${crypto.randomUUID()}.${ext}`;
+      const path = `${userId}/${crypto.randomUUID()}.jpg`;
 
       const { error: uploadErr } = await supabase.storage
         .from(BUCKET)
-        .upload(path, file, {
+        .upload(path, compressed, {
           cacheControl: "31536000",
           upsert: false,
-          contentType: file.type,
+          contentType: "image/jpeg",
         });
 
       if (uploadErr) {
