@@ -2,8 +2,8 @@
 
 > **Documento vivo de transferência de contexto.** Use isto pra continuar o trabalho em qualquer máquina (sua, do colega, ou em outra sessão do Claude). Mantenha atualizado conforme o projeto avança.
 
-**Última atualização:** 2026-05-12 — Etapa 35: Painel Circle import + ajustes broadcast/feed/cron
-**Último commit no main:** `0d628fa` — feat(etapa35): popup expira + interromper broadcast + feed timeline + fix recovery cron
+**Última atualização:** 2026-05-15 — Etapa 36: Storage egress + matrícula via afiliado Kiwify
+**Último commit no main:** `256d1f5` — feat(kiwify): matricula comprador quando afiliado vende LTA 2 / DTD
 **Domínio custom (prod):** https://membros.felipesempe.com.br ✅
 **Vercel (preview/fallback):** https://npb-area-de-membros.vercel.app
 **GitHub:** https://github.com/npbdigital/areademembros
@@ -51,6 +51,47 @@ SaaS de área de membros multi-curso, multi-turma, com:
 ---
 
 ## ✅ Etapas concluídas
+
+### Etapa 36 — Storage egress + matrícula via afiliado Kiwify (2026-05-13 → 2026-05-15)
+
+**Commits:** `04f032d`, `51ade2c`, `862789e`, `46a397a` (storage/broadcast/recompress) + `256d1f5` (matrícula afiliado)
+
+**Por que:** dois problemas distintos resolvidos juntos. (1) Cached Egress da Supabase estourou o free tier (8.42 GB / 5 GB) — análise mostrou que o gargalo era Storage (avatares + course-covers sem compressão e sem cache), não API. (2) Aluno comprou LTA 2 via afiliado Kiwify e não recebeu acesso — venda de afiliado não cai em `transactions_data` (n8n filtra "minhas vendas diretas"), então `purchase_events` ficava vazio e ninguém matriculava.
+
+**1) Storage egress — compressão + cache 1 ano + cleanup**
+- Bucket `avatars` agora limita upload a 5 MB e MIME `jpg/png/webp` (era ilimitado).
+- Bucket `course-covers` mesma config.
+- Recompress retroativo via `import/storage-recompress/recompress.py` (Pillow): avatares → max 400×400 q80, capas → max 1200×675 q82. Resultado: 96 MB → 4.8 MB (economia 90.3 MB sem trocar URL).
+- Cache-control alterado pra `31536000` (1 ano) na metadata dos arquivos. UUID-per-upload garante invalidação automática quando avatar troca.
+- Compressão client-side antes do upload em [src/components/student/avatar-upload.tsx](src/components/student/avatar-upload.tsx) via novo helper [src/lib/compress-image.ts](src/lib/compress-image.ts) (canvas API nativo, sem deps): 400×400 JPEG q85, reduz upload típico de ~1MB pra ~30KB.
+- Cleanup automático do avatar antigo quando aluno troca: [src/app/(student)/profile/actions.ts](src/app/(student)/profile/actions.ts) e [src/app/(student)/onboarding/actions.ts](src/app/(student)/onboarding/actions.ts) extraem o path do bucket e fazem `remove()` best-effort. Helper [src/lib/storage-paths.ts](src/lib/storage-paths.ts).
+- Script `import/storage-recompress/cleanup-orphans.py` deleta arquivos órfãos (não referenciados em `users.avatar_url`). Rodado: 0 órfãos, bucket em 257 KB.
+
+**2) Broadcast com >1000 alunos elegíveis tava entregando 0**
+- PostgREST limita queries a 1000 rows por padrão. `resolveBroadcastAudience` puxava `users` primeiro (9k+) e o `.in()` com cohort_ids virava no-op.
+- Solução: inverter — quando `include_cohort_ids` presente, começa de `enrollments` (set pequeno) e busca `users` por id. Helper `fetchAllPaged` em [src/lib/push.ts](src/lib/push.ts) pagina em batches de 1000. Todos `.in()` chunked em 1000 IDs pra evitar URL muito longa.
+- Métricas por canal no histórico de broadcasts ([broadcast/page.tsx](src/app/(admin)/admin/notifications/broadcast/page.tsx)): "📱 Push: X", "🔔 In-app: enviado pra todos", "📌 Banner: X dispensaram", "🪟 Popup: X viram". Conta de `broadcast_popup_seen` e `user_dismissed_broadcasts`.
+
+**3) Matrícula via afiliado Kiwify (LTA 2 + DTD)**
+- Webhook Kiwify ([api/webhooks/kiwify/route.ts](src/app/api/webhooks/kiwify/route.ts)) já fazia XP pra TODOS os produtos vendidos por afiliados (programa interno), mas não matriculava ninguém — assumia que `transactions_data` (via n8n) cobria as matrículas.
+- N8n da Kiwify provavelmente filtra "minhas vendas diretas" e ignora vendas de afiliados — comprovado: 0 vendas com split de afiliado pesado em `transactions_data`, mesmo com 9 vendas registradas em `afiliados.sales_raw` pros 2 produtos da casa.
+- Adicionada **allowlist por `product_id`** no webhook:
+  - `8a28d1e0-23c0-11f1-86d3-2bbea225a8b1` → cohort LTA 2 (`c4067a2f-3e6f-4eef-acae-ecb1e44d608a`)
+  - `8970da40-23c5-11f1-b5d3-ff15160a5d5f` → cohort DTD (`d52774b6-b06e-49e3-9efc-d0318bfddb73`)
+- Quando product_id bate, depois do `processSalesRaw` (XP), chama o novo helper [src/lib/affiliates/enroll-buyer.ts](src/lib/affiliates/enroll-buyer.ts) que enfileira em `purchase_events` com `matched_cohort_id` já preenchido. O `processPurchaseEvent` existente faz o resto (cria user, cria enrollment, dispara welcome email).
+- `kiwify-direct/route.ts` refatorado pra usar o mesmo helper.
+- Filtro por ID (não por nome) — renomear o produto na Kiwify não quebra.
+- **Importante:** XP do afiliado roda pra TODOS os produtos (Etapa 30 inalterada). Matrícula é AÇÃO ADICIONAL só pros 2 produtos da casa. Se afiliado não tem vinculação verificada (`affiliate_links`), venda fica órfã esperando vinculação — comportamento padrão preservado.
+- Nomes "Low Ticket Automático 2" e "Dólar Todo Dia" (sem ".0"/sufixo) adicionados em `product_cohort_map` — Kiwify manda esse formato.
+- Backfill: 2 vendas afetadas (Cristiane Rosalina/PyANKFX e Caroline Pereira/fQwlPdw) reprocessadas como `processed`. As 2 já tinham sido matriculadas manualmente pelo Felipe; idempotência do upsert protegeu.
+
+**Como testar a matrícula via afiliado:**
+1. Afiliado Kiwify vende LTA 2 ou DTD com `order_approved`
+2. Em ~5s, comprador deve estar em `membros.users` + `membros.enrollments` (ativo na cohort certa)
+3. Se afiliado tem `affiliate_links` verificado, XP é creditado em paralelo
+4. Conferir status em `purchase_events.platform = 'kiwify-affiliate'`
+
+---
 
 ### Etapa 35 — Painel Circle import + ajustes broadcast/feed/cron (2026-05-10 → 2026-05-12)
 
