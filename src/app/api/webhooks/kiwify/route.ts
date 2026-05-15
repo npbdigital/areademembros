@@ -2,6 +2,21 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { processSalesRaw } from "@/lib/affiliates/process";
 import { verifyKiwifySignature } from "@/lib/affiliates/hmac";
+import { enrollBuyerFromKiwifyPayload } from "@/lib/affiliates/enroll-buyer";
+
+/**
+ * Allowlist de produtos Kiwify que matriculam o COMPRADOR na área de
+ * membros (além do XP pro afiliado vendedor). Filtro por product_id
+ * (estável a renomeações). Outros produtos: só XP, sem matrícula.
+ *
+ * product_id (Kiwify) → cohort_id (membros).
+ */
+const ENROLLMENT_PRODUCTS: Record<string, string> = {
+  // Low Ticket Automático 2
+  "8a28d1e0-23c0-11f1-86d3-2bbea225a8b1": "c4067a2f-3e6f-4eef-acae-ecb1e44d608a",
+  // Dólar Todo Dia
+  "8970da40-23c5-11f1-b5d3-ff15160a5d5f": "d52774b6-b06e-49e3-9efc-d0318bfddb73",
+};
 
 /**
  * Webhook Kiwify — Fase B (recebe + processa).
@@ -14,7 +29,11 @@ import { verifyKiwifySignature } from "@/lib/affiliates/hmac";
  *  3. Salva tudo em afiliados.sales_raw (raw_payload + raw_headers + query)
  *  4. Chama processSalesRaw em background (cria afiliados.sales, atribui
  *     XP, dispara conquistas)
- *  5. Retorna 200 sempre (mesmo com erro de processamento — Kiwify não
+ *  5. Se o product_id está em ENROLLMENT_PRODUCTS, dispara matrícula do
+ *     comprador (via enrollBuyerFromKiwifyPayload). Cobre o caso onde
+ *     afiliado Kiwify vende nosso produto e o n8n da transactions_data
+ *     não pega.
+ *  6. Retorna 200 sempre (mesmo com erro de processamento — Kiwify não
  *     deve reenviar, a gente vê pelos logs e marca processed=false)
  *
  * 2 env vars distintos:
@@ -138,6 +157,37 @@ export async function POST(req: NextRequest) {
     } catch (e) {
       console.error("[kiwify webhook] erro no process:", e);
       // não falha — raw já está salvo, dá pra reprocessar manualmente
+    }
+  }
+
+  // Matrícula: só dispara pros 2 produtos da nossa área de membros
+  // (LTA 2 e DTD). Outros produtos vendidos por afiliados continuam só
+  // com XP, sem entrar em purchase_events.
+  const productId =
+    (parsed as { Product?: { product_id?: string } } | null)?.Product
+      ?.product_id ?? null;
+  const cohortForEnrollment = productId ? ENROLLMENT_PRODUCTS[productId] : null;
+
+  if (cohortForEnrollment) {
+    try {
+      const sb = createAdminClient();
+      const enrollResult = await enrollBuyerFromKiwifyPayload(
+        sb,
+        parsed as Record<string, unknown>,
+        {
+          cohortId: cohortForEnrollment,
+          platform: "kiwify-affiliate",
+        },
+      );
+      if (!enrollResult.ok && !enrollResult.ignored) {
+        console.error(
+          "[kiwify webhook] falha matrícula:",
+          enrollResult.error,
+        );
+      }
+    } catch (e) {
+      console.error("[kiwify webhook] exceção matrícula:", e);
+      // não falha o webhook — Kiwify não deve reenviar
     }
   }
 
